@@ -148,7 +148,7 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
    * not worth its price.
    */
   private async loadCounts(): Promise<JeCounts> {
-    const monthStart = this.monthStartUTC();
+    const monthStart = this.monthStartBusiness();
     const scoped = (own: string | null): string => this.Scope.ComposeFilter(own);
 
     // NO scheduled-entries count: the ScheduledJournalEntry system was retired (D15) — its count
@@ -172,7 +172,7 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
   private buildStats(c: JeCounts): DashboardStat[] {
     return [
       { Id: 'month', Label: 'Entries this month', Value: c.thisMonth, Icon: 'fa-solid fa-book-open', GoTo: 'all-entries',
-        Tooltip: 'Journal entries with an effective date in the current calendar month (UTC).' },
+        Tooltip: 'Journal entries with an effective date in the current calendar month, in the business time zone.' },
       { Id: 'pending', Label: 'Pending', Value: c.pending, Icon: 'fa-solid fa-layer-group', GoTo: 'all-entries',
         Tooltip: 'Not yet batched — the candidate pool a JE batch build would sweep.' },
       { Id: 'batched', Label: 'Batched', Value: c.batched, Icon: 'fa-solid fa-box-archive', GoTo: 'all-batches',
@@ -243,9 +243,9 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
     );
 
     // RunView reports failure in the result, it does not throw — so check, don't assume.
-    if (!recent.Success) throw new Error(recent.ErrorMessage ?? 'Could not load recent journal entries');
-    if (!awaiting.Success) throw new Error(awaiting.ErrorMessage ?? 'Could not load entries awaiting approval');
-    if (!oldest.Success) throw new Error(oldest.ErrorMessage ?? 'Could not load the oldest unposted entries');
+    if (!recent.Success) throw new Error(recent.ErrorMessage ?? 'Could not load recent journal entries. Refresh the page to try again.');
+    if (!awaiting.Success) throw new Error(awaiting.ErrorMessage ?? 'Could not load entries awaiting approval. Refresh the page to try again.');
+    if (!oldest.Success) throw new Error(oldest.ErrorMessage ?? 'Could not load the oldest unposted entries. Refresh the page to try again.');
 
     return { recent: recent.Results ?? [], awaiting: awaiting.Results ?? [], oldest: oldest.Results ?? [] };
   }

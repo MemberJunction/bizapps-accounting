@@ -8,7 +8,7 @@
      paints its card chrome (background + border + shadow + row padding): a blank bubble.
      Note MJ tightens <mj-page-body-interior>'s TOP padding to 8px on the assumption a header sits
      above it, so this card starts a little higher than a header card would on a sibling page. Left
-     as-is pending Marcelo's eye on the live result. -->
+     as-is pending a visual check of the live result. -->
 
 <!-- <mj-page-body-interior> is the interior primitive <mj-left-nav-content> expects; it owns the
      gutters that keep content off the rail and off the page edge (elements were hitting the screen
@@ -93,16 +93,54 @@
       <label class="bw-field">
         <span>Include unbatched through</span>
         <input
-          type="datetime-local"
+          type="date"
           class="mj-input"
           [(ngModel)]="Draft.Criteria.Cutoff"
           (ngModelChange)="OnCriteriaChanged()"
           [disabled]="IsBuilt" />
+        @if (!Draft.Criteria.Cutoff) {
+          <span class="bw-hint">No cutoff — includes everything through the posting date.</span>
+        }
       </label>
+
+      <!-- The journal date the ERP receives (golive #315). It also ends the pool: an entry dated after
+           it waits for a later batch, so a changed date needs Apply like any other criterion. -->
+      <label class="bw-field">
+        <span>Posting date</span>
+        <input
+          type="date"
+          class="mj-input"
+          [(ngModel)]="Draft.Criteria.PostingDate"
+          (ngModelChange)="OnCriteriaChanged()"
+          [disabled]="IsBuilt" />
+        @if (PostingDateProblem && !IsBuilt) {
+          <span class="bw-hint bw-hint--error">{{ PostingDateProblem }}</span>
+        } @else {
+          <span class="bw-hint">The journal date {{ Draft.Criteria.TargetSystem }} receives. Entries dated after it wait for a later batch.</span>
+        }
+      </label>
+
+      <!-- A prior or future month is allowed but confirmed: the ERP books the batch in that month. -->
+      @if (PostingDateWarning && !IsBuilt) {
+        <div class="bw-warn bw-posting-warning" role="alert">
+          <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+          <div>
+            {{ PostingDateWarning }}
+            <label class="bw-posting-confirm">
+              <input
+                type="checkbox"
+                class="mj-checkbox"
+                [checked]="PostingDateConfirmed"
+                (change)="OnPostingDateConfirmChange($event)" />
+              Yes, post this batch in {{ PostingMonth }}
+            </label>
+          </div>
+        </div>
+      }
 
       <label class="bw-field">
         <span>Company</span>
-        <!-- Single-select (Marcelo 2026-07-21): a batch is single-company (clean single-CFO approval).
+        <!-- Single-select: a batch is single-company (clean single-CFO approval).
              "All companies" is kept for now so the sweep-all path + existing engine still work; the
              enforce-exactly-one-company invariant lands with the single-company engine change. -->
         <!-- Single-select ON PURPOSE: this is a BUILD CRITERION (batches are single-company,
@@ -184,7 +222,15 @@
       <div class="bw-warn">
         <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
         Your exclusions skip <b>&nbsp;{{ Preview?.OutOfOrderSkipCount }} older entr{{ Preview?.OutOfOrderSkipCount === 1 ? 'y' : 'ies' }}&nbsp;</b>
-        — later entries will batch ahead of them (allowed, but visible · MOD-8).
+        — later entries will be batched before them. This is allowed; check that it is what you intend.
+      </div>
+    }
+    @if (BeforePostingStartCount > 0) {
+      <!-- Held back by AccountingCompanyProfile.PostingStartDate: never in any batch, so say how many. -->
+      <div class="bw-warn" role="status">
+        <i class="fa-solid fa-calendar-xmark" aria-hidden="true"></i>
+        <b>&nbsp;{{ BeforePostingStartCount }} entr{{ BeforePostingStartCount === 1 ? 'y is' : 'ies are' }}&nbsp;</b>
+        dated before {{ BeforePostingStartCount === 1 ? 'its' : 'their' }} company's posting start date and held back. They stay Pending and are not in this batch.
       </div>
     }
 
@@ -192,8 +238,11 @@
     <div class="bw-sumstrip">
       <span>Included <b>{{ IncludedCount }}</b> / {{ Preview?.Candidates?.length ?? 0 }}</span>
       <span>Excluded <b>{{ ExcludedCount }}</b></span>
-      <span [class.bw-unbalanced]="!IsBalanced">
-        Dr <b>{{ Preview?.TotalDebits ?? 0 | currency }}</b>
+      <span title="Every line of every included entry, before netting">
+        Entries Dr <b>{{ Preview?.GrossDebits ?? 0 | currency }}</b> · Cr <b>{{ Preview?.GrossCredits ?? 0 | currency }}</b>
+      </span>
+      <span [class.bw-unbalanced]="!IsBalanced" title="The netted summary the batch will carry and post">
+        Net to post Dr <b>{{ Preview?.TotalDebits ?? 0 | currency }}</b>
         {{ IsBalanced ? '=' : '≠' }}
         Cr <b>{{ Preview?.TotalCredits ?? 0 | currency }}</b>
         {{ IsBalanced ? '✓' : '✗' }}

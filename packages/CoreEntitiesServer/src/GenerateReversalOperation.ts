@@ -1,7 +1,7 @@
 /**
  * GenerateReversalOperation — 'Accounting.GenerateJournalEntryReversal' as a code-only Remote
- * Operation. Replaces the hand-written JournalEntryResolver (four-surface doctrine, Amith
- * 2026-07-28: an action that runs entity/engine logic server-side travels the remote-op stack).
+ * Operation. Replaces the hand-written JournalEntryResolver (four-surface doctrine:
+ * an action that runs entity/engine logic server-side travels the remote-op stack).
  *
  * Thin by design: the business logic — a NEW Pending JE with Dr/Cr swapped, dimension tags +
  * counterparty carried, typed Code='Reversal', back-referenced both ways, the no-double-reverse /
@@ -36,12 +36,12 @@ export class GenerateReversalOperation extends BaseRemotableOperation<GenerateRe
   public readonly OperationKey = 'Accounting.GenerateJournalEntryReversal';
 
   protected async InternalExecute(input: GenerateReversalInput, provider: IMetadataProvider, user: UserInfo): Promise<GenerateReversalOutput> {
-    if (!input?.JournalEntryID) throw new Error('GenerateJournalEntryReversal: JournalEntryID is required.');
-    if (!input?.Reason?.trim()) throw new Error('GenerateJournalEntryReversal: a reason is required.');
+    if (!input?.JournalEntryID) throw new Error('The entry was not reversed: no journal entry was given.');
+    if (!input?.Reason?.trim()) throw new Error('Enter a reason for the reversal.');
 
     const je = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, user);
     if (!(await je.Load(input.JournalEntryID))) {
-      throw new Error(`Journal Entry ${input.JournalEntryID} not found.`);
+      throw new Error(`The entry was not reversed: journal entry ${input.JournalEntryID} was not found.`);
     }
     const reversal = await je.GenerateReversal(input.Reason, user);
     return { ReversalJournalEntryID: reversal.ID, ReversalEntryNumber: reversal.EntryNumber };

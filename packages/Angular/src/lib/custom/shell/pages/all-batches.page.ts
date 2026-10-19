@@ -3,6 +3,7 @@ import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page
 import { RunView, RunViewParams } from '@memberjunction/core';
 import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-entity-viewer';
 import { mjBizAppsAccountingJournalEntryBatchEntityType } from '@mj-biz-apps/accounting-entities';
+import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
 import { CompanyScopeService, ScopeCompany } from '../../shared/company-scope.service';
 import { TIME_WINDOWS, TimeWindowId, timeWindowRange, toSqlDate, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
 import { sqlLiteral, likeContains } from '../../../transfer-pending/list-scaffold/sql-filter';
@@ -33,7 +34,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * All batches — the batches list on the standard list idiom (the All-JEs clone): summary strip +
  * list toolbar (search · status chips · Filters disclosure) + the house grid, row slide-in detail.
  *
- * Replaces the old BatchStatus dashboard as this rail item (Marcelo 2026-08-04): a list page and a
+ * Replaces the old BatchStatus dashboard as this rail item: a list page and a
  * dashboard are different idioms, and "All batches" is a list.
  *
  * The date filters run on **PostingDate** — the batch's business date (what the GL cares about) —
@@ -71,7 +72,7 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   public SelectedStatuses = new Set<BatchStatus>();
 
   /** Per-page company narrowing — ANDs inside the app-wide scope, never widens it. */
-  /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = no narrowing ("All companies"). */
+  /** MULTI-select company narrowing: empty = no narrowing ("All companies"). */
   public CompanyIDs: string[] = [];
 
   public Search = '';
@@ -299,7 +300,7 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   }
 
   private applyWindowRange(window: TimeWindowId): void {
-    const { From, To } = timeWindowRange(window);
+    const { From, To } = timeWindowRange(window, new Date(), BusinessTimeZoneEngine.Instance.Zone);
     this.FromDate = From ? toSqlDate(From) : null;
     this.ToDate = To ? toSqlDate(new Date(To.getTime() - DAY_MS)) : null;
   }

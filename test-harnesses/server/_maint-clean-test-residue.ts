@@ -55,7 +55,7 @@ async function main(): Promise<void> {
       await exec(`DELETE FROM ${TASK_SCHEMA}.Task WHERE ID IN (${taskIds})`);
     }
 
-    const toggled = ['JournalEntryLine', 'JournalEntry', 'JournalEntryBatch'];
+    const toggled = ['JournalEntryLineDimension', 'JournalEntryLine', 'JournalEntry', 'JournalEntryBatch'];
     try {
       for (const t of toggled) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
       await exec(`DELETE d FROM ${SCHEMA}.JournalEntryLineDimension d JOIN ${SCHEMA}.JournalEntryLine l ON l.ID=d.JournalEntryLineID JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID WHERE j.CompanyID IN ${IN}`);
@@ -82,7 +82,7 @@ async function main(): Promise<void> {
 
   // Orphans: accounting rows whose company profile no longer exists (any tag).
   console.log('Sweeping orphaned JEs/batches (company profile gone):');
-  const toggled = ['JournalEntryLine', 'JournalEntry', 'JournalEntryBatch'];
+  const toggled = ['JournalEntryLineDimension', 'JournalEntryLine', 'JournalEntry', 'JournalEntryBatch'];
   const orphanJE = `NOT EXISTS (SELECT 1 FROM ${SCHEMA}.AccountingCompanyProfile p WHERE p.ID = j.CompanyID)`;
   try {
     for (const t of toggled) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);

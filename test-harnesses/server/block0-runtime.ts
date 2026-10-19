@@ -9,13 +9,13 @@
  * 2026-07-06 rework (engine-meeting rulings): AccountingPeriod is GONE (the ERP owns
  * periods — CH-1), and JE/batch numbering is GLOBAL, not company-scoped (D-SEQ):
  *
- *   R1  GLAccountRole reference data: exactly the 9 seeded roles, in sequence order
+ *   R1  GLAccountRole reference data: exactly the 12 seeded roles, in sequence order
  *        (proves the migrations-only deploy carried the metadata-sync seed).
  *   W1  AccountingCompanyProfile first-save seeding (AccountingCompanyProfileEntityServer):
  *        1. create + Save() succeeds
  *        2. seeds EXACTLY the 10 minimal GL accounts (IsSystemSeeded), codes as expected
  *        3. wires the 5 default GL-account refs to the right account codes
- *        4. defaults OperatingTimeZone = 'UTC' (Block-0 addition)
+ *        4. leaves OperatingTimeZone blank, so the company inherits the business zone (#158)
  *        5. __mj.RecordChange rows exist for the seeded rows (audit-by-construction)
  *        (Period generation was RETIRED — no AccountingPeriod rows exist to assert.)
  *   W2  JournalEntry numbering (JournalEntryEntityServer): EntryNumber = JE-{FY}-{seq:000000}
@@ -48,7 +48,7 @@ import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
-import { RequireJournalEntryTypeID, JournalEntryEntityServer } from '@mj-biz-apps/accounting-core-entities-server';
+import { RequireJournalEntryTypeID, JournalEntryEntityServer, JournalEntryBatchEntityServer } from '@mj-biz-apps/accounting-core-entities-server';
 import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
   mjBizAppsAccountingJournalEntryEntity,
@@ -72,6 +72,7 @@ const BATCH_TABLE = `${SCHEMA}.JournalEntryBatch`;
 const EXPECTED_CODES = ['11101', '11201', '21201', '21301', '21401', '21402', '40100', '40200', '50400', '50500'];
 const EXPECTED_ROLES: ReadonlyArray<{ sequence: number; name: string }> = [
   { sequence: 10, name: 'Cash' },
+  { sequence: 15, name: 'BankAccount' },
   { sequence: 20, name: 'Accounts Receivable' },
   { sequence: 30, name: 'Inventory' },
   { sequence: 40, name: 'Cost of Goods Sold' },
@@ -80,6 +81,8 @@ const EXPECTED_ROLES: ReadonlyArray<{ sequence: number; name: string }> = [
   { sequence: 70, name: 'Sales Returns and Allowances' },
   { sequence: 80, name: 'Deferred Revenue' },
   { sequence: 90, name: 'Processing Fee' },
+  { sequence: 100, name: 'Unbilled Receivable' },
+  { sequence: 110, name: 'Customer Deposits' },
 ];
 
 const RUN_TAG = `BLOCK0-${Date.now()}`;
@@ -172,7 +175,7 @@ async function main(): Promise<void> {
   const createdBatchIds: string[] = [];
 
   // ─── R1 — GL account role reference data (metadata-sync seed) ─────────────
-  await test('R1 GLAccountRole reference data — exactly the 9 seeded roles, in sequence', async () => {
+  await test('R1 GLAccountRole reference data — exactly the 12 seeded roles, in sequence', async () => {
     const rv = new RunView();
     const res = await rv.RunView<{ Name: string; Sequence: number; Status: string }>(
       { EntityName: ROLE_ENTITY, Fields: ['Name', 'Sequence', 'Status'], OrderBy: 'Sequence ASC', ResultType: 'simple' }, user);
@@ -242,10 +245,10 @@ async function main(): Promise<void> {
     assert(acp.UnrealizedFXGainLossGLAccountID == null, `UnrealizedFXGainLossGLAccountID unexpectedly wired: ${acp.UnrealizedFXGainLossGLAccountID}`);
   });
 
-  await test('W1.4 defaults OperatingTimeZone = UTC (Block-0 addition)', async () => {
+  await test('W1.4 leaves OperatingTimeZone blank so the business zone applies (#158)', async () => {
     const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, user);
     await acp.Load(acpId);
-    assert(acp.OperatingTimeZone === 'UTC', `OperatingTimeZone expected 'UTC', got '${acp.OperatingTimeZone}'`);
+    assert(acp.OperatingTimeZone == null, `OperatingTimeZone expected blank, got '${acp.OperatingTimeZone}'`);
   });
 
   await test('W1.5 __mj.RecordChange rows exist for seeded rows (audit-by-construction)', async () => {
@@ -299,8 +302,11 @@ async function main(): Promise<void> {
   // description promises BATCH-{CompanyCode}-{seq} but spAssignNextJournalEntryBatchNumber emits the
   // global BATCH-{seq} — asserted here as the sproc actually behaves; see plans/donor-audit.md) ──
   const makeBatch = async (): Promise<mjBizAppsAccountingJournalEntryBatchEntity> => {
-    const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, user);
+    const batch = await md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, user);
     batch.NewRecord();
+    // W3 exercises the numbering sproc, not the build flow, so it declares its own provenance —
+    // the create guard (#193) refuses any new batch that does not.
+    batch.MarkBuiltByBatchingProcess();
     batch.CompanyID = acpId; // batches are single-company (D7/MOD-15)
     batch.PostingDate = new Date(new Date().toISOString().slice(0, 10));
     batch.TargetSystem = 'BusinessCentral';

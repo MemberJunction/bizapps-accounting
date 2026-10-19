@@ -4,6 +4,17 @@
       "Lock DisplayName to the unprefixed entity title so CodeGen form SectionName and Explorer chrome stay human."
     ],
     "fields": {
+      "DisplayName": "Accounting Engine Extensions"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Accounting Engine Extensions"
+    }
+  },
+  {
+    "_comments": [
+      "Lock DisplayName to the unprefixed entity title so CodeGen form SectionName and Explorer chrome stay human."
+    ],
+    "fields": {
       "DisplayName": "Accounting Company Profiles"
     },
     "primaryKey": {

@@ -21,7 +21,7 @@ export interface MJASummaryFigure {
  * The accounting twin of orders' `mjo-summary-strip` (bizapps-orders
  * `panels/summary-strip.component.ts`) — same layout, same tokens, so the two apps' list
  * pages read identically. Kept app-local because accounting cannot depend on orders
- * (dependencies point UP the graph); when the four-layer standard (MJ#3403 / PR #37) lands a
+ * (dependencies point UP the graph); when the four-layer standard (MJ#3403) lands a
  * shared home for these, both copies should graduate there.
  *
  * WHY A STRIP RATHER THAN STAT TILES: tiles are for numbers a person navigates BY; the strip
@@ -70,7 +70,7 @@ export interface MJASummaryFigure {
                 border-radius: var(--mj-radius-lg);
             }
             .mja-strip__figure {
-                /* Uniform figure width (Marcelo 2026-08-04): every bubble the same size, so the
+                /* Uniform figure width: every bubble the same size, so the
                    strip reads as a row of equal cells rather than a ragged line, and figures line
                    up column-for-column across the app's list pages. */
                 flex: 0 0 auto;
@@ -141,8 +141,8 @@ export class MJASummaryStripComponent {
 
     /**
      * Bare mode: no card chrome (background/border/radius/margin) — for composing the strip INTO a
-     * host card, e.g. the list subheader that fuses stats + toolbar into one band (Marcelo
-     * 2026-08-04: "consolidate the cards at the top into one").
+     * host card, e.g. the list subheader that fuses stats + toolbar into one band
+     * so the top of the page carries a single card rather than several.
      */
     @Input() Bare = false;
 }

@@ -4,6 +4,7 @@ import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { NormalizeUUID, UUIDsEqual } from '@memberjunction/global';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import type { JEValidationError } from '@mj-biz-apps/accounting-engine-base';
+import { BusinessTimeZoneEngine, FromCalendarDay, IsCalendarDay } from '@mj-biz-apps/common-entities';
 import { CompanyScopeService } from '../../shared/company-scope.service';
 import { WorkspaceTabStore } from '../../../transfer-pending/workspace-tabs/workspace-tab-store';
 import { WorkspaceTab } from '../../../transfer-pending/workspace-tabs/workspace-tabs.types';
@@ -19,6 +20,7 @@ import {
   toCreateInput,
   LiveLines,
   TextIssue,
+  CalendarDayValue,
 } from './je-draft';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
@@ -142,7 +144,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
       const md = new Metadata();
       const entry = await md.GetEntityObject<JournalEntryEntity>(JE_ENTITY, this.ProviderToUse.CurrentUser);
       if (!(await entry.Load(id))) {
-        this.ActionMessage = 'That journal entry could not be loaded into the workspace.';
+        this.ActionMessage = 'That journal entry could not be opened. It may have been deleted, or you may not have access to it.';
         this.ActionIsError = true;
         this.cdr.markForCheck();
         return;
@@ -227,7 +229,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   /** "Keep as draft tab" — the tab already holds the state; this makes that explicit + clean. */
   public KeepAsDraft(): void {
     if (this.tabs.ActiveId) this.tabs.MarkClean(this.tabs.ActiveId);
-    this.ActionMessage = 'Kept as a draft tab — it stays for this session (drafts are not saved to the database in v1).';
+    this.ActionMessage = 'Kept as a draft tab. Drafts last only for this browser session and are not saved, so closing the app discards it.';
     this.ActionIsError = false;
     this.cdr.markForCheck();
   }
@@ -244,7 +246,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
     // Seed from the app-wide scope when it names exactly one company — with several in scope we
     // cannot know which one the operator means, so we ask rather than guess wrong.
     if (this.Scope.SelectedIDs.length === 1) entry.CompanyID = this.Scope.SelectedIDs[0];
-    entry.EffectiveDate = new Date();
+    entry.EffectiveDate = BusinessTimeZoneEngine.Instance.TodayAsDate();
     entry.Status = 'Pending';
     // The workspace is the MANUAL-entry home (§8.1), so the type is fixed rather than offered — a
     // one-option select would be a control that cannot be operated. Stamped on the entity rather
@@ -273,28 +275,30 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
 
   // ─── posting date ──────────────────────────────────────────────────────────
 
-  /**
-   * The posting date as `<input type="date">` wants it, and back.
-   *
-   * Formatted from the LOCAL parts rather than `toISOString()`: an entry posted on the 1st in a
-   * timezone behind UTC serialises as the 31st of the previous month, which files it in the wrong
-   * accounting period — balanced, reconciling against itself, and wrong.
-   */
+  /** The posting date as `<input type="date">` wants it: the stored calendar day, read from UTC parts — matching what `SetEffectiveDate` writes. */
   public get EffectiveDateValue(): string {
-    const value = this.Draft?.Entry.EffectiveDate;
-    if (!value) return '';
-    const date = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    return CalendarDayValue(this.Draft?.Entry.EffectiveDate);
   }
 
   public SetEffectiveDate(text: string): void {
     const d = this.Draft;
     if (!d) return;
-    // Parsed as LOCAL midnight (the `T00:00:00` is load-bearing): `new Date('2026-03-15')` is UTC
-    // midnight, which reads as the 14th anywhere west of Greenwich.
-    d.Entry.EffectiveDate = text ? new Date(`${text}T00:00:00`) : (null as unknown as Date);
+    // UTC midnight of the picked day: the shape a DATE column round-trips as, so
+    // `CalendarDayValue` (UTC parts) reads back the day the user chose in every browser zone.
+    //
+    // Guarded, because `FromCalendarDay` THROWS on anything that is not a calendar day and this is
+    // an ngModelChange handler: <input type="date"> accepts years beyond four digits, so typing
+    // '12345-06-07' would raise an uncaught RangeError mid-keystroke where the old `new Date(...)`
+    // merely produced an Invalid Date. A half-typed or out-of-range day leaves the draft's date
+    // ALONE rather than blanking it — blanking would silently discard a date the user had already
+    // chosen, on the way to typing a new one.
+    if (!text) {
+      d.Entry.EffectiveDate = null as unknown as Date;
+    } else if (IsCalendarDay(text)) {
+      d.Entry.EffectiveDate = FromCalendarDay(text);
+    } else {
+      return;
+    }
     this.touch();
   }
 
@@ -337,7 +341,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   }
 
   /** The chosen account's full "Code · Name" — bound to the select's title so the full name shows on
-   *  hover even when the fixed-width column truncates it (Marcelo 2026-07-21). */
+   *  hover even when the fixed-width column truncates it. */
   public AccountLabel(id: string | null): string {
     if (!id) return '';
     return this.AccountOptions.find((a) => UUIDsEqual(a.ID, id))?.Label ?? '';
@@ -375,7 +379,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   }
 
   /**
-   * Staleness self-heal (Marcelo 2026-07-30): the picker reads the client engine cache, but a
+   * Staleness self-heal: the picker reads the client engine cache, but a
    * company's chart can be created SERVER-side (seed hooks, another user, the accounts editor in
    * another tab) — the cache never hears about those rows. An empty cached chart for a picked
    * company is therefore suspect: force ONE engine refresh for it per session before trusting
@@ -552,7 +556,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   }
 
   /**
-   * The active tab's caption, derived from the memo (Marcelo 2026-07-17: the memo is the human label
+   * The active tab's caption, derived from the memo (the memo is the human label
    * people scan by). The memo is the JE's free-text meaning — the `Description` field on the draft
    * (there is no `Memo` column on the Journal Entry entity). When it is empty we fall back to the
    * created entry NUMBER, then to "New JE" for a brand-new untyped draft.
@@ -640,7 +644,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
 
       if (!result.Success) {
         this.applyEngineErrors(result.Errors ?? []);
-        this.setError('The ledger rejected this entry — see the errors above.');
+        this.setError('The entry was not created. Fix the problems listed above, then submit again.');
         return;
       }
 

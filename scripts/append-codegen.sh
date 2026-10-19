@@ -32,8 +32,20 @@ MARKER_LINE=$(grep -n "$MARKER" "$MIGRATION" | head -1 | cut -d: -f1)
 BANNER_END=$(awk -v s="$MARKER_LINE" 'NR>s && /^-- =+$/ { last=NR } NR>s && !/^--/ && NF { exit } END { print last }' "$MIGRATION")
 [[ -n "$BANNER_END" ]] || { echo "could not find the end of the banner block" >&2; exit 1; }
 
+# Normalize the blank gutter above the banner to GUTTER lines (Amith, PR #148 review: a wide
+# run of whitespace is how a human eye finds the generated boundary at a glance). Enforced here
+# so every future migration gets it without anyone remembering to.
+GUTTER=76
+BANNER_START=$(awk -v s="$MARKER_LINE" 'NR<s && /^-- =+$/ { last=NR } END { print last }' "$MIGRATION")
+[[ -n "$BANNER_START" ]] || { echo "could not find the start of the banner block" >&2; exit 1; }
+
 TMP=$(mktemp)
-head -n "$BANNER_END" "$MIGRATION" > "$TMP"
+# Hand-authored DDL with its trailing blank lines stripped...
+awk -v e=$((BANNER_START - 1)) 'NR<=e' "$MIGRATION" \
+    | awk 'NF { for (; blanks > 0; blanks--) print ""; print; next } { blanks++ }' > "$TMP"
+# ...then a fresh gutter of exactly GUTTER blank lines, then the banner block itself.
+for ((i = 0; i < GUTTER; i++)); do printf '\n' >> "$TMP"; done
+awk -v s="$BANNER_START" -v e="$BANNER_END" 'NR>=s && NR<=e' "$MIGRATION" >> "$TMP"
 printf '\n\n' >> "$TMP"
 for f in "${GENERATED[@]}"; do
     printf '  + %s\n' "$(basename "$f")" >&2

@@ -55,6 +55,13 @@ module.exports = {
     { type: 'GraphQLServer', directory: './packages/Server/src/generated' },
     { type: 'ActionSubclasses', directory: './packages/Actions/src/generated' },
     { type: 'EntitySubclasses', directory: './packages/Entities/src/generated' },
+    // Typed bases for the `MJ: Remote Operations` rows in metadata/remote-operations/
+    // (GenerationType=Manual: a contract shell; the server subclass in
+    // core-entities-server supplies the body). Entities is the browser-safe package
+    // every other package already depends on, so a client can call .Execute() on
+    // the generated base without the server engine. Operations registered in code
+    // only (no metadata row) are unaffected.
+    { type: 'RemoteOperations', directory: './packages/Entities/src/generated' },
     { type: 'DBSchemaJSON', directory: './Schema Files' },
   ],
 
@@ -125,6 +132,12 @@ module.exports = {
   // Allow-list: CodeGen this app's schema only (MJ >= 5.50 includeSchemas).
   // Unnamed schemas — core, siblings, never-seen client schemas — are excluded.
   includeSchemas: ['__mj_BizAppsAccounting'],
+  // Keep the historical monolith (entity_subclasses.ts / generated.ts). CodeGen's
+  // default since schema-scale is one file per schema under generated/entities/
+  // and graphql-schemas/; this app is not that size and matches bizapps-fpna.
+  fileEmit: {
+    perSchema: false,
+  },
   excludeSchemas: [],
   /**
    * Schema → npm for peer entity classes this emit does NOT generate

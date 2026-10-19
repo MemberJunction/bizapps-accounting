@@ -1,7 +1,7 @@
 {
   "name": "@mj-biz-apps/accounting-server",
   "type": "module",
-  "version": "0.4.0",
+  "version": "0.22.2",
   "description": "BizApps Accounting server bootstrap - GraphQL resolvers and class registrations for the AR subledger and JE primitives Open App",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -13,26 +13,36 @@
   ],
   "scripts": {
     "build": "tsc && tsc-alias -f",
-    "test": "echo \"No tests configured yet\""
+    "test": "vitest run",
+    "test:types": "tsc --noEmit -p tsconfig.spec.json"
   },
   "author": "MemberJunction.com",
   "license": "BUSL-1.1",
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "@types/node": "^24.10.11",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18",
+    "vite": "^7.1.5",
+    "@memberjunction/core": "^6.1.5",
+    "@memberjunction/global": "^6.1.5",
+    "@memberjunction/server": "^6.1.5",
+    "@memberjunction/sqlserver-dataprovider": "^6.1.5",
+    "@mj-biz-apps/common-server": "5.50.2",
+    "@mj-biz-apps/common-entities": "5.50.2"
   },
   "dependencies": {
-    "@mj-biz-apps/accounting-core-entities-server": "0.4.0",
-    "@mj-biz-apps/accounting-entities": "0.4.0",
-    "@mj-biz-apps/accounting-actions": "0.4.0",
+    "@mj-biz-apps/accounting-core-entities-server": "^0.22.2",
+    "@mj-biz-apps/accounting-entities": "^0.22.2",
+    "@mj-biz-apps/accounting-actions": "^0.22.2",
     "class-validator": "^0.14.3"
   },
   "peerDependencies": {
-    "@memberjunction/core": "^6.1.0-edge.4",
-    "@memberjunction/global": "^6.1.0-edge.4",
-    "@memberjunction/server": "^6.1.0-edge.4",
-    "@memberjunction/sqlserver-dataprovider": "^6.1.0-edge.4",
-    "@mj-biz-apps/common-server": "^5.34.0",
-    "@mj-biz-apps/common-entities": "^5.34.0"
+    "@memberjunction/core": "^6.1.5",
+    "@memberjunction/global": "^6.1.5",
+    "@memberjunction/server": "^6.1.5",
+    "@memberjunction/sqlserver-dataprovider": "^6.1.5",
+    "@mj-biz-apps/common-server": "^5.50.2",
+    "@mj-biz-apps/common-entities": "^5.50.2"
   },
   "repository": {
     "type": "git",

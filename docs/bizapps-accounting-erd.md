@@ -7,17 +7,42 @@
 > (≤5 entity boxes) so it renders full-size on a 13" laptop — open in VS Code
 > Markdown preview, or paste a block into https://mermaid.live to zoom.
 >
-> **Current as of 2026-08-06** — verified against the live `__mj_BizAppsAccounting` schema, not just
-> read forward from the migrations (24 tables, every column diffed; see
-> `test-harnesses/server/_maint-erd-drift.ts`, which reproduces the check).
+> **Current as of 2026-10-11** — read forward from every migration through
+> `V202610051600__v0.21.x__AccountingCompanyProfile_Parent_Tree.sql`: 26 tables, none dropped. The
+> last diff against a live `__mj_BizAppsAccounting` schema (every column) was on 2026-08-29;
+> `test-harnesses/server/_maint-erd-drift.ts` reproduces it. Its live table count also includes
+> Skyway's `flyway_schema_history`, which `mj migrate --schema` keeps in this schema.
 >
-> - **JournalEntryBatch rename** (Amith ruling, 2026-08-04/05) — every bare `Batch` identifier naming
+> **Since 2026-08-29:**
+> - **`GLAccountRole.Cardinality`** (`One` | `Many`, BA-D34) and the `BankAccount` role, the only
+>   `Many` role. Its migration is dated 2026-08-27; the column was first drawn here on 2026-10-11.
+> - **`Archived` batch status** (golive #214) with its audit triple `ArchiveReason` / `ArchivedAt` /
+>   `ArchivedByUserID`.
+> - **Predictive anomaly fields** on `JournalEntry`: `PredictedAnomalyProbability`,
+>   `PredictedAnomalyRiskBand`, `PredictedAnomalyScoredAt`.
+> - **`OperatingTimeZone` inherits the business zone** when blank (#158); no column change.
+> - **Cancel after approval** (#183): `CancelReason` / `CancelledAt` / `CancelledByUserID`, the ERP
+>   check `ERPNotPostedConfirmedAt` / `ERPNotPostedConfirmedByUserID` / `ERPNotPostedBasis`, and the
+>   approval seal `ApprovedContentHash`.
+> - **NEW `FinanceExceptionType` + `FinanceException`** (golive #279) — §10.
+> - **Send audit** (#184): `SentByUserID`, `SendAttemptCount`, `trg_JournalEntryBatch_SendOnce`.
+> - **Seal mismatch** (#216): `SealMismatchDetectedAt`; a locked entry's dimension tags are frozen
+>   (`trg_JELD_Immutability`).
+> - **`AccountingCompanyProfile.PostingStartDate`**: entries dated before it never batch.
+> - **Company parents may nest**: `trg_ACP_NoChains` refuses a cycle instead of a chain (50010).
+>
+> **Earlier (to 2026-08-29):**
+> - **NEW `AccountingEngineExtension`** (ERP provider layer Rev 2) — host registry for Open App
+>   run-extensions the accounting engine invokes around its verbs. Empty in this app; consumers
+>   (FP&A first) insert their own row. Hook participation is on the class, not columns.
+>
+> - **JournalEntryBatch rename** (2026-08-04/05) — every bare `Batch` identifier naming
 >   the entity now carries the full name: `JournalEntry.JournalEntryBatchID`,
 >   `JournalEntryBatch.JournalEntryBatchNumber`, `ExternalJournalEntryBatchRef`,
 >   `JournalEntryType.IsJournalEntryBatchSummary`, plus the sproc, triggers and constraints named off
 >   them. Unchanged on purpose: `BatchedAt`/`BatchedByUserID` and the `Batched` status (they name the
 >   action, not the entity) and the `BATCH-…` number format.
-> - **Tax model reworked (PR #28)** — `CustomerTaxProfile` is **DROPPED** (buyer-side exemption moved
+> - **Tax model reworked** — `CustomerTaxProfile` is **DROPPED** (buyer-side exemption moved
 >   to bizapps-orders as `CustomerTaxExemption`) and **`CompanyTaxNexus` is REAL, not planned** — §7b
 >   below. `TaxRate.Rate` widened `DECIMAL(7,4) → DECIMAL(9,6)`; `CK_TaxRate_Source` dropped.
 >
@@ -39,7 +64,7 @@
 > point UP the dependency graph only and are REAL FKs (issue #22); the ONE sanctioned downstream
 > lineage is the polymorphic D25 origin pair (`LinkedEntityID` hard-FK to `__mj.Entity` +
 > `LinkedRecordID`, soft by nature). External (not this schema): `Company`, `User`, `File`,
-> `Entity` (`__mj`), `Organization` (`__mj_BizAppsCommon`).
+> `Entity` (`__mj`), `Task` (`__mj_BizAppsTasks`, the batch approval task).
 
 ---
 
@@ -55,8 +80,8 @@ flowchart TD
         Entity[Entity]
     end
 
-    subgraph Common["BizApps Common"]
-        Organization[Organization]
+    subgraph TasksApp["BizApps Tasks"]
+        Task[Task]
     end
 
     subgraph Accounting["BizApps Accounting  (__mj_BizAppsAccounting)"]
@@ -98,6 +123,13 @@ flowchart TD
             TaxLiability[TaxLiability]
             CTN[CompanyTaxNexus]
         end
+        subgraph EngineExt["Engine extensions"]
+            AEE[AccountingEngineExtension]
+        end
+        subgraph FinEx["Finance exceptions"]
+            FET[FinanceExceptionType]
+            FE[FinanceException]
+        end
         subgraph Perms["Permissions (planned)"]
             UCR[UserCompanyRole]
         end
@@ -132,14 +164,20 @@ flowchart TD
     Batch -->|JournalEntryBatchID: members + summary| JournalEntry
     Batch -.->|SummaryJournalEntryID| JournalEntry
     User -->|batched / approved by| Batch
+    Task -->|ApprovalTaskID| Batch
     Company --> JESeq
+    Company -->|optional scope| AEE
     TaxAuthority --> TaxJurisdiction
     TaxJurisdiction --> TaxRate
     Company --> TaxLiability
     TaxAuthority --> TaxLiability
     TaxJurisdiction --> TaxLiability
-    Organization --> CTP
-    TaxJurisdiction --> CTP
+    Company --> CTN
+    TaxJurisdiction --> CTN
+    FET --> FE
+    Company --> FE
+    Entity -->|polymorphic source| FE
+    User -->|source creator / reviewer| FE
     User --> UCR
     Company --> UCR
     Role --> UCR
@@ -156,7 +194,7 @@ erDiagram
     Company ||--o| AccountingCompanyProfile : "IS-A Disjoint - same UUID"
     User ||--o{ AccountingCompanyProfile : "ApprovalCFOUserID"
     Currency ||--o{ AccountingCompanyProfile : "Functional / Reporting"
-    AccountingCompanyProfile |o--o{ AccountingCompanyProfile : "uses books of (no chains)"
+    AccountingCompanyProfile |o--o{ AccountingCompanyProfile : "parent (Division/Dept/Branch use its books)"
     Currency ||--o{ CurrencySpotRate : "From / To"
     %% ---- chart of accounts / roles / links ----
     Company ||--o{ GLAccount : "owns COA"
@@ -164,7 +202,7 @@ erDiagram
     Currency ||--o{ GLAccount : "CurrencyCode"
     GLAccount ||--o{ GLAccountLink : "GLAccountID"
     GLAccountRole ||--o{ GLAccountLink : "GLAccountRoleID"
-    Entity ||--o{ GLAccountLink : "EntityID (Company | Product | Category)"
+    Entity ||--o{ GLAccountLink : "EntityID (Company | Product | ProductCategory | ProductType)"
     GLAccountLink ||--o{ GLAccountLinkDimension : ""
     Dimension ||--o{ GLAccountLinkDimension : ""
     %% ---- journal entries ----
@@ -175,15 +213,31 @@ erDiagram
     JournalEntry |o--o| JournalEntry : "Reverses / ReversedBy"
     JournalEntryType ||--o{ JournalEntry : "EntryTypeID (BA-D29)"
     JournalEntryLine ||--o{ JournalEntryLineDimension : ""
+    Dimension ||--o{ JournalEntryLineDimension : ""
     Dimension ||--o{ DimensionValue : ""
     DimensionValue |o--o{ DimensionValue : "parent"
     DimensionValue ||--o{ JournalEntryLineDimension : ""
     Entity ||--o{ JournalEntry : "LinkedEntityID (D25 origin pair)"
+    File |o--o{ JournalEntry : "FileID (source document)"
+    %% ---- engine extensions ----
+    Company ||--o{ AccountingEngineExtension : "optional company scope (NULL = all)"
+    AccountingEngineExtension {
+        uuid ID PK
+        string Code UK "engine key e.g. ImportBankAccountBalances"
+        string Name
+        string Description "nullable"
+        string DriverClass "ClassFactory key"
+        string Status "Active | Disabled"
+        int Sequence "run order, default 0"
+        uuid CompanyID FK "nullable - NULL = every company in the run"
+        string Configuration "JSON IAccountingEngineExtensionConfiguration, ISJSON"
+    }
     %% ---- intercompany lookup (BA-D26..D28) ----
     Company ||--o{ IntercompanyAccountMatch : "Source / Target (ordered pair)"
     GLAccount ||--o{ IntercompanyAccountMatch : "DueTo (Source's liability) / DueFrom (Target's asset)"
     IntercompanyAccountMatch ||--o{ IntercompanyAccountMatchDimension : "per-Side dimension pins"
     Dimension ||--o{ IntercompanyAccountMatchDimension : ""
+    DimensionValue |o--o{ IntercompanyAccountMatchDimension : "nullable pin"
     IntercompanyAccountMatch {
         uuid ID PK
         uuid SourceCompanyID FK "ORDERED - Source owes Target (BA-D27)"
@@ -207,7 +261,8 @@ erDiagram
     Company ||--o{ JournalEntryBatch : "single-company (D7)"
     JournalEntryBatch ||--o{ JournalEntry : "JournalEntryBatchID (members + summary, by IsJournalEntryBatchSummary type)"
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID"
-    User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy"
+    User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy / ArchivedBy / CancelledBy / ERPNotPostedConfirmedBy / SentBy"
+    Task |o--o{ JournalEntryBatch : "ApprovalTaskID (__mj_BizAppsTasks)"
     Company ||--o{ JournalEntrySequence : "per-company per-FY numbering"
     %% ---- tax ----
     TaxAuthority ||--o{ TaxJurisdiction : ""
@@ -218,6 +273,11 @@ erDiagram
     TaxJurisdiction ||--o{ TaxLiability : ""
     Company ||--o{ CompanyTaxNexus : ""
     TaxJurisdiction ||--o{ CompanyTaxNexus : ""
+    %% ---- finance exceptions (golive #279) ----
+    FinanceExceptionType ||--o{ FinanceException : "FinanceExceptionTypeID"
+    Entity ||--o{ FinanceException : "SourceEntityID (polymorphic source pair)"
+    Company ||--o{ FinanceException : "CompanyID"
+    User |o--o{ FinanceException : "SourceCreatedByUserID / ReviewedByUserID"
     %% ---- permissions (planned) ----
     User ||--o{ UserCompanyRole : ""
     Company ||--o{ UserCompanyRole : ""
@@ -232,11 +292,12 @@ erDiagram
         string JurisdictionCountry
         string JurisdictionRegion
         string FederalTaxID
-        string OperatingTimeZone "display only - UTC storage"
+        string OperatingTimeZone "optional override - blank inherits business zone"
         string FunctionalCurrencyCode FK
         string ReportingCurrencyCode FK
         int FiscalYearStartMonth
         int FiscalYearStartDay
+        date PostingStartDate "nullable - entries dated before it never batch"
         uuid ParentAccountingCompanyID FK
         uuid ApprovalCFOUserID FK
         bool IsActive
@@ -274,10 +335,11 @@ erDiagram
     }
     GLAccountRole {
         uuid ID PK
-        string Name "AR | Sales | DefRev | SalesDiscounts | ReturnsAndAllowances | ..."
+        string Name UK "Cash | Accounts Receivable | Sales | Deferred Revenue | BankAccount | ..."
         string Description
         string Status "Active | Inactive"
         int Sequence "display/resolution order, default 0"
+        string Cardinality "One | Many (default One); BankAccount is Many (BA-D34)"
     }
     GLAccountLink {
         uuid ID PK
@@ -318,6 +380,7 @@ erDiagram
         uuid ID PK
         string Code UK "Manual | Reversal | JournalEntryBatchSummary | consumer-seeded ..."
         string Name
+        string Description
         bool IsSystem "accounting's own - do not repurpose"
         bool IsJournalEntryBatchSummary "exactly one flagged row (filtered UX)"
         bool IsActive
@@ -338,6 +401,9 @@ erDiagram
         uuid FileID FK
         datetimeoffset GLPostedAt
         string GLReferenceID
+        decimal PredictedAnomalyProbability "Predictive Studio anomaly probability"
+        string PredictedAnomalyRiskBand "Predictive Studio anomaly risk band"
+        datetimeoffset PredictedAnomalyScoredAt "Predictive Studio score timestamp"
     }
     JournalEntryLine {
         uuid ID PK
@@ -365,11 +431,21 @@ erDiagram
         date PostingDate "must match the GL (D8)"
         uuid SummaryJournalEntryID FK "summary JE (type flagged IsJournalEntryBatchSummary)"
         string TargetSystem
-        string Status "Pending | Approved | Sent | Posted | Failed | Cancelled"
+        string Status "Pending | Approved | Sent | Posted | Failed | Cancelled | Archived"
         datetimeoffset BatchedAt
         uuid BatchedByUserID FK
         datetimeoffset ApprovedAt
         uuid ApprovedByUserID FK
+        string ApprovedContentHash "SHA-256 seal written at approval (#183)"
+        string ArchiveReason
+        datetimeoffset ArchivedAt
+        uuid ArchivedByUserID FK
+        string CancelReason
+        datetimeoffset CancelledAt
+        uuid CancelledByUserID FK
+        datetimeoffset ERPNotPostedConfirmedAt
+        uuid ERPNotPostedConfirmedByUserID FK
+        string ERPNotPostedBasis "ERPLookup | UserAttested"
         int TotalEntries
         decimal TotalDebits
         decimal TotalCredits
@@ -377,7 +453,10 @@ erDiagram
         datetimeoffset ApprovalTaskRaisedAt
         string ExternalJournalEntryBatchRef
         datetimeoffset SentAt
+        uuid SentByUserID FK
+        int SendAttemptCount
         datetimeoffset PostedAt
+        datetimeoffset SealMismatchDetectedAt
         string ErrorMessage
     }
     JournalEntrySequence {
@@ -404,8 +483,11 @@ erDiagram
         string CountryCode
         string RegionCode
         string PostalCode
+        string PostalCodeStart
+        string PostalCodeEnd
         string CityName
         uuid ParentTaxJurisdictionID FK
+        bool IsActive
     }
     TaxRate {
         uuid ID PK
@@ -414,7 +496,7 @@ erDiagram
         decimal Rate "0..1"
         date EffectiveFrom
         date EffectiveTo
-        string Source "Avalara | TaxJar | Manual"
+        string Source "free text, default Manual - no CHECK"
     }
     TaxLiability {
         uuid ID PK
@@ -439,6 +521,33 @@ erDiagram
         string Status "Active | Inactive"
         string Comments
     }
+    FinanceExceptionType {
+        uuid ID PK
+        string Code UK "detector key, never renamed"
+        string Name
+        string Description "nullable"
+        string OwningApp "orders | sales | accounting - free text, no CHECK"
+        bool IsActive
+        string Configuration "JSON object (ISJSON check) - detector thresholds"
+    }
+    FinanceException {
+        uuid ID PK
+        uuid FinanceExceptionTypeID FK "UQ with DedupeKey"
+        uuid SourceEntityID FK "polymorphic source pair - __mj.Entity"
+        string SourceRecordID
+        uuid CompanyID FK
+        decimal Amount "nullable"
+        date ExceptionDate "its month is the close it blocks"
+        datetimeoffset DetectedAt
+        string Summary
+        string DedupeKey "UQ with FinanceExceptionTypeID"
+        uuid SourceCreatedByUserID FK "nullable - may not clear"
+        bool CreatorUnresolved
+        string Status "Open | Reviewed | Corrected"
+        uuid ReviewedByUserID FK "nullable"
+        datetimeoffset ReviewedAt "nullable"
+        string ReviewNote "nullable"
+    }
     UserCompanyRole {
         uuid ID PK
         uuid UserID FK
@@ -457,7 +566,7 @@ erDiagram
     Company ||--o| AccountingCompanyProfile : "IS-A Disjoint - same UUID"
     User ||--o{ AccountingCompanyProfile : "ApprovalCFOUserID"
     Currency ||--o{ AccountingCompanyProfile : "Functional / Reporting currency"
-    AccountingCompanyProfile |o--o{ AccountingCompanyProfile : "ParentAccountingCompanyID - uses books of, no chains"
+    AccountingCompanyProfile |o--o{ AccountingCompanyProfile : "ParentAccountingCompanyID - nests, no cycles"
 
     AccountingCompanyProfile {
         uuid ID PK "IS-A: same UUID as parent Company (no own PK gen)"
@@ -468,12 +577,13 @@ erDiagram
         string JurisdictionCountry "ISO 3166-1, nullable"
         string JurisdictionRegion "nullable"
         string FederalTaxID "nullable"
-        string OperatingTimeZone "display only - storage is UTC"
+        string OperatingTimeZone "optional override - blank inherits business zone"
         string FunctionalCurrencyCode FK "JEs post in this"
         string ReportingCurrencyCode FK "nullable"
         int FiscalYearStartMonth
         int FiscalYearStartDay
-        uuid ParentAccountingCompanyID FK "nullable"
+        date PostingStartDate "nullable - entries dated before it never batch"
+        uuid ParentAccountingCompanyID FK "nullable - Division/Department/Branch use the legal entity found up this chain"
         uuid ApprovalCFOUserID FK "batch approver - a security identity"
         bool IsActive
     }
@@ -520,16 +630,17 @@ erDiagram
     }
     GLAccountRole {
         uuid ID PK
-        string Name "Cash | AR | Sales | DefRev | SalesDiscounts | ReturnsAndAllowances | ..."
+        string Name UK "Cash | Accounts Receivable | Sales | Deferred Revenue | BankAccount | ... - orders resolves by exact Name"
         string Description
         string Status "Active | Inactive"
         int Sequence "display/resolution order, default 0"
+        string Cardinality "One | Many (default One); tie guard + single resolve only for One (BA-D34)"
     }
     GLAccountLink {
         uuid ID PK
         uuid GLAccountID FK
         uuid GLAccountRoleID FK
-        uuid EntityID FK "polymorphic: Company | Product | ProductCategory"
+        uuid EntityID FK "polymorphic: Company | Product | ProductCategory | ProductType"
         string RecordID "target record (NVARCHAR 400)"
         string Status "Pending | Active | Disabled"
         datetimeoffset StartedAt "nullable window"
@@ -544,8 +655,8 @@ erDiagram
     }
 ```
 
-**Resolution walk:** product link → product-company's own category tree → company default →
-loud tripwire. Cross-company links hard-blocked; revenue side anchors to the product-company,
+**Resolution walk:** product link → product-company's own category tree → product type → company
+default → loud tripwire. Cross-company links hard-blocked; revenue side anchors to the product-company,
 AR/cash side to the order-owning company (§5.3).
 
 ---
@@ -597,6 +708,7 @@ erDiagram
     GLAccount ||--o{ JournalEntryLine : "GLAccountID - must match header company (trigger)"
     JournalEntry |o--o| JournalEntry : "Reverses / ReversedBy - pen not pencil"
     JournalEntryLine ||--o{ JournalEntryLineDimension : "line tags"
+    Dimension ||--o{ JournalEntryLineDimension : "DimensionID"
     Dimension ||--o{ DimensionValue : "DimensionID"
     DimensionValue ||--o{ JournalEntryLineDimension : "DimensionValueID"
 
@@ -616,6 +728,9 @@ erDiagram
         uuid FileID FK "nullable - source document"
         datetimeoffset GLPostedAt "GL roundtrip - mutable after lock"
         string GLReferenceID "GL roundtrip"
+        decimal PredictedAnomalyProbability "Predictive Studio anomaly probability"
+        string PredictedAnomalyRiskBand "Predictive Studio anomaly risk band"
+        datetimeoffset PredictedAnomalyScoredAt "Predictive Studio score timestamp"
     }
     JournalEntryLine {
         uuid ID PK
@@ -632,7 +747,7 @@ erDiagram
     }
     JournalEntryLineDimension {
         uuid ID PK
-        uuid JournalEntryLineID FK
+        uuid JournalEntryLineID FK "frozen once the JE is Batched/GLPosted (trg_JELD_Immutability, 50033)"
         uuid DimensionID FK "UNIQUE (line, dimension)"
         uuid DimensionValueID FK
     }
@@ -650,7 +765,7 @@ erDiagram
         string Code "UNIQUE per dimension"
         string Name
         uuid ParentDimensionValueID FK "nullable hierarchy"
-        date EffectiveFrom
+        date EffectiveFrom "nullable"
         date EffectiveTo "nullable"
         bool IsActive
     }
@@ -696,7 +811,7 @@ erDiagram
     Company ||--o{ JournalEntryBatch : "CompanyID NOT NULL - single-company (D7)"
     JournalEntryBatch ||--o{ JournalEntry : "JournalEntryBatchID - members AND the summary (discriminated by the type IsJournalEntryBatchSummary flag)"
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID - coherence trigger 50023"
-    User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy"
+    User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy / ArchivedBy / CancelledBy / ERPNotPostedConfirmedBy / SentBy"
 
     JournalEntryBatch {
         uuid ID PK
@@ -705,27 +820,57 @@ erDiagram
         date PostingDate "singular, accountant-set - must match the GL (D8)"
         uuid SummaryJournalEntryID FK "type IsJournalEntryBatchSummary, EffectiveDate=PostingDate, same JournalEntryBatchID"
         string TargetSystem "BusinessCentral | QuickBooks | NetSuite | Sage | Xero | Other"
-        string Status "Pending | Approved | Sent | Posted | Failed | Cancelled"
+        string Status "Pending | Approved | Sent | Posted | Failed | Cancelled | Archived"
         datetimeoffset BatchedAt
         uuid BatchedByUserID FK
         datetimeoffset ApprovedAt "nullable"
         uuid ApprovedByUserID FK "nullable"
+        string ApprovedContentHash "nullable - SHA-256 of the approved content, frozen; dispatch compares it (#183)"
+        string ArchiveReason "nullable - required when Archived (CK_JournalEntryBatch_ArchiveAudit)"
+        datetimeoffset ArchivedAt "nullable"
+        uuid ArchivedByUserID FK "nullable"
+        string CancelReason "nullable - required when cancelled after approval (CK_JournalEntryBatch_CancelAudit)"
+        datetimeoffset CancelledAt "nullable"
+        uuid CancelledByUserID FK "nullable"
+        datetimeoffset ERPNotPostedConfirmedAt "nullable - required when a batch that was sent is cancelled (CK_JournalEntryBatch_CancelERPCheck)"
+        uuid ERPNotPostedConfirmedByUserID FK "nullable"
+        string ERPNotPostedBasis "nullable - ERPLookup | UserAttested; how not-posted was established (CK_JournalEntryBatch_ERPNotPostedBasis)"
         int TotalEntries "control totals"
         decimal TotalDebits
         decimal TotalCredits
         uuid ApprovalTaskID "FK to __mj_BizAppsTasks.Task (#22) - both-or-neither with RaisedAt (CHECK)"
         datetimeoffset ApprovalTaskRaisedAt "nullable"
         string ExternalJournalEntryBatchRef "nullable"
-        datetimeoffset SentAt "nullable"
+        datetimeoffset SentAt "nullable - latest send; a retry overwrites it"
+        uuid SentByUserID FK "nullable - whose dispatch last entered Sent (#184)"
+        int SendAttemptCount "dispatch attempts that entered Sent; each send must advance it by one (trg_JournalEntryBatch_SendOnce, 50030)"
         datetimeoffset PostedAt "nullable"
+        datetimeoffset SealMismatchDetectedAt "nullable - a retry recorded it Posted from the ERP over a broken seal; set only then, frozen after (50034, #216)"
         string ErrorMessage "nullable"
     }
 ```
 
 **Lock model (derived, one machinery):** member + summary JEs lock preliminarily at build
-(`Batched`, batch still `Pending` — reversible unlock sanctioned), permanently at approval,
-`GLPosted` at post. Summary is excluded from netting/count/sweep via its type's `IsJournalEntryBatchSummary` flag (the
-discriminator); footing-trigger successor = pending Amith.
+(`Batched`, batch still `Pending` — reversible unlock sanctioned), and at approval for as long as
+the batch stays approved, `GLPosted` at post. Batch content is frozen (trg_JournalEntryBatch_Immutability)
+from `Approved` on, `Failed` included. `Cancelled` — from `Pending`, `Approved` or `Failed` —
+releases the members: the unlock is sanctioned while the owning batch is `Pending` or `Cancelled`,
+and a batch becomes `Cancelled` only with its summary pointer cleared — in the same update, or by
+regenerate's teardown before it (#183, #213). `Posted`, `Cancelled` and `Archived` are terminal, no batch returns to `Pending`,
+only a `Pending` batch is approved, only a `Sent` batch becomes `Posted` or `Failed` (#221), a `Sent` batch is not archived, and a `Cancelled` batch's content, approval pair and
+cancel audit are frozen (50031 / 50009). The cancel audit and the ERP check are written only by the
+update that cancels the batch, and `SentAt` is never cleared once set (50032; `trg_JournalEntryBatch_SendOnce`
+fires first, so a caller clearing it sees 50030). The send stamp — `SentAt`,
+`SentByUserID`, `SendAttemptCount` — changes only on a send, which must start from `Approved` or `Failed`
+and advance the count by one (50030). A locked entry's lines and their dimension tags are frozen too
+(50006, 50033, #216); a `Failed` retry that finds the batch already in the ERP is recorded `Posted`
+even over a broken seal, and `SealMismatchDetectedAt` flags it. That flag is written only by the
+`Sent` → `Posted` update of a retry (`SendAttemptCount` above 1) and is never changed or cleared
+after; no insert carries it (50034). `Archived` keeps the members
+locked for good. Summary is excluded from netting/count/sweep via its type's `IsJournalEntryBatchSummary` flag (the
+discriminator). Footing is checked in code, by `JournalEntryBatchEntityServer` at approval and again
+at dispatch; whether a database trigger should also assert it is still open
+(`plans/bizapps-accounting-master.md` §6, item 6).
 
 ---
 
@@ -832,7 +977,7 @@ Calculation is delegated (D17); these tables record, never author, rates. Both t
 the **seller**: `TaxLiability` is what our company owes, `CompanyTaxNexus` is where it is obliged to
 collect in the first place.
 
-> **Buyer-side taxability is NOT here (PR #28).** `CustomerTaxProfile` was dropped from this schema
+> **Buyer-side taxability is NOT here.** `CustomerTaxProfile` was dropped from this schema
 > — "is this CUSTOMER exempt" is a customer-shaped concern, and accounting is the general JE/ERP
 > engine. It now lives in **bizapps-orders as `CustomerTaxExemption`**, where customer attributes
 > start. Any tax-category scope belongs there too, keyed by an accounting-owned tax category rather
@@ -859,3 +1004,81 @@ erDiagram
 
 RLS on all four operations rides one Accounting MJ role, scoped per company by this grant
 table; the batch approver enforced at approval is the company's Accounting Approver.
+
+---
+
+## 9. Accounting engine extensions (ERP provider layer Rev 2)
+
+Host-visible registry for Open App run-extensions the accounting engine invokes around its
+verbs (`SyncMasterData`, `PostJournalBatch`, later others). Accounting does **not** seed rows;
+FP&A (and later payroll, expense) insert their own. Hook participation is on
+`BaseAccountingEngineExtension` getters / Before-After overrides, not columns. ERP provider
+plugins are **not** rows here — they stay ClassFactory on `BaseAccountingERPProvider`.
+
+```mermaid
+erDiagram
+    Company ||--o{ AccountingEngineExtension : "CompanyID nullable — NULL = all companies"
+
+    AccountingEngineExtension {
+        uuid ID PK
+        string Code UK "stable engine key; unique"
+        string Name "Explorer / dashboard display"
+        string Description "nullable — owning app and what it writes"
+        string DriverClass "ClassFactory key for the subclass"
+        string Status "Active | Disabled (default Active)"
+        int Sequence "run order; ties break on Code"
+        uuid CompanyID FK "nullable"
+        string Configuration "JSON bag; NULL = class/engine defaults"
+    }
+```
+
+
+---
+
+## 10. Finance exceptions (golive #279)
+
+The month-end review list. Detectors in consuming apps raise rows through
+`Accounting.RaiseFinanceExceptions` (idempotent on type + `DedupeKey`; a repeat refreshes an Open
+row's creator fields and summary), and accounting raises `ERP_POSTING_NOT_READ_BACK` itself when a
+batch the ERP accepted cannot be read back; a holder of
+`MJ.BizApps.Accounting.FinanceExceptions.Clear` (the Finance role) who did not create the source
+record clears them through `Accounting.ClearFinanceException`. `Open → Reviewed | Corrected`, both
+terminal; `FinanceExceptionEntityServer` refuses any other status change and any delete. A company's
+month is ready to close when it has no Open rows (saved query "Finance Exceptions Ready To Close").
+The six types and their thresholds are seeded by `metadata/finance-exception-types`.
+
+```mermaid
+erDiagram
+    FinanceExceptionType ||--o{ FinanceException : "FinanceExceptionTypeID"
+    Entity ||--o{ FinanceException : "SourceEntityID (polymorphic source pair)"
+    Company ||--o{ FinanceException : "CompanyID"
+    User |o--o{ FinanceException : "SourceCreatedByUserID / ReviewedByUserID"
+
+    FinanceExceptionType {
+        uuid ID PK
+        string Code UK "PROGRESS_JUDGMENT_CALL | PROGRESS_UNATTESTED | WON_DEAL_ORDER_NOT_CONFIRMED | PRICE_BELOW_ENGINE_UNAPPROVED | OVERLAPPING_SUBSCRIPTION | ERP_POSTING_NOT_READ_BACK"
+        string Name
+        string Description "nullable"
+        string OwningApp "orders | sales | accounting - free text, no CHECK"
+        bool IsActive "inactive = detector and raise skip"
+        string Configuration "JSON object (ISJSON check) - detector thresholds"
+    }
+    FinanceException {
+        uuid ID PK
+        uuid FinanceExceptionTypeID FK "UQ with DedupeKey"
+        uuid SourceEntityID FK
+        string SourceRecordID "source record PK"
+        uuid CompanyID FK
+        decimal Amount "nullable, 19,4"
+        date ExceptionDate "its month is the close it blocks"
+        datetimeoffset DetectedAt
+        string Summary
+        string DedupeKey "UQ with FinanceExceptionTypeID"
+        uuid SourceCreatedByUserID FK "nullable - may not clear"
+        bool CreatorUnresolved "creator has no linked login"
+        string Status "Open | Reviewed | Corrected"
+        uuid ReviewedByUserID FK "nullable; required once terminal"
+        datetimeoffset ReviewedAt "nullable; required once terminal"
+        string ReviewNote "nullable; NULL while Open"
+    }
+```

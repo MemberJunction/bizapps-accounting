@@ -5,14 +5,17 @@
  * with the typed contract intact on the wire.
  *
  *   1. success — a mergeable draft books; outputJSON carries {Success, JournalEntryID,
- *      EntryNumber JE-{FY}-{seq}, LineCount} (exact values).
+ *      EntryNumber JE-{CompanyCode}-{FY}-{seq:000000}, LineCount} (exact values).
  *   2. typed failure ON THE WIRE — an unbalanced draft returns transport success=true with
  *      Output.Success=false + UNBALANCED (logical failures live INSIDE the output).
  *   3. unknown operation key → UNKNOWN_OPERATION (the registry gate works over the wire).
+ *   4. Accounting.GenerateJournalEntryReversal — a reversal JE comes back with an EntryNumber; a
+ *      second reversal of the same JE is refused.
  *
  * Reuses the batching fixture for an isolated company. Run from the INSTANCE WORKTREE ROOT:
  *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/engine-op-api.ts
- * Env overrides: MJ_API_URL (default http://localhost:4070) · MJ_API_KEY · MJDEV_SLUG.
+ * Env overrides: MJ_API_URL (default http://localhost:4180) · MJ_API_KEY (default: minted with
+ * `mjdev key <slug>`) · MJDEV_SLUG (default accounting-revamp).
  * Exit codes: 0 all passed · 1 assertion failures · 2 bootstrap/connection error.
  */
 import { execFileSync, execSync } from 'node:child_process';

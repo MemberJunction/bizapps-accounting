@@ -8,24 +8,30 @@ this folder is gitignored except this doc** (`.gitignore`: `test-harnesses/test-
 It is intentionally empty in git. Each developer/agent (re)creates the contents locally; this doc
 is the contract for what goes here and how to regenerate it.
 
-## What to put here
+## What goes here
 
 | Path | What | How to (re)create |
 |---|---|---|
-| `chrome-profile/` | Persisted system-Chrome user-data dir (MSAL/session cookies, localStorage) so auth survives between Playwright runs. | First headed run authenticates once; the profile dir is written here and reused on later headless runs. See `playwright/README.md`. |
-| `session.json` | A logged-in Explorer session URL + magic-link token for a chosen persona (so a run can deep-link straight in). | `mjdev explorer-url <slug>` (mints a magic-link session; needs MJAPI running). Re-mint when it expires. |
-| `personas.json` | The two persona identities the approval-gate tests need: a **CFO-role** identity (decision authority) and a **non-CFO** identity (to prove the gate *blocks*). Just IDs/emails + which is CFO — no secrets. | Provision via `mjdev persona add` / pick from `mjdev persona list`; record their IDs here. |
+| `magic-link.txt` | A logged-in Explorer URL with a magic-link token (`http://localhost:<explorer-port>/#token=<JWT>`), valid for about 8 hours. | Written automatically: `playwright/lib/global-setup.ts` runs `mjdev explorer-url <slug>` at the start of every `npx playwright test` run (needs MJAPI running). |
+
+Nothing else is read or written here. `playwright/lib/env.ts` defines a `storage-state.json` path in
+this folder, but no code uses it.
 
 ## How the harness consumes it
-- The Playwright config points its `userDataDir` / `storageState` at `test-auth/chrome-profile`
-  (or `session.json`), falling back to a one-time interactive login if absent.
-- The instance Explorer URL/port is **:4310** (API **:4010**) for `bizapps-accounting-dev`; confirm
-  with `mjdev runs <slug>`. Launch the services with `mjdev run <slug> explorer` / `... api`.
+- `global-setup` creates this folder if it is missing, mints the magic link once per run and writes
+  it to `magic-link.txt` (`playwright/lib/auth.ts`).
+- Every spec calls `loginViaMagicLink(page)`, which opens that URL to authenticate its own fresh
+  browser context. The config sets no `userDataDir` or `storageState`: the magic-link session lives
+  in sessionStorage / memory, which `storageState` does not capture.
+- The Explorer and MJAPI ports are not fixed. `playwright/lib/env.ts` reads them from
+  `mjdev ps <slug> --json` (process labels `MJExplorer` and `MJAPI`), unless `MJEXPLORER_PORT` /
+  `MJAPI_PORT` are set; it falls back to 4200 / 4000.
 
 ## Regenerating from scratch
-1. `mjdev run bizapps-accounting-dev api` and `mjdev run bizapps-accounting-dev explorer`.
-2. `mjdev explorer-url bizapps-accounting-dev` → paste the logged-in URL into `session.json`, OR do
-   one headed Playwright login to populate `chrome-profile/`.
-3. Ensure both personas exist (`mjdev persona list`); record them in `personas.json`.
+1. `mjdev run <slug> api` and `mjdev run <slug> explorer`.
+2. Run the suite (`npx playwright test` in `test-harnesses/playwright`); `global-setup` writes a fresh
+   `magic-link.txt`.
+3. No persona file is needed: the batching fixture creates its throwaway company at runtime and makes
+   the instance's Owner user its CFO.
 
-If auth fails mid-suite, delete the stale `chrome-profile/` / `session.json` and redo step 2.
+If auth fails mid-suite (an expired token), re-run; `global-setup` re-mints the link every run.

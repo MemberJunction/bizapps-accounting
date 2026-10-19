@@ -1,0 +1,13 @@
+:host { display: block; }
+.erp-sync {
+  padding: 16px; border: 1px solid var(--mj-border-default); border-radius: 16px;
+  background: var(--mj-bg-surface); display: flex; flex-direction: column; gap: 12px;
+}
+.erp-sync__head h3 { margin: 0; font-size: 1rem; color: var(--mj-text-primary); }
+.erp-sync__head p { margin: 4px 0 0; color: var(--mj-text-secondary); font-size: var(--mj-text-sm); }
+.erp-sync__objects { display: flex; gap: 16px; flex-wrap: wrap; color: var(--mj-text-primary); }
+.erp-sync__objects label { display: flex; gap: 6px; align-items: center; }
+.erp-sync__results { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.erp-sync__results li { display: flex; gap: 8px; align-items: baseline; font-size: var(--mj-text-sm); }
+.erp-sync__ok { color: var(--mj-status-success); }
+.erp-sync__bad { color: var(--mj-status-error); }

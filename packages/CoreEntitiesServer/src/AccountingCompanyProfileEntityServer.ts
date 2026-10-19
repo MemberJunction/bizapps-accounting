@@ -26,12 +26,15 @@
  *   DOC:      docs/ARCHITECTURE.md#company-profile-init
  */
 
-import { BaseEntity, EntitySaveOptions, LogError, Metadata, RunView } from '@memberjunction/core';
+import { BaseEntity, IRunViewProvider, LogError, Metadata, RunView, ValidationErrorInfo, ValidationResult } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
   mjBizAppsAccountingGLAccountEntity,
 } from '@mj-biz-apps/accounting-entities';
+import { UsesParentBooks } from '@mj-biz-apps/accounting-engine-base';
+import { ParentBooksAccountOwnerError } from './GLAccountEntityServer.js';
+import { sqlGuidLiteral } from './SqlGuards.js';
 
 import {
   DEFAULT_CHART_OF_ACCOUNTS,
@@ -41,31 +44,62 @@ import {
 @RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Accounting Company Profiles')
 export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAccountingCompanyProfileEntity {
 
-  override async Save(options?: EntitySaveOptions): Promise<boolean> {
-    const isNewRecord = !this.IsSaved;
+  // No Save override. Two first-save behaviors were retired:
+  //  - COA auto-seed (2026-07-30, supersedes the W1 auto-hook): a new company starts with an
+  //    EMPTY chart, because GL accounts identity-lock immediately (L8) and auto-seeding forced
+  //    ten locked-identity accounts on every company. Seeding stays an EXPLICIT capability —
+  //    call `SeedDefaultChartOfAccounts()` (idempotent, code-guarded).
+  //  - OperatingTimeZone = 'UTC' default (#158): the field is a per-company display override,
+  //    and blank means "inherit `BizApps.BusinessTimeZone`". Stamping 'UTC' made every new
+  //    company override the business zone with UTC.
 
-    // Block 0 / AD-16: default OperatingTimeZone to UTC for a new profile when the
-    // caller didn't supply one. All storage is Zulu; period & rev-rec boundaries are
-    // evaluated in this zone. Set before the first persist so __mj.RecordChange
-    // captures it (audit-by-construction).
-    if (isNewRecord && !this.OperatingTimeZone) {
-      this.OperatingTimeZone = 'UTC';
+  /** BaseEntity SKIPS ValidateAsync by default — opt in, or the owner check below never runs on Save. */
+  public override get DefaultSkipAsyncValidation(): boolean {
+    return false;
+  }
+
+  /**
+   * A company that owns active GL accounts cannot become a Division, Department or Branch
+   * (bc-aidp-next-golive#313). Those types keep no books, so their entries resolve their legal
+   * entity's accounts and an account the company owned would never be used, or would book entries
+   * under a company with no ERP connection. `GLAccountEntityServer` refuses the same state on the
+   * account side. Checked only when EntityType changes, so other edits to such a profile still save.
+   */
+  public override async ValidateAsync(): Promise<ValidationResult> {
+    const result = await super.ValidateAsync();
+    const entityTypeChanged = this.GetFieldByName('EntityType')?.Dirty ?? false;
+    if (this.IsSaved && entityTypeChanged && UsesParentBooks(this.EntityType)) {
+      const ownedCode = await this.firstActiveGLAccountCode();
+      const error = ownedCode === null ? null : ParentBooksAccountOwnerError(ownedCode, this.ID, this.EntityType);
+      if (error) {
+        result.Success = false;
+        result.Errors.push(new ValidationErrorInfo('EntityType', `${error} Deactivate its accounts first.`, this.EntityType));
+      }
     }
+    return result;
+  }
 
-    const saved = await super.Save(options);
-    if (!saved) {
-      return false;
+  /**
+   * The code of one active GL account this company owns, or null when it owns none. An inactive
+   * account takes no new lines, so it does no harm on a company that keeps no books.
+   */
+  private async firstActiveGLAccountCode(): Promise<string | null> {
+    const provider = this.ProviderToUse as unknown as IRunViewProvider;
+    const res = await provider.RunView<Pick<mjBizAppsAccountingGLAccountEntity, 'Code'>>(
+      {
+        EntityName: 'MJ_BizApps_Accounting: GL Accounts',
+        ExtraFilter: `CompanyID=${sqlGuidLiteral(this.ID, 'AccountingCompanyProfileEntityServer.firstActiveGLAccountCode')} AND IsActive=1`,
+        Fields: ['Code'],
+        MaxRows: 1,
+        ResultType: 'simple',
+        BypassCache: true,
+      },
+      this.ContextCurrentUser,
+    );
+    if (!res.Success) {
+      throw new Error(`Could not check whether company ${this.ID} owns active GL accounts: ${res.ErrorMessage ?? 'unknown error'}`);
     }
-
-    // NO auto-seed on create (Marcelo ruling 2026-07-30, supersedes the W1 auto-hook): a new
-    // company starts with an EMPTY chart. Rationale: GL accounts identity-lock immediately (L8),
-    // so auto-seeding forced ten locked-identity accounts on every company. The seed remains an
-    // EXPLICIT capability — call `SeedDefaultChartOfAccounts()` (idempotent, code-guarded) from
-    // fixtures, demo seeds, or a future "seed standard chart" affordance. `isNewRecord` is kept
-    // for the TZ default above.
-    void isNewRecord;
-
-    return true;
+    return res.Results?.[0]?.Code ?? null;
   }
 
   // ─── Seed COA (explicit capability — no longer an auto-hook) ───────────

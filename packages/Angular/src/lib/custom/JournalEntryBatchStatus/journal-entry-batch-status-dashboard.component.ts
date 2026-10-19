@@ -11,6 +11,7 @@ import {
 } from '@mj-biz-apps/accounting-entities';
 import { JournalEntryBatchDispatchClient } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import { resolveBatchStatusWindow } from './batch-status-window';
 
 /** Generated value-list unions (rule 2c: derived from the entity, never hand-copied). */
 type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
@@ -32,15 +33,19 @@ export interface BatchDetail { Lines: ConsolidatedLine[]; TotalDebits: number; T
 export interface PreviewEntry { ID: string; EntryNumber: string; EffectiveDate: Date | null; EntryType: string; Description: string | null; Amount: number }
 
 /** One batch row in the table, with its inferred date range + lazily-loaded JE detail. */
-export interface BatchRow {
-  ID: string;
-  JournalEntryBatchNumber: string;
-  Status: BatchStatus;
-  TargetSystem: TargetSystem;
-  TotalEntries: number;
-  TotalDebits: number;
-  TotalCredits: number;
-  ExternalJournalEntryBatchRef: string | null;
+/**
+ * The batch's own fields are PICKED from the generated entity class, never re-declared, so the
+ * compiler checks every field name and type against the schema. Everything below the
+ * intersection is derived or UI state, not a column: the inferred date range, the company list,
+ * and the expand/detail cache.
+ *
+ * `BatchedAt` is re-declared as nullable on purpose — the column is NOT NULL, but this page
+ * builds rows before the value is resolved.
+ */
+export type BatchRow = Pick<
+  mjBizAppsAccountingJournalEntryBatchEntity,
+  'ID' | 'JournalEntryBatchNumber' | 'Status' | 'TargetSystem' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'ExternalJournalEntryBatchRef' | 'ArchiveReason'
+> & {
   BatchedAt: Date | null;
   /** Inferred from the batch's journal entries' EffectiveDates (min/max) — a temporary stand-in for a real cutoff. */
   StartDate: Date | null;
@@ -51,12 +56,12 @@ export interface BatchRow {
   DetailLoaded: boolean;
   DetailLoading: boolean;
   Detail: BatchDetail | null;
-}
+};
 
 type SortField = 'Status' | 'TargetSystem' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'StartDate' | 'EndDate' | 'BatchedAt';
 
 /**
- * Batch Status — the filterable roll-up over every JE batch. Enhances the read-only view (Marcelo, 2026-07-08):
+ * Batch Status — the filterable roll-up over every JE batch. Enhances the read-only view with:
  * status toggles + company (incl. All) + target-system filters, an inferred Start→End date range per batch (from
  * its journal entries), summary stats, an in-page Build Batch action, and an expandable per-batch row whose indented
  * table shows that batch's journal entries and their Dr/Cr lines (account, company, amounts). It loads batches +
@@ -94,7 +99,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
 
   /** Filters. Empty status set = show all; null company/target = "All". */
   public SelectedStatuses = new Set<BatchStatus>();
-  /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = no narrowing. */
+  /** MULTI-select company narrowing: empty = no narrowing. */
   public SelectedCompanyIDs: string[] = [];
   public SelectedTarget: TargetSystem | null = null;
   /** Target used by the in-page Build action (defaults to the filtered target, else Business Central). */
@@ -117,7 +122,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   async GetResourceDisplayName(_data: ResourceData): Promise<string> { return 'Batch Status'; }
 
   /** The category header's Refresh reaches this dashboard through the shared channel —
-   *  the inline mj-refresh-button was removed (Marcelo 2026-08-05: the header owns the ONE
+   *  the inline mj-refresh-button was removed (the header owns the ONE
    *  refresh control, orders-style). Subscribing is also what makes the header button SHOW
    *  while this page is mounted (CanRefreshActivePage = HasSubscriber). */
   /** OPTIONAL: provided per category shell; a directly-mounted resource (or a bare TestBed) has none. */
@@ -182,26 +187,21 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   public OnFromDateChange(v: string): void { this.FromDate = v || null; this.ActiveWindow = null; this.cdr.markForCheck(); }
   public OnToDateChange(v: string): void { this.ToDate = v || null; this.ActiveWindow = null; this.cdr.markForCheck(); }
 
-  /** Moving-window presets (Robert 2026-07-09: "last day/week/month" windows). Sets the From/To range. */
+  /**
+   * Moving-window presets (last day / week / month). Sets the From/To
+   * range. Anchored on the BUSINESS day via `resolveBatchStatusWindow`
+   * (`BusinessTimeZoneEngine.Instance.Today()`), not the browser's local day — see that file for
+   * why this component may read the engine directly.
+   */
   public ApplyWindow(win: 'today' | '7d' | '30d'): void {
-    const to = new Date();
-    const from = new Date();
-    if (win === '7d') from.setDate(from.getDate() - 6);
-    else if (win === '30d') from.setDate(from.getDate() - 29);
-    this.FromDate = this.toDateInput(from);
-    this.ToDate = this.toDateInput(to);
+    const { FromDate, ToDate } = resolveBatchStatusWindow(win);
+    this.FromDate = FromDate;
+    this.ToDate = ToDate;
     this.ActiveWindow = win;
     this.cdr.markForCheck();
   }
   public ClearWindow(): void { this.FromDate = null; this.ToDate = null; this.ActiveWindow = null; this.cdr.markForCheck(); }
   public IsWindowOn(win: 'today' | '7d' | '30d'): boolean { return this.ActiveWindow === win; }
-
-  /** Local-time yyyy-MM-dd for a native <input type="date"> (matches inSpan's day-granularity parsing). */
-  private toDateInput(d: Date): string {
-    const m = `${d.getMonth() + 1}`.padStart(2, '0');
-    const day = `${d.getDate()}`.padStart(2, '0');
-    return `${d.getFullYear()}-${m}-${day}`;
-  }
 
   public StatusVariant(active: boolean): MjButtonVariant { return active ? 'primary' : 'flat'; }
 
@@ -240,8 +240,13 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   private inSpan(b: BatchRow): boolean {
     if (!this.FromDate && !this.ToDate) return true;
     if (!b.StartDate || !b.EndDate) return false; // a dateless batch can't satisfy a span
-    const fromT = this.FromDate ? new Date(this.FromDate).getTime() : -Infinity;
-    const toT = this.ToDate ? new Date(`${this.ToDate}T23:59:59`).getTime() : Infinity;
+    // BOTH ends are parsed as UTC midnight, the contract batch-status-window.ts states and the
+    // shape StartDate/EndDate already carry (they come from EffectiveDate, a DATE column). A bare
+    // 'YYYY-MM-DD' is UTC by spec, but 'YYYY-MM-DDTHH:mm:ss' with no offset is LOCAL — so the To
+    // end used to run to 23:59:59 in the BROWSER's zone, and a batch dated tomorrow showed up
+    // under the "Today" preset for every viewer west of UTC.
+    const fromT = this.FromDate ? new Date(`${this.FromDate}T00:00:00.000Z`).getTime() : -Infinity;
+    const toT = this.ToDate ? new Date(`${this.ToDate}T23:59:59.999Z`).getTime() : Infinity;
     return b.EndDate.getTime() >= fromT && b.StartDate.getTime() <= toT;
   }
 
@@ -329,7 +334,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
         this.BuildPreviewVisible = false;
         await this.loadAll();
       } else {
-        this.setActionMessage(res.ErrorMessage ?? 'Build failed.', true);
+        this.setActionMessage(res.ErrorMessage ?? 'The journal entry batch was not built. Try again.', true);
       }
     } finally {
       this.Building = false;
@@ -359,7 +364,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   }
 
   private toRow(
-    b: { ID: string; JournalEntryBatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalJournalEntryBatchRef: string | null; BatchedAt: Date | null },
+    b: { ID: string; JournalEntryBatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalJournalEntryBatchRef: string | null; ArchiveReason: string | null; BatchedAt: Date | null },
     jes: JEHeader[], companyIDs: string[],
   ): BatchRow {
     const dates = jes.map(j => j.EffectiveDate).filter((d): d is Date => d instanceof Date);
@@ -367,7 +372,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
     return {
       ID: b.ID, JournalEntryBatchNumber: b.JournalEntryBatchNumber, Status: b.Status, TargetSystem: b.TargetSystem,
       TotalEntries: b.TotalEntries, TotalDebits: b.TotalDebits, TotalCredits: b.TotalCredits,
-      ExternalJournalEntryBatchRef: b.ExternalJournalEntryBatchRef, BatchedAt: b.BatchedAt,
+      ExternalJournalEntryBatchRef: b.ExternalJournalEntryBatchRef, ArchiveReason: b.ArchiveReason, BatchedAt: b.BatchedAt,
       StartDate: times.length ? new Date(Math.min(...times)) : null,
       EndDate: times.length ? new Date(Math.max(...times)) : null,
       CompanyIDs: companyIDs,
@@ -385,21 +390,22 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
       .sort((a, b) => a.Name.localeCompare(b.Name));
   }
 
-  private async loadBatches(): Promise<Array<{ ID: string; JournalEntryBatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; CompanyID: string | null; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalJournalEntryBatchRef: string | null; BatchedAt: Date | null }>> {
+  private async loadBatches(): Promise<Array<{ ID: string; JournalEntryBatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; CompanyID: string | null; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalJournalEntryBatchRef: string | null; ArchiveReason: string | null; BatchedAt: Date | null }>> {
     const res = await this.runView().RunView<mjBizAppsAccountingJournalEntryBatchEntity>(
       { EntityName: BATCH_ENTITY, OrderBy: 'BatchedAt DESC', ResultType: 'simple' }, this.contextUser());
     return (res.Results ?? []).map(b => ({
       ID: b.ID, JournalEntryBatchNumber: b.JournalEntryBatchNumber, Status: b.Status, TargetSystem: b.TargetSystem,
       CompanyID: b.CompanyID ?? null,
       TotalEntries: b.TotalEntries, TotalDebits: b.TotalDebits, TotalCredits: b.TotalCredits,
-      ExternalJournalEntryBatchRef: b.ExternalJournalEntryBatchRef, BatchedAt: b.BatchedAt ? new Date(b.BatchedAt) : null,
+      ExternalJournalEntryBatchRef: b.ExternalJournalEntryBatchRef, ArchiveReason: b.ArchiveReason,
+      BatchedAt: b.BatchedAt ? new Date(b.BatchedAt) : null,
     }));
   }
 
   /** JE headers per batch (for the inferred date range + to fetch each batch's lines on expand). */
   private async loadJEHeaders(): Promise<Map<string, JEHeader[]>> {
     // The batch's own SUMMARY JE also carries JournalEntryBatchID — it is the consolidation OF the sources,
-    // so counting it alongside them doubles every amount (Marcelo 2026-07-30: a 350/350 batch
+    // so counting it alongside them doubles every amount (a 350/350 batch
     // drilled down as 700/700). Exclude summaries here so the map holds SOURCE JEs only; the
     // detail then re-derives the same netted posting the summary persists.
     const [res, batches] = await Promise.all([

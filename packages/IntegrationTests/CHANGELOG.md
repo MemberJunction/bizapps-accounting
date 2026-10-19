@@ -1,5 +1,166 @@
 # @mj-biz-apps/accounting-integration-tests
 
+## 0.22.2
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.22.2
+
+## 0.22.1
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.22.1
+
+## 0.22.0
+
+### Patch Changes
+
+- Updated dependencies [37536eb]
+  - @mj-biz-apps/accounting-entities@0.22.0
+
+## 0.21.2
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.21.2
+
+## 0.21.1
+
+### Patch Changes
+
+- Updated dependencies [fd193bf]
+  - @mj-biz-apps/accounting-entities@0.21.1
+
+## 0.21.0
+
+### Patch Changes
+
+- Updated dependencies [4b5fdac]
+  - @mj-biz-apps/accounting-entities@0.21.0
+
+## 0.20.0
+
+### Patch Changes
+
+- Updated dependencies [77e4756]
+- Updated dependencies [c7a1af4]
+- Updated dependencies [d3a99ff]
+- Updated dependencies [b2de2f7]
+- Updated dependencies [a8e560f]
+  - @mj-biz-apps/accounting-entities@0.20.0
+
+## 0.19.0
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.19.0
+
+## 0.18.0
+
+### Patch Changes
+
+- Updated dependencies [cc21d7c]
+  - @mj-biz-apps/accounting-entities@0.18.0
+
+## 0.17.0
+
+### Patch Changes
+
+- Updated dependencies [7210151]
+- Updated dependencies [a36297a]
+  - @mj-biz-apps/accounting-entities@0.17.0
+
+## 0.16.0
+
+### Patch Changes
+
+- Updated dependencies [844cb02]
+  - @mj-biz-apps/accounting-entities@0.16.0
+
+## 0.15.0
+
+### Patch Changes
+
+- Updated dependencies [0587bfa]
+  - @mj-biz-apps/accounting-entities@0.15.0
+
+## 0.14.0
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.14.0
+
+## 0.13.0
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.13.0
+
+## 0.12.0
+
+### Patch Changes
+
+- Updated dependencies [a64b1e0]
+  - @mj-biz-apps/accounting-entities@0.12.0
+
+## 0.11.0
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.11.0
+
+## 0.10.0
+
+### Patch Changes
+
+- Updated dependencies [2919ad0]
+  - @mj-biz-apps/accounting-entities@0.10.0
+
+## 0.9.0
+
+### Patch Changes
+
+- Updated dependencies [b1f3c53]
+  - @mj-biz-apps/accounting-entities@0.9.0
+
+## 0.8.0
+
+### Patch Changes
+
+- Updated dependencies [21accf9]
+  - @mj-biz-apps/accounting-entities@0.8.0
+
+## 0.7.0
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.7.0
+
+## 0.6.1
+
+### Patch Changes
+
+- Updated dependencies [553ee29]
+  - @mj-biz-apps/accounting-entities@0.6.1
+
+## 0.6.0
+
+### Patch Changes
+
+- Updated dependencies [434df96]
+- Updated dependencies [71fc375]
+  - @mj-biz-apps/accounting-entities@0.6.0
+
+## 0.5.0
+
+### Patch Changes
+
+- Updated dependencies [9966206]
+- Updated dependencies [51012f5]
+- Updated dependencies [fa6ae13]
+  - @mj-biz-apps/accounting-entities@0.5.0
+
 ## 0.4.0
 
 ### Patch Changes

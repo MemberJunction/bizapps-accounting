@@ -36,6 +36,7 @@ import { WorkspaceTipDirective } from '../transfer-pending/workspace-tabs/worksp
 // Hero Headers & Overview Panels
 import { JournalEntryBatchHeaderPanel } from './form-panels/journal-entry-batch-header.panel';
 import { JournalEntryBatchOverviewPanel, JournalEntryBatchOverviewComponent } from './form-panels/journal-entry-batch-overview.panel';
+import { JournalEntryBatchNewRecordPanel } from './form-panels/journal-entry-batch-new-record.panel';
 import { CompanyAccountingHeaderPanel } from './form-panels/company-accounting-header.panel';
 import { CompanyAccountingOverviewPanel, CompanyAccountingOverviewComponent } from './form-panels/company-accounting-overview.panel';
 import { GLAccountHierarchyPanel } from './form-panels/gl-account-hierarchy.panel';
@@ -48,6 +49,7 @@ const ACCOUNTING_PANELS = [
   GLAccountFormComponentExtended,
   JournalEntryBatchHeaderPanel,
   JournalEntryBatchOverviewPanel,
+  JournalEntryBatchNewRecordPanel,
   CompanyAccountingHeaderPanel,
   CompanyAccountingOverviewPanel,
   JournalEntryHeaderPanel,

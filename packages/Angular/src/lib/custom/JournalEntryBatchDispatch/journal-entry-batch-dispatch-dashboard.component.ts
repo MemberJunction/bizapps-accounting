@@ -8,7 +8,7 @@ import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import {
   mjBizAppsAccountingJournalEntryBatchEntity,
 } from '@mj-biz-apps/accounting-entities';
-import { JournalEntryBatchDispatchClient, JournalEntryBatchDecision } from './journal-entry-batch-dispatch.client';
+import { DispatchConfirmationKind, JournalEntryBatchDispatchClient, JournalEntryBatchDecision } from './journal-entry-batch-dispatch.client';
 
 /** The generated batch Status union (rule 2c: derived, never hand-copied). */
 type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
@@ -18,22 +18,22 @@ type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
  * Approval state is NOT a column on the batch — it lives in bizapps-tasks (a Task linked to the
  * batch + a terminal Task Decision), so we resolve it via the gate-backed `JournalEntryBatchApprovalState` query.
  */
-interface BatchRow {
-  ID: string;
-  JournalEntryBatchNumber: string;
-  Status: BatchStatus;
-  TargetSystem: string;
-  TotalEntries: number;
-  TotalDebits: number;
-  TotalCredits: number;
-  ExternalJournalEntryBatchRef: string | null;
-  ErrorMessage: string | null;
+/**
+ * The batch's own fields are PICKED from the generated entity class, never re-declared, so the
+ * compiler checks every field name and type against the schema. Only the genuinely non-entity
+ * parts — the gate result and the per-row in-flight flag, neither of which is a column — are
+ * declared here.
+ */
+type BatchRow = Pick<
+  mjBizAppsAccountingJournalEntryBatchEntity,
+  'ID' | 'JournalEntryBatchNumber' | 'Status' | 'TargetSystem' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'ExternalJournalEntryBatchRef' | 'ErrorMessage' | 'ArchiveReason' | 'CancelReason'
+> & {
   /** undefined = not yet checked; null = unknown/error; true/false = gate result. */
   Approved?: boolean | null;
   ApprovalReason?: string;
   /** Per-row in-flight flag so spinners/disables are scoped to the acting row. */
   Busy?: boolean;
-}
+};
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 
@@ -76,7 +76,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
   }
 
   /** The category header's Refresh reaches this dashboard through the shared channel —
-   *  the inline mj-refresh-button was removed (Marcelo 2026-08-05: the header owns the ONE
+   *  the inline mj-refresh-button was removed (the header owns the ONE
    *  refresh control, orders-style). Subscribing is also what makes the header button SHOW
    *  while this page is mounted (CanRefreshActivePage = HasSubscriber). */
   /** OPTIONAL: provided per category shell; a directly-mounted resource (or a bare TestBed) has none. */
@@ -110,14 +110,20 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
 
   // ─── actions ───────────────────────────────────────────────────────────────
 
-  /** Record an in-app CFO Approve / Reject decision on a batch, then refresh its approval state. */
+  /**
+   * Record an in-app CFO Approve / Reject decision on a batch, then refresh its approval state. A
+   * rejection cancels the batch, so it asks for a reason (golive #302), recorded as the decision's
+   * notes and the batch's CancelReason; a cancelled or blank prompt aborts silently.
+   */
   public async OnRecordDecision(row: BatchRow, decision: JournalEntryBatchDecision): Promise<void> {
     if (row.Busy) return;
+    const notes = decision === 'Rejected' ? this.PromptForRejectReason(row)?.trim() : undefined;
+    if (decision === 'Rejected' && !notes) return;
     row.Busy = true;
     this.clearActionMessage();
     this.cdr.markForCheck();
     try {
-      const res = await this.client().RecordDecision(row.ID, decision);
+      const res = await this.client().RecordDecision(row.ID, decision, notes);
       if (res.Success) {
         // A rejection reverses the preliminary lock: the batch is Cancelled and its entries return to the pool.
         const msg = decision === 'Rejected'
@@ -126,7 +132,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
         this.setActionMessage(msg, false);
         await this.loadBatches(); // an approval flips Pending→Approved; a rejection flips Pending→Cancelled
       } else {
-        this.setActionMessage(res.ErrorMessage ?? 'Failed to record decision.', true);
+        this.setActionMessage(res.ErrorMessage ?? `Your decision on batch ${row.JournalEntryBatchNumber} was not recorded. Try again.`, true);
       }
     } finally {
       row.Busy = false;
@@ -155,7 +161,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
         );
         await this.loadBatches();
       } else {
-        this.setActionMessage(res.ErrorMessage ?? 'Regenerate failed.', true);
+        this.setActionMessage(res.ErrorMessage ?? `Batch ${row.JournalEntryBatchNumber} was not regenerated. Try again.`, true);
       }
     } finally {
       row.Busy = false;
@@ -163,7 +169,14 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     }
   }
 
-  /** Dispatch a Pending, approved batch to the ERP (gate blocks if not approved; mock poster v1). */
+  /**
+   * Dispatch a Pending, approved batch to the ERP (gate blocks if not approved; mock poster v1).
+   * `Success` means only that the call returned: an ERP rejection comes back as `Success` with the
+   * batch at `Failed` (or `Failed` in memory while the database stays at `Sent`, if recording the
+   * failure fails), so anything other than `Posted` is reported as an error. Every outcome reloads:
+   * a server throw can land after the batch has already moved (e.g. the Sent→Posted save failing
+   * after the ERP accepted the journal), and the card must not keep showing `Approved`.
+   */
   public async OnDispatch(row: BatchRow): Promise<void> {
     if (row.Busy) return;
     row.Busy = true;
@@ -171,19 +184,125 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     this.cdr.markForCheck();
     try {
       const res = await this.client().DispatchJournalEntryBatch(row.ID);
-      if (res.Success) {
+      if (res.Success && res.Status === 'Posted') {
         this.setActionMessage(
-          `Dispatched batch ${row.JournalEntryBatchNumber} → ${res.Status}${res.ExternalJournalEntryBatchRef ? ` (ref ${res.ExternalJournalEntryBatchRef})` : ''}.`,
+          `Dispatched batch ${row.JournalEntryBatchNumber} → Posted${res.ExternalJournalEntryBatchRef ? ` (ref ${res.ExternalJournalEntryBatchRef})` : ''}.`,
           false,
         );
+      } else if (res.Success) {
+        this.setActionMessage(
+          `Batch ${row.JournalEntryBatchNumber} did not post — the batch is ${res.Status ?? 'unknown'}. The reason is on the batch below; retry it from Dispatch status.`,
+          true,
+        );
+      } else {
+        this.setActionMessage(res.ErrorMessage ?? `Batch ${row.JournalEntryBatchNumber} was not sent to the ERP. Try again.`, true);
+      }
+      await this.loadBatches();
+    } finally {
+      row.Busy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /**
+   * Archive a batch that must never post to the ERP (#214): terminal, no ERP call, and the batch's
+   * journal entries STAY locked — the opposite of Reject, which returns them to the candidate pool.
+   * A cancelled or blank prompt aborts silently; the reason is required and is the only record of why.
+   */
+  public async OnArchive(row: BatchRow): Promise<void> {
+    if (row.Busy) return;
+    const reason = this.PromptForReason(row);
+    if (!reason?.trim()) return;
+
+    row.Busy = true;
+    this.clearActionMessage();
+    this.cdr.markForCheck();
+    try {
+      const res = await this.client().ArchiveBatch(row.ID, reason.trim());
+      if (res.Success) {
+        this.setActionMessage(`Archived batch ${row.JournalEntryBatchNumber} — no ERP call; its journal entries stay locked to it.`, false);
         await this.loadBatches();
       } else {
-        this.setActionMessage(res.ErrorMessage ?? 'Dispatch failed.', true);
+        this.setActionMessage(res.ErrorMessage ?? `Batch ${row.JournalEntryBatchNumber} was not archived. Try again.`, true);
       }
     } finally {
       row.Busy = false;
       this.cdr.markForCheck();
     }
+  }
+
+  /** The archive-reason prompt, as a seam a test can stub. Native prompt — this package has no dialog helper. */
+  /** The reject-reason prompt, as a seam a test can stub. */
+  protected PromptForRejectReason(row: BatchRow): string | null {
+    return window.prompt(`Reject batch ${row.JournalEntryBatchNumber}? It is cancelled and its journal entries return to the candidate pool for the next build.\n\nReason (required):`);
+  }
+
+  protected PromptForReason(row: BatchRow): string | null {
+    return window.prompt(`Archive batch ${row.JournalEntryBatchNumber}? It will never post to the ERP and its journal entries stay locked to it.\n\nReason (required):`);
+  }
+
+  /**
+   * Cancel a Pending (golive #302), Approved or Failed (#183) batch: the batch becomes Cancelled, its
+   * summary journal entry is deleted and its journal entries return to the candidate pool for the next
+   * build — the opposite of Archive, which keeps them locked. A Pending batch's approval request is
+   * closed. A cancelled or blank reason prompt aborts silently.
+   *
+   * A Failed batch may already be in the ERP, and its entries would post again under the next batch's
+   * new number. The server looks the number up first (#207) and refuses outright if the ERP holds it;
+   * the operator is asked only when the lookup cannot settle it, and declining leaves the batch as is.
+   */
+  public async OnCancel(row: BatchRow): Promise<void> {
+    if (row.Busy) return;
+    const reason = this.PromptForCancelReason(row)?.trim();
+    if (!reason) return;
+
+    row.Busy = true;
+    this.clearActionMessage();
+    this.cdr.markForCheck();
+    try {
+      let res = await this.client().CancelBatch(row.ID, reason, false);
+      if (res.Success && res.ConfirmationRequired) {
+        if (!this.ConfirmNotPostedInERP(row, res.ConfirmationRequired, res.ConfirmationKind)) {
+          this.setActionMessage(`Batch ${row.JournalEntryBatchNumber} was not cancelled.`, false);
+          return;
+        }
+        res = await this.client().CancelBatch(row.ID, reason, true);
+      }
+      if (res.Success) {
+        this.setActionMessage(`Cancelled batch ${row.JournalEntryBatchNumber} — its journal entries return to the next build.`, false);
+        await this.loadBatches();
+      } else {
+        this.setActionMessage(res.ErrorMessage ?? `Batch ${row.JournalEntryBatchNumber} was not cancelled. Try again.`, true);
+      }
+    } finally {
+      row.Busy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /** The cancel-reason prompt, as a seam a test can stub. */
+  protected PromptForCancelReason(row: BatchRow): string | null {
+    return window.prompt(`Cancel batch ${row.JournalEntryBatchNumber}? Its journal entries return to the candidate pool for the next build.\n\nReason (required):`);
+  }
+
+  /**
+   * The Failed-batch ERP check, asked only when the server's lookup could not settle it, as a seam a
+   * test can stub. A `Mismatch` is most likely this batch already posted, so it needs the number typed.
+   */
+  protected ConfirmNotPostedInERP(row: BatchRow, serverReason: string, kind: DispatchConfirmationKind | undefined): boolean {
+    const erp = row.TargetSystem || this.TargetSystem;
+    const doc = row.JournalEntryBatchNumber;
+    if (kind === 'Mismatch') {
+      const typed = window.prompt(
+        `${erp} already holds a posting under document ${doc} that differs from this batch.\n\n${serverReason}\n\n` +
+        `If it is this batch, do not cancel: its journal entries would post a second time. To cancel anyway, type ${doc}:`,
+      );
+      return typed?.trim() === doc;
+    }
+    return window.confirm(
+      `${serverReason}\n\nConfirm you searched ${erp} for document ${doc} and it has NOT posted. ` +
+      `If it has, cancelling lets its journal entries post a second time in the next batch.`,
+    );
   }
 
   // ─── view helpers (template-facing) ──────────────────────────────────────
@@ -201,6 +320,22 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
   /** Regenerate is offered on an OPEN (Pending) batch — it re-gathers candidates in place. */
   public canRegenerate(row: BatchRow): boolean {
     return row.Status === 'Pending' && !row.Busy;
+  }
+
+  /** Archive is offered wherever LEGAL_TRANSITIONS allows `→ Archived` (server-side: Pending / Approved / Failed). */
+  public canArchive(row: BatchRow): boolean {
+    return ['Pending', 'Approved', 'Failed'].includes(row.Status) && !row.Busy;
+  }
+
+  /**
+   * Cancel is offered on a Pending (golive #302), Approved or Failed (#183) batch; who may cancel is
+   * the server's call. On a Pending batch it is the builder's way to withdraw it, beside the CFO's
+   * Reject. Not on a Failed batch carrying the ERP's reference: the ERP accepted it, and the server
+   * refuses it.
+   */
+  public canCancel(row: BatchRow): boolean {
+    if (row.Status === 'Failed' && row.ExternalJournalEntryBatchRef) return false;
+    return ['Pending', 'Approved', 'Failed'].includes(row.Status) && !row.Busy;
   }
 
   /** Map a batch status to a stat-badge variant for the status pill. */
@@ -230,7 +365,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     );
     if (!res.Success) {
       this.Batches = [];
-      this.LoadError = res.ErrorMessage ?? 'Failed to load journal entry batches.';
+      this.LoadError = res.ErrorMessage ?? 'Could not load journal entry batches. Refresh the page to try again.';
       return;
     }
     this.Batches = (res.Results ?? []).map(b => this.toRow(b));
@@ -251,6 +386,8 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
       TotalCredits: b.TotalCredits,
       ExternalJournalEntryBatchRef: b.ExternalJournalEntryBatchRef,
       ErrorMessage: b.ErrorMessage,
+      ArchiveReason: b.ArchiveReason,
+      CancelReason: b.CancelReason,
     };
   }
 

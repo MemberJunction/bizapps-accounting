@@ -112,16 +112,19 @@ derivation, the reversal-type discriminator, GL account existence and company sc
 
 **Server-side work — call the operation**
 
+CodeGen emits a typed class for each Remote Operation that has a metadata row, in
+`packages/Entities/src/generated/remote_operations.ts`. An operation with no row has no class to call.
+
 ```typescript
-const op = new AccountingRecordJournalEntryBatchDecisionOperation();
-const result = await op.Execute({ JournalEntryBatchID: id, Decision: 'Approved' });
+const op = new AccountingClearFinanceExceptionOperation();
+const result = await op.Execute({ FinanceExceptionID: id, Outcome: 'Reviewed', Note: note });
 ```
 
 **Cached lookups — ask the engine**
 
 ```typescript
 await AccountingEngineBase.Instance.Config();
-const currency = AccountingEngineBase.Instance.Currencies.find(c => c.ISOCode === 'USD');
+const currency = AccountingEngineBase.Instance.Currencies.find(c => c.Code === 'USD');
 ```
 
 ## What a service IS still for
@@ -148,4 +151,4 @@ usually a DTO that mirrors an entity.
 
 - `packages/Entities/src/JournalEntryEntity.ts` — the shared subclass and what belongs on it
 - `metadata/entity-relationships/` — how `Lines` is declared (metadata, not TypeScript)
-- MJ: `packages/MJCore/docs/related-record-collections.md`
+- MJ: [`packages/MJCore/docs/related-record-collections.md`](https://github.com/MemberJunction/MJ/blob/next/packages/MJCore/docs/related-record-collections.md)

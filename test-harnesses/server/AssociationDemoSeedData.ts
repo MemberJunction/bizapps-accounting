@@ -29,7 +29,7 @@
  *     emit them); no netting/provisioning is called.
  *
  * All JEs self-balance (triggers 50001 + per-company 50019 enforce it) and are posted to GLPosted
- * (via buildJournalEntryBatch + approveJournalEntryBatch + sendJournalEntryBatch with the AutoApproveGate) so the views — which filter Batched/GLPosted
+ * (via buildJournalEntryBatch + approveJournalEntryBatch + sendJournalEntryBatch, built with the AutoApproveGate and sent through the harness dispatch services) so the views — which filter Batched/GLPosted
  * — show data. This is DEMO data: it PERSISTS by design (unlike the test harnesses, there is no
  * teardown). Idempotency comes entirely from the static IDs.
  *
@@ -62,6 +62,7 @@ import {
   buildJournalEntryBatch, approveJournalEntryBatch, sendJournalEntryBatch, AutoApproveGate,
   GetJournalEntryBatchSummaryEntryType, LookupJournalEntryTypeByCode, JournalEntryEntityServer,
 } from '@mj-biz-apps/accounting-core-entities-server';
+import { RegisterHarnessDispatchServices } from './harness-dispatch-services.js';
 
 // ─── Entity name constants ───────────────────────────────────────────────────
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
@@ -180,6 +181,7 @@ interface LineSpec {
  * was created vs. reused.
  */
 export async function seedAssociationDemo(contextUser: UserInfo, provider: IMetadataProvider): Promise<DemoSeedReport> {
+  RegisterHarnessDispatchServices(); // every send: always approved, mock ERP (#233)
   const report: DemoSeedReport = {
     Companies: [],
     Customers: [],
@@ -509,7 +511,7 @@ async function postPending(contextUser: UserInfo, report: DemoSeedReport, provid
     const built = await buildJournalEntryBatch(companyId, TARGET_SYSTEM, contextUser.ID, contextUser, provider, AutoApproveGate);
     if (built === null) throw new Error(`postPending: buildJournalEntryBatch returned null for company ${companyId} (no pending JEs or all netted to zero).`);
     await approveJournalEntryBatch(built.batchId, contextUser.ID, contextUser, provider);
-    const batch = await sendJournalEntryBatch(built.batchId, contextUser, { gate: AutoApproveGate, provider });
+    const batch = await sendJournalEntryBatch(built.batchId, contextUser, { provider });
     if (batch.Status !== 'Posted') throw new Error(`postPending: batch should be Posted, got ${batch.Status}`);
     report.BatchesPosted += 1;
   }

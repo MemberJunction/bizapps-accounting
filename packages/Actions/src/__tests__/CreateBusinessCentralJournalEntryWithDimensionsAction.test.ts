@@ -1,0 +1,269 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { MJGlobal } from '@memberjunction/global';
+import { BaseAction } from '@memberjunction/actions';
+import { ActionResultSimple, RunActionParams } from '@memberjunction/actions-base';
+import { ACCOUNTING_VERBS, ERP_INTEGRATION, erpPluginKey } from '@memberjunction/actions-bizapps-accounting';
+import { BusinessTimeZoneEngine, type InstanceConfigurationRow } from '@mj-biz-apps/common-entities';
+import { CreateBusinessCentralJournalEntryWithDimensionsAction } from '../CreateBusinessCentralJournalEntryWithDimensionsAction';
+
+const PLUGIN_KEY = erpPluginKey(ACCOUNTING_VERBS.CreateJournalEntry, ERP_INTEGRATION.BusinessCentral);
+
+/** One BC call as the spy records it: endpoint, method, body. */
+type BCCall = [string, string, Record<string, unknown> | undefined];
+
+/**
+ * The protected request helper the action inherits from `BusinessCentralBaseAction`, named as a
+ * structural type so the spy is typed rather than cast away — this file compiles under the
+ * package's `tsc` build, not just vitest.
+ */
+interface BCRequestSeam {
+  makeBCRequest(
+    endpoint: string,
+    method: string,
+    body?: Record<string, unknown>,
+    contextUser?: unknown,
+  ): Promise<unknown>;
+}
+
+const seamOf = (action: CreateBusinessCentralJournalEntryWithDimensionsAction): BCRequestSeam =>
+  action as unknown as BCRequestSeam;
+
+const inputs = (values: Record<string, unknown>): RunActionParams => {
+  const params = new RunActionParams();
+  params.ContextUser = { ID: 'SYSTEM-USER' } as never;
+  params.Params = Object.entries(values).map(([Name, Value]) => ({ Name, Type: 'Input' as const, Value }));
+  return params;
+};
+
+const run = (action: BaseAction, params: RunActionParams): Promise<ActionResultSimple> => action.Run(params);
+
+const outParam = (result: ActionResultSimple, name: string): unknown =>
+  result.Params?.find(p => p.Name === name)?.Value;
+
+/** Records every BC call and answers the journal lookup + line creates. */
+const stubBC = (
+  action: CreateBusinessCentralJournalEntryWithDimensionsAction,
+  overrides: (endpoint: string, method: string) => unknown = () => undefined,
+) => {
+  let lineNumber = 0;
+  return vi.spyOn(seamOf(action), 'makeBCRequest').mockImplementation(async (endpoint, method) => {
+    const override = overrides(endpoint, method);
+    if (override !== undefined) {
+      return override;
+    }
+    if (endpoint === 'journals') {
+      return { value: [{ id: 'j-1', code: 'GENERAL', balancingAccountNumber: null }] };
+    }
+    if (endpoint.startsWith('journals(j-1)/journalLines?') && method === 'GET') {
+      return { value: [] };
+    }
+    if (endpoint.endsWith('/journalLines') && method === 'POST') {
+      lineNumber += 1;
+      return { id: `line-${lineNumber}`, documentNumber: 'JE-9' };
+    }
+    return undefined;
+  });
+};
+
+const calls = (spy: { mock: { calls: Parameters<BCRequestSeam['makeBCRequest']>[] } }): BCCall[] =>
+  spy.mock.calls.map(c => [c[0], c[1], c[2]] as BCCall);
+
+const TAGGED_LINES = [
+  {
+    accountNumber: '1000',
+    debit: 100,
+    description: 'Debit side',
+    dimensions: [
+      { code: 'VENTURE', valueCode: 'ACME' },
+      { code: 'PRODUCT', valueCode: 'WIDGET' },
+    ],
+  },
+  {
+    accountNumber: '2000',
+    credit: 100,
+    dimensions: [{ code: 'VENTURE', valueCode: 'ACME' }],
+  },
+];
+
+describe('CreateBusinessCentralJournalEntryWithDimensionsAction', () => {
+  let action: CreateBusinessCentralJournalEntryWithDimensionsAction;
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    action = new CreateBusinessCentralJournalEntryWithDimensionsAction();
+  });
+
+  it('outranks the platform registration for the Business Central CreateJournalEntry plugin key', () => {
+    const instance = MJGlobal.Instance.ClassFactory.CreateInstance<BaseAction>(BaseAction, PLUGIN_KEY);
+    expect(instance).toBeInstanceOf(CreateBusinessCentralJournalEntryWithDimensionsAction);
+  });
+
+  it('POSTs a dimensionSetLine per tag, against the created line, before posting the batch', async () => {
+    const spy = stubBC(action);
+
+    const result = await run(action, inputs({ CompanyID: 'comp-1', DocNumber: 'JE-9', Lines: TAGGED_LINES }));
+
+    expect(calls(spy).map(c => [c[0], c[1]])).toEqual([
+      ['journals', 'GET'],
+      ['journals(j-1)/journalLines?$select=id,documentNumber&$top=20', 'GET'],
+      ['journals(j-1)/journalLines', 'POST'],
+      ['journalLines(line-1)/dimensionSetLines', 'POST'],
+      ['journalLines(line-1)/dimensionSetLines', 'POST'],
+      ['journals(j-1)/journalLines', 'POST'],
+      ['journalLines(line-2)/dimensionSetLines', 'POST'],
+      ['journals(j-1)/Microsoft.NAV.post', 'POST'],
+    ]);
+    expect(calls(spy)[3][2]).toEqual({ code: 'VENTURE', valueCode: 'ACME' });
+    expect(calls(spy)[4][2]).toEqual({ code: 'PRODUCT', valueCode: 'WIDGET' });
+    expect(calls(spy)[6][2]).toEqual({ code: 'VENTURE', valueCode: 'ACME' });
+    expect(result.Success).toBe(true);
+    expect(outParam(result, 'JournalEntryID')).toBe('j-1');
+    expect(outParam(result, 'TotalAmount')).toBe(100);
+  });
+
+  it('keeps the line body free of dimension fields — BC v2.0 journalLines has no shortcut dimension properties', async () => {
+    const spy = stubBC(action);
+
+    await run(action, inputs({ CompanyID: 'comp-1', DocNumber: 'JE-9', Lines: TAGGED_LINES }));
+
+    const firstLine = calls(spy)[2][2] as Record<string, unknown>;
+    expect(firstLine.accountNumber).toBe('1000');
+    expect(firstLine.amount).toBe(100);
+    expect(Object.keys(firstLine)).not.toContain('dimensions');
+    expect(Object.keys(firstLine)).not.toContain('shortcutDimension1Code');
+    expect(Object.keys(firstLine)).not.toContain('shortcutDimension2Code');
+  });
+
+  it('writes no dimensionSetLines for untagged lines, and skips tags missing a code', async () => {
+    const spy = stubBC(action);
+
+    await run(action, inputs({
+      CompanyID: 'comp-1',
+      Lines: [
+        { accountNumber: '1000', debit: 100 },
+        { accountNumber: '2000', credit: 100, dimensions: [{ code: '', valueCode: 'ACME' }, { code: 'VENTURE', valueCode: '' }] },
+      ],
+    }));
+
+    expect(calls(spy).filter(c => c[0].includes('dimensionSetLines'))).toEqual([]);
+  });
+
+  it('deletes the lines written so far and does not post when a dimensionSetLine POST fails', async () => {
+    const spy = stubBC(action, (endpoint, method) => {
+      if (endpoint.includes('dimensionSetLines') && method === 'POST') {
+        throw new Error('dimension VENTURE does not exist');
+      }
+      return undefined;
+    });
+
+    const result = await run(action, inputs({ CompanyID: 'comp-1', Lines: TAGGED_LINES }));
+
+    expect(result.Success).toBe(false);
+    expect(result.Message).toBe('dimension VENTURE does not exist');
+    expect(calls(spy).map(c => [c[0], c[1]])).toEqual([
+      ['journals', 'GET'],
+      ['journals(j-1)/journalLines?$select=id,documentNumber&$top=20', 'GET'],
+      ['journals(j-1)/journalLines', 'POST'],
+      ['journalLines(line-1)/dimensionSetLines', 'POST'],
+      ['journalLines(line-1)', 'DELETE'],
+    ]);
+  });
+
+  // NAV.post posts the whole journal: lines left there by an earlier rejected post would go to the GL
+  // with this entry, and a retry would double the batch beside its own orphans (#182).
+  it('refuses to write into a journal that already holds unposted lines, naming their documents', async () => {
+    const spy = stubBC(action, (endpoint, method) =>
+      endpoint.startsWith('journals(j-1)/journalLines?') && method === 'GET'
+        ? { value: [{ id: 'old-1', documentNumber: 'JE-9' }, { id: 'old-2', documentNumber: 'JE-9' }] }
+        : undefined,
+    );
+
+    const result = await run(action, inputs({ CompanyID: 'comp-1', DocNumber: 'JE-9', Lines: TAGGED_LINES }));
+
+    expect(result.Success).toBe(false);
+    expect(result.Message).toMatch(/journal 'GENERAL' already holds 2 unposted line\(s\), document number\(s\) JE-9/);
+    expect(calls(spy).some(c => c[1] === 'POST')).toBe(false);
+  });
+
+  it('refuses to post when the journal lines cannot be read', async () => {
+    const spy = stubBC(action, (endpoint, method) =>
+      endpoint.startsWith('journals(j-1)/journalLines?') && method === 'GET' ? {} : undefined,
+    );
+
+    const result = await run(action, inputs({ CompanyID: 'comp-1', DocNumber: 'JE-9', Lines: TAGGED_LINES }));
+
+    expect(result.Success).toBe(false);
+    expect(result.Message).toMatch(/Could not read the lines of Business Central journal 'GENERAL'/);
+    expect(calls(spy).some(c => c[1] === 'POST')).toBe(false);
+  });
+
+  it('fails rather than dropping tags when BC returns a created line with no id', async () => {
+    const spy = stubBC(action, (endpoint, method) =>
+      endpoint.endsWith('/journalLines') && method === 'POST' ? { documentNumber: 'JE-9' } : undefined,
+    );
+
+    const result = await run(action, inputs({ CompanyID: 'comp-1', Lines: TAGGED_LINES }));
+
+    expect(result.Success).toBe(false);
+    expect(result.Message).toContain('no line id');
+    expect(calls(spy).some(c => c[0].includes('Microsoft.NAV.post'))).toBe(false);
+  });
+
+  it('still refuses an unbalanced entry without calling Business Central', async () => {
+    const spy = stubBC(action);
+
+    const result = await run(action, inputs({
+      CompanyID: 'comp-1',
+      Lines: [{ accountNumber: '1000', debit: 100 }, { accountNumber: '2000', credit: 50 }],
+    }));
+
+    expect(result.ResultCode).toBe('VALIDATION_ERROR');
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('CreateBusinessCentralJournalEntryWithDimensionsAction — posting date with no EntryDate (golive #168)', () => {
+  // 2026-10-01T02:30:00Z is 9:30 PM Central on 30 September. The fallback was `new Date()` formatted
+  // by its UTC day, so an evening post with no EntryDate landed on 1 October — tomorrow, and on
+  // the last day of a month, the next month's period.
+  const engine = BusinessTimeZoneEngine.Instance as unknown as { _configurations: InstanceConfigurationRow[]; _loaded: boolean };
+  const saved = { rows: engine._configurations, loaded: engine._loaded };
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    engine._configurations = [
+      { FeatureKey: 'BizApps.BusinessTimeZone', Value: '{"iana":"America/Chicago","sql":"Central Standard Time"}', DefaultValue: '{"iana":"UTC","sql":"UTC"}' },
+    ];
+    engine._loaded = true;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-01T02:30:00.000Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    engine._configurations = saved.rows;
+    engine._loaded = saved.loaded;
+  });
+
+  const postingDates = (spy: { mock: { calls: Parameters<BCRequestSeam['makeBCRequest']>[] } }): unknown[] =>
+    calls(spy).filter(c => c[0].endsWith('/journalLines') && c[1] === 'POST').map(c => c[2]?.postingDate);
+
+  it('defaults to today\'s business day', async () => {
+    const action = new CreateBusinessCentralJournalEntryWithDimensionsAction();
+    const spy = stubBC(action);
+
+    const result = await run(action, inputs({ CompanyID: 'comp-1', Lines: TAGGED_LINES }));
+
+    expect(result.Success).toBe(true);
+    expect(postingDates(spy)).toEqual(['2026-09-30', '2026-09-30']);
+  });
+
+  it('still posts an explicit EntryDate as given', async () => {
+    const action = new CreateBusinessCentralJournalEntryWithDimensionsAction();
+    const spy = stubBC(action);
+
+    await run(action, inputs({ CompanyID: 'comp-1', EntryDate: '2026-10-01', Lines: TAGGED_LINES }));
+
+    expect(postingDates(spy)).toEqual(['2026-10-01', '2026-10-01']);
+  });
+});

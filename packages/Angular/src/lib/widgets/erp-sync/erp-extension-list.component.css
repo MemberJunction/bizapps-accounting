@@ -1,0 +1,16 @@
+:host { display: block; }
+.erp-ext {
+  padding: 16px; border: 1px solid var(--mj-border-default); border-radius: 16px;
+  background: var(--mj-bg-surface);
+}
+.erp-ext__head h3 { margin: 0; font-size: 1rem; }
+.erp-ext__head p { margin: 4px 0 12px; color: var(--mj-text-secondary); font-size: var(--mj-text-sm); }
+.erp-ext__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.erp-ext__row { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.erp-ext__name {
+  background: none; border: 0; padding: 0; cursor: pointer; font-weight: 700;
+  color: var(--mj-text-primary); text-align: left;
+}
+.erp-ext__code { font-size: var(--mj-text-xs); color: var(--mj-text-muted); }
+.erp-ext__actions { display: flex; gap: 8px; align-items: center; }
+.erp-ext__status { font-size: var(--mj-text-xs); font-weight: 600; color: var(--mj-text-secondary); }

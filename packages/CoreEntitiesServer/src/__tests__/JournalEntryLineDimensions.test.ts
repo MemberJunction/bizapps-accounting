@@ -112,7 +112,7 @@ describe('JournalEntryLineEntityServer — Dimensions collection', () => {
       line.AddDimension(newDimension('DIM_DEPT', undefined));
       const result = line.Validate();
       expect(result.Success).toBe(false);
-      expect(result.Errors.some(e => getErrorText(e).includes('BOTH DimensionID and DimensionValueID'))).toBe(true);
+      expect(result.Errors.some(e => getErrorText(e).includes('needs both a dimension and a value'))).toBe(true);
     });
 
     it('fails when the SAME dimension is tagged twice on one line (UQ_JELDimension_Line_Dimension)', () => {
@@ -120,7 +120,7 @@ describe('JournalEntryLineEntityServer — Dimensions collection', () => {
       line.AddDimension(newDimension('DIM_DEPT', 'VAL_MKTG'));
       const result = line.Validate();
       expect(result.Success).toBe(false);
-      expect(result.Errors.some(e => getErrorText(e).includes('tagged more than once'))).toBe(true);
+      expect(result.Errors.some(e => getErrorText(e).includes('is used more than once'))).toBe(true);
     });
 
     it('passes with distinct dimensions each carrying a full pair', () => {

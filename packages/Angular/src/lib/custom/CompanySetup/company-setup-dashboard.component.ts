@@ -6,6 +6,7 @@ import { RegisterClass } from '@memberjunction/global';
 import { CompositeKey, Metadata, RunView } from '@memberjunction/core';
 import { ResourceData } from '@memberjunction/core-entities';
 import { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
+import { createdRecordId } from './created-record-id';
 
 const COMPANY_PROFILE_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 // __mj.User — the CFO approver FK target (ApprovalCFOUserID). MJ v5: core entities REQUIRE the
@@ -85,7 +86,7 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
   }
 
   /** The category header's Refresh reaches this dashboard through the shared channel —
-   *  the inline mj-refresh-button was removed (Marcelo 2026-08-05: the header owns the ONE
+   *  the inline mj-refresh-button was removed (the header owns the ONE
    *  refresh control, orders-style). Subscribing is also what makes the header button SHOW
    *  while this page is mounted (CanRefreshActivePage = HasSubscriber). */
   /** OPTIONAL: provided per category shell; a directly-mounted resource (or a bare TestBed) has none. */
@@ -134,7 +135,7 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
       },
       { EntityName: USER_ENTITY, Fields: ['ID', 'Name'], OrderBy: 'Name ASC', MaxRows: 500, ResultType: 'simple' },
     ]);
-    if (!companies.Success) throw new Error(companies.ErrorMessage ?? 'Failed to load company profiles.');
+    if (!companies.Success) throw new Error(companies.ErrorMessage ?? 'Could not load companies. Refresh the page to try again.');
     this.Companies = (companies.Results ?? []) as CompanyProfileRow[];
     this.Users = ((users.Results ?? []) as Array<{ ID: string; Name: string }>)
       .map(u => ({ ID: u.ID, Name: u.Name }));
@@ -206,7 +207,8 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
     if (!saved) return; // cancelled
     const created = saved as mjBizAppsAccountingAccountingCompanyProfileEntity;
     await this.loadCompanies();
-    this._selectedID = created.ID;
+    // Not `created.ID`: on MJ 6.1.x that is the parent's unwritten key (see createdRecordId).
+    this._selectedID = createdRecordId(created);
     this.ActionMessage = `Company ${created.Name} created — its default chart of accounts has been seeded.`;
     this.ActionIsError = false;
     this.cdr.markForCheck();
@@ -234,7 +236,7 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
     this.beginSave();
     try {
       const user = this.ProviderToUse.CurrentUser;
-      if (!user) { this.setError('No current user is available.'); return; }
+      if (!user) { this.setError('Your sign-in could not be confirmed. Sign out, sign back in, and try again.'); return; }
       await this.setCompanyCFO(company.ID, user.ID, `You are now the CFO approver for ${company.Name}.`);
     } catch (e) {
       this.setError(e instanceof Error ? e.message : String(e));
@@ -277,10 +279,10 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
   private async setCompanyCFO(companyID: string, userID: string | null, successMessage: string): Promise<void> {
     const md = new Metadata();
     const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(COMPANY_PROFILE_ENTITY);
-    if (!(await acp.Load(companyID))) { this.setError('Could not load the company profile.'); return; }
+    if (!(await acp.Load(companyID))) { this.setError('Could not load this company\'s accounting settings. It may have been deleted; refresh the page and try again.'); return; }
     acp.ApprovalCFOUserID = userID;
     if (!(await acp.Save())) {
-      this.setError(`Could not save the CFO: ${acp.LatestResult?.CompleteMessage ?? 'unknown error'}`);
+      this.setError(`The CFO approver was not saved. ${acp.LatestResult?.CompleteMessage ?? 'Try again.'}`);
       return;
     }
     this.ActionMessage = successMessage;

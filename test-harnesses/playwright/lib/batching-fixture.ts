@@ -211,7 +211,7 @@ async function teardown(p: Pools, companyId: string, cfoPersonId?: string): Prom
   // Locked accounting rows need triggers disabled. Always re-enable in finally (harness-notes #3).
   // JEs and batches carry CompanyID directly now (single-company, D3/D7) — company-rooted deletes.
   // (The retired JournalEntryBatchLineItem/-Dimension tables are gone; summaries are ordinary JEs.)
-  const toggled = ['JournalEntryLine', 'JournalEntry', 'JournalEntryBatch'];
+  const toggled = ['JournalEntryLineDimension', 'JournalEntryLine', 'JournalEntry', 'JournalEntryBatch'];
   try {
     for (const t of toggled) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
     await exec(`DELETE d FROM ${SCHEMA}.JournalEntryLineDimension d JOIN ${SCHEMA}.JournalEntryLine l ON l.ID=d.JournalEntryLineID JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID WHERE j.CompanyID='${companyId}'`);

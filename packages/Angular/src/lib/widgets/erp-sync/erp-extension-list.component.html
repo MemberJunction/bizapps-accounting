@@ -1,0 +1,31 @@
+<section class="erp-ext">
+  <header class="erp-ext__head">
+    <h3>Engine extensions</h3>
+    <p>Other apps register here. Disable without a rebuild — hook participation is on the class.</p>
+  </header>
+  @if (Extensions.length === 0) {
+    <mj-empty-state
+      Icon="fa-solid fa-puzzle-piece"
+      Title="No extensions registered"
+      Message="FP&A cash import and later apps insert a row and @RegisterClass a driver. Accounting does not seed any.">
+    </mj-empty-state>
+  } @else {
+    <ul class="erp-ext__list">
+      @for (ext of Extensions; track ext.ID) {
+        <li class="erp-ext__row">
+          <div>
+            <button type="button" class="erp-ext__name" (click)="OpenExtension.emit(ext)">{{ ext.Name }}</button>
+            <div class="erp-ext__code">{{ ext.Code }} · {{ ext.DriverClass }}</div>
+            @if (ext.Description) { <p>{{ ext.Description }}</p> }
+          </div>
+          <div class="erp-ext__actions">
+            <span class="erp-ext__status">{{ ext.Status }}</span>
+            <button mjButton variant="outline" size="sm" type="button" (click)="ToggleStatus.emit(ext)">
+              {{ ext.Status === 'Active' ? 'Disable' : 'Enable' }}
+            </button>
+          </div>
+        </li>
+      }
+    </ul>
+  }
+</section>

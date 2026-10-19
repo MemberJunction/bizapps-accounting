@@ -1,7 +1,7 @@
 # testing.md — bizapps-accounting test ledger + coverage matrix
 
-The **living coverage record** for this app's test suite, per the testing motto (filed in
-`~/MJDev/MJDEV-REQUESTS.md`): *every feature, every variation, every layer, every interaction —
+The **living coverage record** for this app's test suite, per the testing motto: *every feature,
+every variation, every layer, every interaction —
 alone and composed as you ascend the tiers — fully validated, for all classes and possible data
 cases, using prudent discrimination to limit tier-5 overuse but treating all other layers as cheap
 and fully fleshing them out.*
@@ -10,8 +10,63 @@ Three sections: the **coverage matrix** (drive every ✗ to zero), the **intenti
 (coverage deliberately placed at a cheaper tier — NOT gaps), and the **ledger** (tests still to
 create + open questions for the human, recorded so dev can roll through and circle back).
 
-Tiers: **1** Vitest (unit) · **2** server (tsx, in-process direct SQL) · **3** API (GraphQL→MJAPI) ·
-**4** GUI/DOM (no-browser — parked, mjdev overlay) · **5** Playwright (browser e2e, pre-PR only).
+Tiers, as defined in [`README.md`](README.md#tiers) (which also has the prerequisites and commands):
+**1** Vitest (unit) · **2** server (live DB: tsx scripts + a Vitest suite, in-process direct SQL) ·
+**3** API (GraphQL→MJAPI: `api/` and `packages/IntegrationTests`) · **4** GUI/DOM (no-browser,
+needs a running MJAPI — opt-in `test:gui`, not in CI) · **5** Playwright (browser e2e, pre-PR only).
+Separate from tier 4, accounting-ng also has a backend-free DOM suite (`test:dom`, TestBed + jsdom,
+in CI). Only tier 1 and the DOM suite run in CI.
+
+## ✅ 2026-09-24 — spec wiring: placement guard, spec type-check, opt-in tier 4 (#185)
+
+- **Placement guard.** `packages/Angular/src/__tests__/spec-placement.test.ts` fails on any spec
+  file under `src/` (`*.test.ts`, `*.spec.ts`, `.tsx`) that is not a `*.test.ts` in
+  `src/__tests__/` or a `*.dom.test.ts`.
+- **Every package's specs are type-checked.** Vitest only transpiles. Each package with specs
+  (accounting-ng, CoreEntitiesServer, EngineBase, Actions) has `test:types` (`tsc --noEmit -p
+  tsconfig.spec.json`), run by `pnpm run test`, so in CI. It found three errors in existing specs,
+  all fixed: `je-draft.test.ts` set a `Dimensions` field `JEDraftState` no longer has; the
+  waterfall spec cast an object literal to a journal entry (it now builds real entities through
+  the shared `src/__tests__/support/entity-stubs.ts`); and `JournalEntryBatchInvariants.test.ts`
+  assigned an untyped `vi.fn()` to `TearDownSummaryAndUnlock`.
+- **Tier 4 has a script.** `pnpm run test:gui` in `packages/Angular` (needs MJAPI; not in CI).
+  It resolves **only inside an mjdev instance**: in a plain clone `@memberjunction/ng-bootstrap-lite`
+  and `undici` are not installed, so all five files fail on module resolution before any test
+  runs. `tsc -p test-harnesses/gui/tsconfig.gui.json` also reports three TS2488 errors
+  (`company-setup.dom.test.ts:65,98`, `journal-entry-batch-workspace.dom.test.ts:68`); tier 4 is
+  outside `test:types`.
+- **`batch-workspace.pure.test.ts` moved** to `packages/CoreEntitiesServer/src/__tests__/BatchWorkspace.test.ts`.
+  It needs no DB, and the tier-2 config it ran under is run by nothing automatic. `src/__tests__/`
+  is excluded from the CES build, so it still does not ship. The tier-2 config now includes only
+  `*.live.test.ts`.
+
+| Package | Files | Tests |
+|---|---|---|
+| accounting-ng | 12 | **152/152** |
+| accounting-engine-base | 6 | **80/80** |
+| accounting-core-entities-server | 16 | **143/143** (+1 skipped) |
+| accounting-actions | 3 | **38/38** |
+| **Tier 1 total** | **37** | **413/413** (+1 skipped) |
+| accounting-ng DOM (`test:dom`) | 3 | **4/4** |
+
+## ✅ 2026-09-23 — tier 1 runs in CI, accounting-ng included (#170)
+
+`pnpm run test` runs on every PR (`build.yml`). accounting-ng's suite was never run before: its
+`test` script had no vitest dependency, and the root script excluded the package. The "4 packages
+remain stubs" note in the 2026-08-06 entries no longer holds. The counts in the entries below are
+as of their own dates.
+
+| Package | Files | Tests |
+|---|---|---|
+| accounting-ng | 11 | **150/150** |
+| accounting-engine-base | 6 | **80/80** |
+| accounting-core-entities-server | 14 | **108/108** (+1 skipped) |
+| accounting-actions | 3 | **36/36** |
+| **Tier 1 total** | **34** | **374/374** (+1 skipped) |
+
+accounting-ng's include glob is now `src/**/*.test.ts`, the same as the other packages, so a spec
+next to its component runs. Known gap: the waterfall spec builds its dates at local midnight, so it
+passes in every zone and cannot catch the component's local-getter month bucketing (#181).
 
 ## ✅ 2026-08-06 (final) — AI-enriched metadata baseline + the V-migration deviation layer
 
@@ -46,7 +101,7 @@ regenerated files.
    for its origin. Clearer, and it no longer collides with the currency grid's own "Name" header.
 2. Same spec, `Functional Currency Code Virtual` → **`Functional Currency (Virtual)`**. Both are
    stale-spec updates tracking intentional improvements, not weakened assertions.
-3. `orders-product-catalog` — **spec DELETED** (Marcelo, 2026-08-06). It drove the *Orders* app from
+3. `orders-product-catalog` — **spec DELETED** (2026-08-06). It drove the *Orders* app from
    accounting's harness because orders had no Playwright harness of its own. That inverts the
    dependency — orders depends on accounting, never the reverse. Orders needs its own harness.
 
@@ -56,11 +111,9 @@ knobs** — named in MJ's defaults, read by no code. Field descriptions come fro
 undocumented columns). AI codegen is also **not byte-reproducible** — re-running produces cosmetic
 DisplayName churn, so fold once and commit.
 
-Procedure for the orders/contracts agents: `reports/ai-codegen-enrichment/`.
-
 ## ✅ RESOLVED (2026-08-06) — All-accounts standard-grid swap, spec red → root-caused, 3 fixes
 
-All accounts now renders the STANDARD mj-entity-data-grid (Marcelo's ask): toolbar filters/search
+All accounts now renders the STANDARD mj-entity-data-grid: toolbar filters/search
 feed GridParams.ExtraFilter (server-side; same predicate the client filter used), row-click opens
 the editor (per-row Edit/Retire buttons retired — the editor's Active checkbox is the retire path),
 tree indentation/orphan flags stay on the CoA page.
@@ -119,7 +172,7 @@ keystone once the bundle was current) — added to the TestBed imports.
   renamed op keys, matching baseline.
 - DB hygiene: `find-stale-fixtures` → zero PWBATCH-* leftovers.
 
-**2026-08-06 (later) — nav-label sweep (Marcelo: "nav tabs at the top, the side bar"):** top-nav
+**2026-08-06 (later) — nav-label sweep (scope: the top nav tabs and the side bar):** top-nav
 category "Batches" → **"Journal Entry Batches"** (metadata DefaultNavItems Label, synced to the DB
 via `app sync --include applications` + API restart), CategoryTitle + both resource display names
 likewise; rail labels mirror the JE category's scheme — "All batches" → **"All journal entry
@@ -131,12 +184,12 @@ workspace"); Dashboard/Dispatch status unchanged. Page-internal prose ("this bat
 render the new labels, zero console errors) **and by tier-5: the 4 batch-flow specs pass 4/4
 (5.3m)** driving the renamed nav end-to-end. Side-find while validating: the Entries column's
 "$1.00" currency dressing is an **MJ-core bug** (host GridColumnConfig type/format dropped +
-name-pattern currency heuristic) — filed in MJ-UPSTREAM.md 2026-08-06 with root cause + fix; the
+name-pattern currency heuristic) — root cause + fix written up 2026-08-06; the
 app keeps its correct column config so it heals when MJ fixes the mapping. A StateKey v1→v2 bump
 was tried on that theory and REVERTED (fresh state still renders currency — disproven).
 
-**2026-08-06 (final) — full UI terminology audit (Marcelo: "change every corresponding piece to
-journal entry batch, except batched at / batched by / the Batched status").** Inventoried every
+**2026-08-06 (final) — full UI terminology audit (rule: every corresponding piece becomes
+"journal entry batch", except batched at / batched by / the Batched status).** Inventoried every
 user-visible string in the app (attribute-borne labels/titles/placeholders/aria-labels, template
 text, TS label/tooltip/message literals, and grid column headers) and swept **66 sites across 20
 files**. Rule applied and worth remembering: **NOUN forms referring to the entity are renamed; VERB
@@ -154,15 +207,15 @@ errors** and no truncation (screenshots captured), and **tier 5 passes 6/6** —
 (approve · reject · regenerate · reversal) plus both accounts specs, all driving the swept UI.
 
 **Battery verdict 2026-08-06: FULL PYRAMID GREEN at baseline** — units 101 · tier-2 75 · tier-3 72
-· tier-4 9 · tier-5 8 (+1 pre-known orders blocker). The branch's uncommitted fix wave (4 grid
-pages' refresh, gl-accounts rowKey parse + CSS height chain, tier-4 module import + regression
-assert, find-stale-fixtures helper, Server index comment) awaits commit approval.
+· tier-4 9 · tier-5 8 (+1 pre-known orders blocker). The branch's fix wave (4 grid pages'
+refresh, gl-accounts rowKey parse + CSS height chain, tier-4 module import + regression assert,
+find-stale-fixtures helper, Server index comment) landed in commit `4dd42cf` (2026-08-06).
 
-## ⭐ CURRENT STATE — 2026-08-05 UI-WAVE BATTERY (post-#43 merge + the chrome/control wave)
+## ⭐ PRIOR STATE — 2026-08-05 UI-WAVE BATTERY (after the list-page UI standard merge + the chrome/control wave)
 
-Scope: PR #43 merged into the rename branch (conflict-free; git followed the renames; the guarded
-sweep re-ran over #43's 16 arriving files — zero leftovers) plus the UI wave (Marcelo's 2026-08-05
-task list): JE panel "Open full" removed (workspace = the ONE open action) · ALL 34 native <select>s
+Scope: the list-page UI standard for the accounting shell merged into the rename branch
+(conflict-free; git followed the renames; the guarded sweep re-ran over its 16 arriving files — zero
+leftovers) plus the UI wave (the 2026-08-05 task list): JE panel "Open full" removed (workspace = the ONE open action) · ALL 34 native <select>s
 replaced with MJ controls (mj-dropdown CVA; new shared mja-check-dropdown CHECKBOX multi-select for
 company filters on All-JE / All-batches / All-accounts / CoA / batch-status — batch-workspace's
 company stays single: it is a BUILD CRITERION under single-company batches, MOD-15) · every inline
@@ -188,7 +241,7 @@ candidate) · GLAccountLink demo seed/create-UI gap (diagnosed 2026-08-05, await
 
 ## ⭐ PRIOR STATE — 2026-08-05 JOURNALENTRYBATCH RENAME BATTERY (full pyramid vs the identifier refactor)
 
-Gate scope: Amith's ruling — every bare `Batch`-prefixed identifier naming the JournalEntryBatch
+Gate scope: the naming rule — every bare `Batch`-prefixed identifier naming the JournalEntryBatch
 entity renamed to the full prefix (`BatchID→JournalEntryBatchID`, `BatchNumber→JournalEntryBatchNumber`,
 `ExternalBatchRef→ExternalJournalEntryBatchRef`, `IsBatchSummary→IsJournalEntryBatchSummary`,
 `spAssignNextBatchNumber→spAssignNextJournalEntryBatchNumber`, `trg_JEBatch_*→trg_JournalEntryBatch_*`,
@@ -222,31 +275,31 @@ kept (nav-category name). Re-validated: full app build clean · Angular units 12
 11/11 · 37/37 · 24/24 (driving the NEW op keys) · tier-4 9/9 · tier-5 batch specs 3/3.
 
 Harness notes: the three explicit-seed fixes (W1 auto-seed retirement) + the two MJ-5.51 locator
-fixes were re-applied on this branch (they also ship in PR #44's branch; identical edits, clean
-merge). Cross-app: bizapps-orders consumes these fields — it needs a companion rename sweep in its
+fixes were re-applied on this branch (they also ship on the branch that wires FillWidth + IconOnly
+to the new MJ-core inputs; identical edits, clean merge). Cross-app: bizapps-orders consumes these fields — it needs a companion rename sweep in its
 own repo once this lands.
 
-## ⭐ PRIOR STATE — 2026-07-30 DEMO-GATE RUN (Amith's demo flow, pre-PR-merge gate)
+## ⭐ PRIOR STATE — 2026-07-30 DEMO-GATE RUN (the demo flow, pre-PR-merge gate)
 
-Gate scope (Amith 2026-07-30): prove the full demo flow — company profile setup → GL accounts →
+Gate scope (2026-07-30): prove the full demo flow — company profile setup → GL accounts →
 JE/Lines → batching — before the PR merges. Company-create browser SAVE stays a **waived** gap
-(5x; Marcelo ruling 2026-07-30: that dialog will be rebuilt as an app-owned form-based dialog).
+(5x; waived 2026-07-30 because that dialog will be rebuilt as an app-owned form-based dialog).
 
 | What ran | Result |
 |---|---|
 | Tier-5 playwright suite (fresh run vs pushed HEAD) | **8/8 demo-relevant specs green** (10.2m). 9th spec = `orders-product-catalog`, failed as pre-known 5y blocker (orders@next ships no nav app) — NOT a regression |
-| **NEW** `test-harnesses/api/full-flow-api.ts` — the demo journey as ONE chain on a FRESH company, all over the wire (the exact calls the UI buttons make): ACP "New company" save → IS-A parent + W1 COA (10 accts, 11201/40100) → 3 JEs via `Accounting.CreateJournalEntry` (merge shape, entry-number format) → Preview/Build netted 600/600 → approval flip → Approve → Dispatch (Posted + MOCK ref) → JEs GLPosted via the dashboards' dynamic-view read path → **C2 dimension-split consolidation** (Marcelo ruling 2026-07-30: prove company × GLAccount × dimension-combo split on the PERSISTED summary, not just tier-1 pure netting): same-account/different-dims lines refuse to merge at creation (LineCount 3), batch collapse nets ACROSS JEs per dim group (AR×SALES 140 = 100+40, AR×MKTG 60 split, REV 200 untagged), summaryLineCount 3, each summary line re-tagged with exactly its combo — all read back over the wire → fixture teardown | **24/24, first run** |
-| Amith's orders integration suite (15 bundles) re-run vs pushed HEAD | **177/177** |
+| **NEW** `test-harnesses/api/full-flow-api.ts` — the demo journey as ONE chain on a FRESH company, all over the wire (the exact calls the UI buttons make): ACP "New company" save → IS-A parent + W1 COA (10 accts, 11201/40100) → 3 JEs via `Accounting.CreateJournalEntry` (merge shape, entry-number format) → Preview/Build netted 600/600 → approval flip → Approve → Dispatch (Posted + MOCK ref) → JEs GLPosted via the dashboards' dynamic-view read path → **C2 dimension-split consolidation** (rule 2026-07-30: prove the company × GLAccount × dimension-combo split on the PERSISTED summary, not just in tier-1 pure netting): same-account/different-dims lines refuse to merge at creation (LineCount 3), batch collapse nets ACROSS JEs per dim group (AR×SALES 140 = 100+40, AR×MKTG 60 split, REV 200 untagged), summaryLineCount 3, each summary line re-tagged with exactly its combo — all read back over the wire → fixture teardown | **24/24, first run** |
+| The bizapps-orders integration suite (15 bundles) re-run vs pushed HEAD | **177/177** |
 | `cross-app-batching.mjs` — now +2 checks reading the order-JEs/batch back through the accounting dashboards' wire view path (the "API in orders → UI in accounting" closure) | **11/11** |
 
-**W1 auto-seed RETIRED (Marcelo ruling 2026-07-30, live UI session):** new companies start with an
+**W1 auto-seed RETIRED (2026-07-30, live UI session):** new companies start with an
 EMPTY chart (auto-seed collided with the L8 identity lock); `SeedDefaultChartOfAccounts()` stays as
 an explicit public capability. Contract re-pinned and re-proven: block0 W1.2 now asserts BOTH halves
 (empty on create + 10 accounts on explicit call) — **10/10**; full-flow-api asserts empty-start over
 the wire then creates its own AR/Revenue accounts — **24/24**; batching-fixture seeds explicitly —
-batch-reject spec re-proven **1/1**; CES units **42/42**. Amith's integration fixtures are unaffected
-by design (they seed directly, fixture.ts:270). Flagged to Amith via instance QUESTIONS.md (W1 was a
-master-plan item). `docs/lifecycle-hooks.md` updated.
+batch-reject spec re-proven **1/1**; CES units **42/42**. The orders integration fixtures are unaffected
+by design (they seed directly, fixture.ts:270). Flagged for review, since W1 was a master-plan item.
+`docs/lifecycle-hooks.md` updated.
 
 **Residue finding + sweep (2026-07-30):** the orders integration suite's bundle teardown LEAKS the
 accounting companies it provisions (63 IT-ORD ACP+Company rows + ~250 orders-schema rows from one
@@ -254,8 +307,8 @@ run) and the cross-app teardown ran without CODEGEN creds (no ALTER for DISABLE 
 orphan GLPosted JEs + 3 orphan batches. Fixed/handled: cross-app teardown now uses the CODEGEN
 pool; new `server/_maint-clean-test-residue.ts` + `_maint-clean-test-residue2.ts` (generic
 FK-driven, tag-scoped sweep, constraints re-verified WITH CHECK) ran to zero — instance now holds
-exactly the 3 Assoc Demo companies (verified over the UI's read path post-API-restart). Suite-leak
-finding filed to `~/MJDev/MJ-UPSTREAM.md` for the orders app.
+exactly the 3 Assoc Demo companies (verified over the UI's read path post-API-restart). The suite
+leak itself is the orders app's to fix.
 
 ## ⭐ PRIOR STATE — 2026-07-30 FULL-COVERAGE OVERNIGHT RUN (all tiers + orders integration)
 
@@ -271,10 +324,10 @@ finding filed to `~/MJDev/MJ-UPSTREAM.md` for the orders app.
 | 3 | engine-op-api / batch-ops-api (incl. NEW regenerate wire section) | **11/11 · 37/37** |
 | 4 | gui dom suite (company-setup, je-dashboard, gl-accounts, batch-workspace + smoke) | **9/9** |
 | 5 | playwright: accounts-manage(2) · batch approve/reject/regenerate · je-reversal · company-create · je-create · shell-smoke | **9/9 specs green** |
-| X-app | Amith's orders integration suite (15 bundles) vs our HEAD | **177/177** |
+| X-app | the bizapps-orders integration suite (15 bundles) vs our HEAD | **177/177** |
 | X-app | cross-app-batching.mjs (order→JE→batch→approve→dispatch→GLPosted, committed flow) | **9/9** |
 
-**Named-flow coverage (Marcelo's 2026-07-29 sweep) — all browser-proven:** create JEs (workspace) ·
+**Named-flow coverage (the 2026-07-29 sweep) — all browser-proven:** create JEs (workspace) ·
 batch build/approve/reject/REGENERATE · JE reversal · account create/rename/identity-lock ·
 dimensions render · company COA render · company creation (affordance+cancel; full dialog save =
 CODED GAP 5x, generated forms lack stable locators — upstream ask filed) · orders→accounting
@@ -302,7 +355,7 @@ is company-scoped now (demo data legitimately keeps Pending JEs).
 
 ## ⭐ PRIOR STATE — 2026-07-29 harness modernization (the donor-port test line)
 
-The suite was modernized with the S-A/S-B/S-C port (see `plans/donor-audit.md`). **Dead harnesses
+The suite was modernized with the S-A/S-B/S-C port. **Dead harnesses
 were REMOVED** — they tested retired systems and could never run against the realigned schema:
 `block2` (old batch-line-item model) · `block4` (ScheduledJE/materializer, dead per D15) · `block5`
 (ChartOfAccountsMapping, dead per D13) · `block6` (the removed `vw_*` views) ·
@@ -342,7 +395,7 @@ DOM) — `category-shell.css` now isolates `mj-left-nav-content`'s stacking cont
 headless hit-testing of the open scope menu. Proper chrome fix (pages → `mj-page-header-interior`
 per conventions §10) tracked for the hardening pass.
 
-**2026-07-29 shipping-hygiene fix (Amith/Marcelo PR review):** CoreEntitiesServer's tsconfig was
+**2026-07-29 shipping-hygiene fix (from PR review):** CoreEntitiesServer's tsconfig was
 missing the `src/**/__tests__/**` build exclude (EngineBase/Angular already had it), so compiled
 test files were landing in `dist/` — which `files: ['/dist']` would have PUBLISHED. Exclude added,
 dist rebuilt clean. The pure engine-internals spec (`BatchWorkspacePure`) moved to
@@ -356,8 +409,9 @@ vitest harness 25/25 (17 live + 8 pure) · no `__tests__` output in any package 
 
 > ⚠ **HISTORICAL (2026-07-06 era — pre-rebuild).** Rows below reference retired features
 > (multi-company JEs/batches, COAMapping, SJE, read-model views) and removed harnesses. Kept as
-> the record of what the donor-era suite covered; the CURRENT STATE section above is the live
-> inventory. A fresh matrix gets rebuilt when the UI port lands (tier 4/5 columns change shape).
+> the record of what the donor-era suite covered; the "Harness inventory + run commands" section
+> below is the live inventory. A fresh matrix gets rebuilt when the UI port lands (tier 4/5 columns
+> change shape).
 
 _Historical matrix, reworked 2026-07-06: AccountingPeriod/AccountBalance retired (CH-1),
 multi-company JEs + GLOBAL multi-company batches (CH-4/AM-4), batch lifecycle
@@ -417,50 +471,65 @@ committed Tier-5 specs** yet — treat as a coverage gap to fill (Tier-5 `dashbo
   - **Company Setup** — CFO assign ("Make me the CFO"), default-account pickers + code display, Open profile dialog.
   - **Batch Approvals** inbox — pending-approval list + Approve/Reject.
   (Existing Batch Dispatch + 4 read-model dashboards keep their Tier-5 10/10.)
+
+  Status 2026-10-11: `dashboards.spec.ts` and `batching.spec.ts` no longer exist, so the 10/10 above
+  no longer runs. The `*-newnav` specs now drive the Batch approvals inbox (approve, reject), the
+  reversal from All journal entries, the Chart of accounts page (render only) and the New company
+  dialog (open and cancel only); the other items above have no spec.
 - ✅ GLAccountLink / GLAccountLinkDimension — covered 2026-07-06 (engine step-4): `pickActiveLinkIndex` unit +
   `engine-runtime.ts` E4.
 
-**Open questions for the human → see `instances/accounting-engine-dev/QUESTIONS.md`:**
-- ✅ **Batch reject semantics** (Q4) — RESOLVED 2026-07-08 (Robert: levels of locking). Reject now reverses the
+**Open questions for the human:**
+- ✅ **Batch reject semantics** (Q4) — RESOLVED 2026-07-08 (rule: levels of locking). Reject now reverses the
   **preliminary** lock: `cancelJournalEntryBatch` → batch Cancelled + entries back to the candidate pool. Proven in `block2`
-  (`#12 cancelJournalEntryBatch`) + live through MJAPI. Impl: migration `V202607081600` + `JournalEntryBatchEngine.cancelJournalEntryBatch`.
+  (`cancelJournalEntryBatch`) + live through MJAPI. Impl: migration `V202607081600` + `JournalEntryBatchEngine.cancelJournalEntryBatch`.
 - ✅ **buildJournalEntryBatch atomicity** (Q5) — RESOLVED 2026-07-08. A failed approval-task raise now auto-reverses the batch
   (reversible preliminary lock) instead of stranding a task-less orphan. Proven in `block2` (`no CFO → auto-reverse`).
-- ⏳ **Follow-on GAAP calls (Q12–Q15, high-priority for Robert):** reversal same-period-vs-forward-date, batch cutoff
+- ⏳ **Follow-on GAAP calls (Q12–Q15, high priority):** reversal same-period-vs-forward-date, batch cutoff
   (oldest-forward), out-of-order approval, backdated-order JE date. Provisional answers coded; confirmations shape the
-  deferred filter/backdating work (plan `batch-approval-lock-redesign.md` §13–14). Do NOT block the shipped reject fix.
-- ✅ Due-to/from semantics **confirmed** (Marcelo): Accounting does **no** intercompany netting — Payments owns it.
+  deferred filter/backdating work (§13–14 of the batch-approval lock redesign plan, since consolidated into
+  `plans/bizapps-accounting-master.md`). Do NOT block the shipped reject fix.
+- ✅ Due-to/from semantics **confirmed** (D18): Accounting does **no** intercompany netting — Payments owns it.
 
-**Batch-lock redesign (#12, 2026-07-08) coverage:** `block2` now **24/24** — adds `#12 cancelJournalEntryBatch` (reject-unlock),
-`#12 permanent lock` (approved → raw unlock rejected by trigger), `#12 regenerateJournalEntryBatch` (re-gathers a since-added JE),
+**Batch-lock redesign (2026-07-08, part of the initial app build) coverage:** `block2` now **24/24** — adds `cancelJournalEntryBatch` (reject-unlock),
+`permanent lock` (approved → raw unlock rejected by trigger), `regenerateJournalEntryBatch` (re-gathers a since-added JE),
 and upgrades the `no CFO` test to assert auto-reverse. Live end-to-end validated through MJAPI (build→reject→Cancelled+freed;
 build→regenerate→jeCount grows; approve→dispatch→Posted). **GUI layer:** `specs/batching-reject.spec.ts` (Playwright, system
 Chrome) drives the live Explorer — Build→**Reject** (card flips to Cancelled + banner)→Build→**Regenerate** (rebuild banner),
 0 console errors — **passed 1/1**. Dual-layer complete.
 
-## Harness inventory + run commands (cwd = instance worktree root)
+## Harness inventory + run commands
+
+Prerequisites, credentials and the mjdev instance layout: [`README.md`](README.md#prerequisites-and-credentials).
+"Instance root" is the mjdev instance's MJ worktree root; "repo root" is this repo.
 
 | Tier | Harness | Run |
 |---|---|---|
-| 1 | `packages/CoreEntitiesServer/src/__tests__/*.test.ts` | `cd packages/dev-apps/bizapps-accounting/packages/CoreEntitiesServer && npx vitest run` |
-| 2 | `test-harnesses/server/block{0,1,2,4,5,6}-runtime.ts` · `batching-multicompany-runtime.ts` · `engine-runtime.ts` | `npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/<file>.ts` (per file) |
-| 3 | `test-harnesses/api/readmodels-api.ts` · `batch-dispatch-api.ts` · `batching-scenarios-api.ts` · `engine-op-api.ts` | `npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/<file>.ts` |
-| 5 | `test-harnesses/playwright/specs/{dashboards,batching}.spec.ts` | `cd …/test-harnesses/playwright && npx playwright test` (MJAPI+Explorer up) |
+| 1 | `packages/*/src/__tests__/*.test.ts` (every package) + every package's spec type-check | `pnpm run test` from the repo root (also runs the DOM suite; this is what CI runs) |
+| 1 | one package | `cd packages/<Package> && npx vitest run` |
+| — | accounting-ng DOM (`src/**/*.dom.test.ts`, no backend) | `cd packages/Angular && pnpm run test:dom` |
+| 2 | `test-harnesses/server/block0-runtime.ts` · `block1-runtime.ts` · `engine-runtime.ts` | from the instance root: `npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/<file>.ts` (one at a time) |
+| 2 | `test-harnesses/server/intercompany-runtime.ts` | from the repo root: `npx tsx test-harnesses/server/intercompany-runtime.ts` |
+| 2 | `test-harnesses/server/phase2-encapsulation.live.test.ts` | from the repo root: `npx vitest run --config test-harnesses/server/vitest.config.ts` |
+| 3 | `test-harnesses/api/engine-op-api.ts` · `batch-ops-api.ts` · `full-flow-api.ts` | from the instance root, with `MJ_API_KEY` set: `npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/<file>.ts` |
+| 3 | `packages/IntegrationTests` (bundles `acct-world`, `acct-ledger`, `acct-batch`) | from the repo root, after a build: `pnpm run test:integration` |
+| 4 | `packages/Angular/test-harnesses/gui/*.dom.test.ts` | `cd packages/Angular && pnpm run test:gui` (inside an mjdev instance only, with MJAPI running; not in CI) |
+| 5 | `test-harnesses/playwright/specs/*.spec.ts` | `cd test-harnesses/playwright && npx playwright test` (inside the instance, MJAPI + Explorer up) |
 
 Latest verified (2026-07-06, instance accounting-engine-dev, post-rework — API :4050, Explorer :4310):
 T1 **39/39** · T2 **76/76** (block0 10 · block1 11 · block2 21 · block4 7 · block5 5 · block6 13 ·
 multi-company 9) + seed **6/6** views · T3 **64/64** (dispatch 20 · readmodels 29 · scenarios 15) ·
 T5 **10/10** in one run, 4.3m (after two REAL catches: the dashboard's Pending-only approval-state
 refresh hid the Dispatch button — fixed; and MJ core's DataExplorerDashboard NG0100 relative-time
-flake — logged in BUGS.md + component-scoped keystone allowlist). **Total 195 checks green.**
+flake — logged in a local BUGS.md + component-scoped keystone allowlist). **Total 195 checks green.**
 AM-7 step-4 ENGINE (2026-07-06, same instance): unit **76/76** (EngineBase 37 — pipeline+link picker;
 CoreEntitiesServer 39) · T2 `engine-runtime.ts` **12/12** (success/merge/order · all 7 typed error codes
 live · ATOMIC ROLLBACK raw-SQL-proven · ResolveLinkedAccount windows) · T3 `engine-op-api.ts` **8/8**
 (the op over GraphQL `ExecuteRemoteOperation` — typed contract on the wire, logical failures inside the
 output, unknown-key gate). The engine has a bounded cache-miss retry (one forced refresh on
 unknown-reference errors) for cross-process reference writes. ⚠ MJ-core TG-failure crash bug + guard:
-see BUGS.md.
-(Explorer needs the peer-dep workaround from MJDEV-ISSUES until fixed: `npm install
+see the E3 comment in `server/engine-runtime.ts`.
+(Explorer needs a peer-dep workaround until mjdev fixes it: `npm install
 @angular/service-worker@21.1.3 aws-amplify@6.16.3 primeng@21.1.1 --no-save` after any full npm install.)
 
 **Equivalence run — `codegen-commit-accounting-3` (squashed v1.0 baseline), 2026-06-30 — ALL GREEN:**
@@ -472,34 +541,40 @@ NOT a squash regression; fixed by the manifest-regen step in the recipe below.)
 
 ## Running the suite on a NON-DEFAULT instance (env-override recipe)
 
-The harnesses hardcode `bizapps-accounting-dev` + default ports `:4070`/`:4310`. To run on another
-instance, override via ENV at run time — **no file edits** (nonstandard-but-OK). Example below is for
-**codegen-commit-accounting-3** (API **:4100**, Explorer **:4410**); swap slug/ports for others.
+Every harness takes the instance from its environment — **no file edits**. Defaults: the `api/`
+harnesses use `MJ_API_URL=http://localhost:4180` and `MJDEV_SLUG=accounting-revamp`; the Playwright
+harness uses `MJDEV_SLUG=bizapps-accounting-dev` and reads both ports from `mjdev ps <slug> --json`
+(overridable with `MJAPI_PORT` / `MJEXPLORER_PORT`); the tier-2 harnesses read the DB from the
+`.env` in their working directory. Below, `<slug>` is the instance, `<api-port>` / `<explorer-port>`
+are the ports `mjdev ps <slug> --json` reports, and `mjdev` is the launcher at `bin/mjdev` in the mjdev
+workspace root.
 
-**Prereqs:** `./bin/mjdev setup codegen-commit-accounting-3 all` (deps→build→migrate baseline→codegen→build),
-then start MJAPI + Explorer, then run the demo seed. Run tsx harnesses from the worktree root
-(`~/MJDev/instances/codegen-commit-accounting-3/mj`) so `.env` resolves.
+**Prereqs:** `mjdev setup <slug> all` (deps→build→migrate baseline→codegen→build), then start MJAPI +
+Explorer, then run the demo seed. Run tsx harnesses from the instance's MJ worktree root so `.env`
+resolves.
 
-- **Start MJAPI:** `./bin/mjdev run codegen-commit-accounting-3 api`  (serves on :4100)
+- **Start MJAPI:** `mjdev run <slug> api`
 - **Start Explorer (ng21 workaround — `mjdev run explorer` injects `--no-interactive` which ng21 rejects):**
   ⚠ FIRST regenerate the class-registrations manifest — the raw `ng serve` below **skips** MJExplorer's
   `prestart` hook that does this, and WITHOUT it the open-app dashboard resources never register, so every
   dashboard T5 test fails with `console.error: Unable to find resource registration for driver class …`:
   `cd packages/MJExplorer && npx mj codegen manifest --exclude-packages @memberjunction --output ./src/app/generated/class-registrations-manifest.ts --open-app-client-bootstrap`
-  THEN serve: `NODE_OPTIONS=--max-old-space-size=16384 npx ng serve --port 4410`
+  THEN serve: `NODE_OPTIONS=--max-old-space-size=16384 npx ng serve --port <explorer-port>`
   (This `mj codegen manifest` is tree-shaking-prevention, NOT entity/SQL codegen — safe in an instance.
-  Verify it reports non-zero classes + "client packages wired". Root-caused in MJDEV-ISSUES.md → ng21 issue, follow-up 2.)
+  Verify it reports non-zero classes + "client packages wired".)
 - **Demo seed (DB-direct, no override):** `npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/seed-demo.ts`
 - **Tier 1 (Vitest, no DB/API, no override):** `cd packages/dev-apps/bizapps-accounting/packages/CoreEntitiesServer && npx vitest run`
-- **Tier 2 (server, DB-direct via .env → NO override; SERIAL):** `npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block{0,1,2,4,5,6}-runtime.ts` and `.../batching-multicompany-runtime.ts`
-- **Tier 3 (API — override URL + KEY; the hardcoded INSTANCE_SLUG is only used to mint the key, which MJ_API_KEY bypasses):**
-  `MJ_API_URL=http://localhost:4100 MJ_API_KEY="$(./bin/mjdev key codegen-commit-accounting-3 | grep mj_sk_ | tail -1)" npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/readmodels-api.ts` (repeat for `batch-dispatch-api.ts`, `batching-scenarios-api.ts`)
+- **Tier 2 (server, DB-direct via .env → NO override; SERIAL):** `npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block0-runtime.ts`, then `block1-runtime.ts` and `engine-runtime.ts` the same way
+- **Tier 3 (API — override URL + KEY; `MJDEV_SLUG` only selects the slug for minting a key, which `MJ_API_KEY` bypasses):**
+  `MJ_API_URL=http://localhost:<api-port> MJ_API_KEY="$(mjdev key <slug> | grep mj_sk_ | tail -1)" npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/batch-ops-api.ts` (repeat for `engine-op-api.ts`, `full-flow-api.ts`)
 - **Tier 5 (Playwright — override SLUG; ports + magic-link auto-follow):**
-  `cd packages/dev-apps/bizapps-accounting/test-harnesses/playwright && MJDEV_SLUG=codegen-commit-accounting-3 npx playwright test` (Explorer must be serving on :4410)
+  `cd packages/dev-apps/bizapps-accounting/test-harnesses/playwright && MJDEV_SLUG=<slug> npx playwright test`
 
-**Portability gap (OK for now):** the three `api/*.ts` harnesses hardcode `INSTANCE_SLUG='bizapps-accounting-dev'`
-(used only for `mjdev key`). Passing `MJ_API_KEY` sidesteps it. Future cleanup: make it
-`process.env.MJDEV_SLUG ?? 'bizapps-accounting-dev'` to match the Playwright `env.ts` pattern.
+**Portability gap:** the `api/*.ts` harnesses now read `process.env.MJDEV_SLUG` (default
+`accounting-revamp`, where the Playwright `env.ts` defaults to `bizapps-accounting-dev`). What remains:
+their key-minting fallback calls an mjdev launcher at an absolute path fixed in the code, so pass
+`MJ_API_KEY`.
 
-**Expectation:** the squashed v1.0 baseline yields the SAME net schema as the old create-then-drop set,
-so a fully green run here IS the equivalence proof that the consolidation didn't break anything.
+**Expectation (the 2026-06-30 equivalence run above):** the squashed v1.0 baseline yields the SAME net
+schema as the old create-then-drop set, so a fully green run IS the equivalence proof that the
+consolidation didn't break anything.

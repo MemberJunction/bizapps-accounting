@@ -1,0 +1,52 @@
+[
+  {
+    "fields": {
+      "Name": "Identify anomalous journal entries within the ledger to facilitate targeted a… (RandomForest)",
+      "Description": "Identify anomalous journal entries within the ledger to facilitate targeted auditing and reduce financial reporting risk.",
+      "Version": 1,
+      "Status": "Draft",
+      "TargetEntityID": "C040A1FC-16CE-49CB-B0E2-4F233BD0D762",
+      "TargetVariable": "AnomalyOutcome",
+      "ProblemType": "classification",
+      "AlgorithmID": "F966965D-3A87-4DD6-91E0-4F9D1AF17796",
+      "SourceBindings": "[{\"Kind\":\"Entity\",\"Ref\":\"MJ_BizApps_Accounting: Journal Entries\"}]",
+      "FeatureSteps": "{\"Steps\":[{\"Id\":\"select-raw\",\"Kind\":\"select\",\"Columns\":[\"TotalDebitAmount\",\"LineCount\",\"EffectiveMonth\",\"EffectiveDayOfWeek\",\"IsWeekend\"]},{\"Id\":\"onehot-EffectiveMonth\",\"Kind\":\"onehot\",\"Column\":\"EffectiveMonth\"},{\"Id\":\"onehot-EffectiveDayOfWeek\",\"Kind\":\"onehot\",\"Column\":\"EffectiveDayOfWeek\"},{\"Id\":\"onehot-IsWeekend\",\"Kind\":\"onehot\",\"Column\":\"IsWeekend\"}]}",
+      "AsOfStrategy": "{\"Mode\":\"none\"}",
+      "LeakageGuard": "{\"DenyFields\":[\"HasLinkedRecord\",\"HasFile\"],\"SingleFeatureDominanceThreshold\":0.6}",
+      "ValidationStrategy": "{\"Strategy\":\"kfold\",\"K\":5,\"LockedHoldoutFraction\":0.2}",
+      "SkipEmbeddings": false
+    },
+    "primaryKey": {
+      "ID": "97EF73C5-1AA6-44FC-B010-BA24025E9393"
+    },
+    "sync": {
+      "lastModified": "2026-09-19T18:45:27.167Z",
+      "checksum": "9ca63f573b207ca9a9345757bdbf036bfaf594164c6acd91949370ba9da104ad"
+    }
+  },
+  {
+    "fields": {
+      "Name": "Identify anomalous journal entries within the ledger to facilitate targeted a… (XGBoost)",
+      "Description": "Identify anomalous journal entries within the ledger to facilitate targeted auditing and reduce financial reporting risk.",
+      "Version": 1,
+      "Status": "Draft",
+      "TargetEntityID": "C040A1FC-16CE-49CB-B0E2-4F233BD0D762",
+      "TargetVariable": "AnomalyOutcome",
+      "ProblemType": "classification",
+      "AlgorithmID": "25E83BF9-C5EE-4BDF-A891-D36D871B73E3",
+      "SourceBindings": "[{\"Kind\":\"Entity\",\"Ref\":\"MJ_BizApps_Accounting: Journal Entries\"}]",
+      "FeatureSteps": "{\"Steps\":[{\"Id\":\"select-raw\",\"Kind\":\"select\",\"Columns\":[\"TotalDebitAmount\",\"LineCount\",\"EffectiveMonth\",\"EffectiveDayOfWeek\",\"IsWeekend\"]},{\"Id\":\"onehot-EffectiveMonth\",\"Kind\":\"onehot\",\"Column\":\"EffectiveMonth\"},{\"Id\":\"onehot-EffectiveDayOfWeek\",\"Kind\":\"onehot\",\"Column\":\"EffectiveDayOfWeek\"},{\"Id\":\"onehot-IsWeekend\",\"Kind\":\"onehot\",\"Column\":\"IsWeekend\"}]}",
+      "AsOfStrategy": "{\"Mode\":\"none\"}",
+      "LeakageGuard": "{\"DenyFields\":[\"HasLinkedRecord\",\"HasFile\"],\"SingleFeatureDominanceThreshold\":0.6}",
+      "ValidationStrategy": "{\"Strategy\":\"kfold\",\"K\":5,\"LockedHoldoutFraction\":0.2}",
+      "SkipEmbeddings": false
+    },
+    "primaryKey": {
+      "ID": "838B981E-CDC5-4D43-A2F9-CD867170189A"
+    },
+    "sync": {
+      "lastModified": "2026-09-19T18:45:27.167Z",
+      "checksum": "b9e237b0c576dd7fd9d2ac085ab430bc9e84f54102a34b8bdb87c7ad961836d4"
+    }
+  }
+]

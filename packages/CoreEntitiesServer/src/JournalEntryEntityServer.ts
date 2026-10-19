@@ -35,17 +35,38 @@ import {
   mjBizAppsAccountingJournalEntryLineDimensionEntity,
 } from '@mj-biz-apps/accounting-entities';
 
-import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import { AccountingEngineBase, FiscalYearOf } from '@mj-biz-apps/accounting-engine-base';
+import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 
 import { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
+import { laterBusinessDate, loadTodayBusiness } from './BusinessDay.js';
 import { LookupJournalEntryTypeByID, RequireJournalEntryTypeID } from './JournalEntryTypes.js';
 import { getNextJournalEntryNumber } from './SequenceService.js';
+import { isSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
+const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const FILE_ENTITY = 'Files'; // __mj.File
+
+/**
+ * The legal JE status graph (plan §7 + the DB triggers' sanctioned carve-outs):
+ *   Pending → Batched (the batch build's lock) · Batched → GLPosted (the batch DISPATCH — see the
+ *   owning-batch check in ValidateAsync) · Batched → Pending (the reversible unlock the immutability
+ *   trigger sanctions: JournalEntryBatchID cleared while the owning batch is Pending or Cancelled —
+ *   the batch-side condition stays DB-enforced, 50004/50005; an Approved or Failed batch reaches
+ *   Cancelled only through JournalEntryBatchEntityServer.Cancel, #183) · GLPosted is terminal.
+ * The DB triggers freeze a LOCKED row but do not police a Pending row's transitions at all — without
+ * this graph a direct client save could jump Pending→GLPosted with forged GLPostedAt/GLReferenceID
+ * and the entry would look ERP-posted without ever being batched, approved, or dispatched.
+ */
+const JE_LEGAL_TRANSITIONS: Record<string, ReadonlyArray<string>> = {
+  Pending: ['Pending', 'Batched'],
+  Batched: ['Batched', 'GLPosted', 'Pending'],
+  GLPosted: ['GLPosted'],
+};
 
 @RegisterClass(BaseEntity, JE_ENTITY)
 export class JournalEntryEntityServer extends JournalEntryEntity {
@@ -146,7 +167,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     // Loud on failure: treating a failed query as "no dimensions" would silently strip tags
     // from everything that reads the hydrated collection (reversals, dispatch, UI).
     if (!res.Success) {
-      throw new Error(`JournalEntryEntityServer.hydrateLineDimensions: failed to load dimension tags for JE ${this.ID}: ${res.ErrorMessage ?? 'unknown error'}`);
+      throw new Error(`Could not load the dimensions on the lines of journal entry ${this.ID}: ${res.ErrorMessage ?? 'unknown error'}`);
     }
     const byLine = new Map<string, mjBizAppsAccountingJournalEntryLineDimensionEntity[]>();
     for (const dim of res.Results ?? []) {
@@ -197,6 +218,29 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
    */
   public override Validate(): ValidationResult {
     const result = super.Validate();
+    const fail = (message: string) => {
+      result.Success = false;
+      result.Errors.push(new ValidationErrorInfo('JournalEntryEntityServer.Validate', message, null));
+    };
+
+    // Status-graph enforcement (2026-09-05 security sweep). See JE_LEGAL_TRANSITIONS for why the
+    // DB triggers alone do not cover this (they never police a Pending row).
+    if (!this.IsSaved) {
+      // A JE is born Pending — every sanctioned creation path (manual entry, the engine,
+      // reversals, the batch summary) starts there; lifecycle moves happen through the batch process.
+      if (this.Status && this.Status !== 'Pending') {
+        fail(`A new journal entry must start as Pending, not '${this.Status}'; it becomes Batched or GL-posted only through batching.`);
+      }
+    } else {
+      const oldStatus = this.GetFieldByName('Status')?.OldValue as string | undefined;
+      if (oldStatus && this.Status !== oldStatus) {
+        if (!(JE_LEGAL_TRANSITIONS[oldStatus] ?? []).includes(this.Status)) {
+          fail(`A journal entry cannot go from ${oldStatus} to ${this.Status}. From ${oldStatus} it can go to: ${(JE_LEGAL_TRANSITIONS[oldStatus] ?? []).filter(s => s !== oldStatus).join(', ') || 'nothing; it is final'}.`);
+        } else if (oldStatus === 'Batched' && this.Status === 'Pending' && this.JournalEntryBatchID) {
+          fail(`A batched journal entry returns to Pending only when its batch releases it, and that clears its batch link (JournalEntryBatchID) in the same save.`);
+        }
+      }
+    }
 
     const blank = (this.Lines.Items as JournalEntryLineEntityServer[])
       .map((line, i) => ({ line, number: i + 1 }))
@@ -232,7 +276,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
         result.Errors.push(
           new ValidationErrorInfo(
             'JournalEntryEntityServer.ValidateAsync',
-            'JournalEntry typed \'Reversal\' must specify ReversesJournalEntryID.',
+            'A Reversal entry must name the journal entry it reverses (ReversesJournalEntryID).',
             null,
           ),
         );
@@ -242,7 +286,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
         result.Errors.push(
           new ValidationErrorInfo(
             'JournalEntryEntityServer.ValidateAsync',
-            'JournalEntry specifying ReversesJournalEntryID must be typed with JournalEntryType Code=\'Reversal\'.',
+            'An entry that reverses another journal entry must have the Reversal entry type.',
             null,
           ),
         );
@@ -264,10 +308,38 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       );
     }
 
+    // Rule 7: status-graph, data-driven half (2026-09-05 security sweep) — Batched→GLPosted is the
+    // batch DISPATCH transition and is only legal while the owning batch has itself been dispatched.
+    try {
+      const transitionError = await this.validateGLPostedTransition();
+      if (transitionError) {
+        result.Success = false;
+        result.Errors.push(new ValidationErrorInfo('JournalEntryEntityServer.ValidateAsync', transitionError, null));
+      }
+    } catch (e: any) {
+      result.Success = false;
+      result.Errors.push(
+        new ValidationErrorInfo('JournalEntryEntityServer.ValidateAsync', e.message || String(e), null),
+      );
+    }
+
     // Rule 6: Single-Company Isolation (Line GLAccounts must match header CompanyID) & Active GL Accounts
     const lines = this.Lines.Items as JournalEntryLineEntityServer[];
     if (lines.length > 0 && this.CompanyID) {
-      const glIds = [...new Set(lines.map(l => l.GLAccountID).filter(Boolean))];
+      const allGlIds = [...new Set(lines.map(l => l.GLAccountID).filter(Boolean))];
+      // GLAccountID values are client-set and interpolated into the filter below — validate each as
+      // a plain UUID (a malformed one can never be a valid FK, so refusing loses nothing).
+      const glIds = allGlIds.filter(id => isSqlGuid(id));
+      for (const bad of allGlIds.filter(id => !isSqlGuid(id))) {
+        result.Success = false;
+        result.Errors.push(
+          new ValidationErrorInfo(
+            'JournalEntryEntityServer.ValidateAsync',
+            `A line's GL account ID '${bad}' is not a valid ID.`,
+            null,
+          ),
+        );
+      }
       if (glIds.length > 0) {
         const provider = this.ProviderToUse as unknown as IRunViewProvider;
         const inList = glIds.map(id => `'${id}'`).join(',');
@@ -291,7 +363,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
               result.Errors.push(
                 new ValidationErrorInfo(
                   'JournalEntryEntityServer.ValidateAsync',
-                  `Line ${line.LineNumber || ''}: GL Account ${line.GLAccountID} not found.`,
+                  `Line ${line.LineNumber || ''}: GL account ${line.GLAccountID} was not found.`,
                   null,
                 ),
               );
@@ -302,7 +374,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
               result.Errors.push(
                 new ValidationErrorInfo(
                   'JournalEntryEntityServer.ValidateAsync',
-                  `Line ${line.LineNumber || ''}: GL Account ${gl.Code || gl.ID} is inactive.`,
+                  `Line ${line.LineNumber || ''}: GL account ${gl.Code || gl.ID} is inactive. Pick an active account.`,
                   null,
                 ),
               );
@@ -312,7 +384,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
               result.Errors.push(
                 new ValidationErrorInfo(
                   'JournalEntryEntityServer.ValidateAsync',
-                  `Line ${line.LineNumber || ''}: GL Account ${gl.Code || gl.ID} belongs to company ${gl.CompanyID}, but Journal Entry belongs to company ${this.CompanyID} (single-company isolation rule D3).`,
+                  `Line ${line.LineNumber || ''}: GL account ${gl.Code || gl.ID} belongs to company ${gl.CompanyID}, but this journal entry belongs to company ${this.CompanyID}. Every line must use an account of the entry's company.`,
                   null,
                 ),
               );
@@ -336,8 +408,9 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       try {
         await this.assignEntryNumber();
       } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
         LogError(`JournalEntryEntityServer.Save: EntryNumber assignment failed: ${err}`);
-        return false;
+        throw new Error(`Cannot number journal entry: ${msg}`);
       }
     }
 
@@ -366,7 +439,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       const saved = await super.Save(options);
       if (!saved) {
         throw new Error(
-          `Failed to save JournalEntry: ${this.LatestResult?.CompleteMessage ?? 'unknown error'}`,
+          `The journal entry could not be saved: ${this.LatestResult?.CompleteMessage ?? 'unknown error'}`,
         );
       }
 
@@ -387,10 +460,10 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
 
   private async assignEntryNumber(): Promise<void> {
     if (!this.ContextCurrentUser) {
-      throw new Error('JournalEntryEntityServer.assignEntryNumber: ContextCurrentUser is required');
+      throw new Error('A journal entry number cannot be assigned without a signed-in user.');
     }
     if (!this.CompanyID) {
-      throw new Error('JournalEntryEntityServer.assignEntryNumber: CompanyID must be set before save (journal entries are single-company, plan D3)');
+      throw new Error('Choose a company before saving the journal entry.');
     }
     const fiscalYear = await this.deriveFiscalYear();
     this.EntryNumber = await getNextJournalEntryNumber(
@@ -404,28 +477,69 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
   /**
    * Fiscal year from the company's ACP settings: the FY containing EffectiveDate,
    * labeled by the calendar year the fiscal year STARTS in. For the default Jan-1
-   * start this equals the calendar year. All date-part math in UTC (repo convention).
+   * start this equals the calendar year. The rule is `FiscalYearOf` (accounting-engine-base),
+   * shared with the deferred-revenue waterfall's year-to-date figure.
    */
   private async deriveFiscalYear(): Promise<number> {
     const effectiveDate = this.EffectiveDate;
     if (!effectiveDate) {
-      throw new Error('JournalEntryEntityServer.deriveFiscalYear: EffectiveDate must be set before save (NOT NULL constraint)');
+      throw new Error('Enter an effective date before saving the journal entry.');
     }
     // Defensive: a raw-loaded value can arrive as an ISO string at runtime despite the Date type.
     const d = effectiveDate instanceof Date ? effectiveDate : new Date(effectiveDate);
     if (Number.isNaN(d.getTime())) {
-      throw new Error(`JournalEntryEntityServer.deriveFiscalYear: invalid EffectiveDate value: ${String(effectiveDate)}`);
+      throw new Error(`The effective date '${String(effectiveDate)}' is not a valid date.`);
     }
     await AccountingEngineBase.Instance.ConfigEx({ contextUser: this.ContextCurrentUser, provider: this.ProviderToUse as unknown as IMetadataProvider });
-    const acp = AccountingEngineBase.Instance.CompanyProfiles.find(
-      p => p.ID?.toLowerCase() === this.CompanyID?.toLowerCase()
+    const day = ToCalendarDay(d);
+    if (day === null) {
+      throw new Error(`The effective date '${String(effectiveDate)}' cannot be read as a calendar day.`);
+    }
+    return FiscalYearOf(day, AccountingEngineBase.Instance.FiscalYearStartFor(this.CompanyID));
+  }
+
+  // ─── Status-graph hardening (data-driven half) ────────────────────────────
+
+  /**
+   * Batched→GLPosted is the engine's dispatch transition (markJournalEntriesGLPosted): it runs after
+   * the owning batch has flipped Approved→Sent→Posted, so at the moment a member JE legitimately
+   * becomes GLPosted its batch is Sent or Posted. An ad-hoc caller flipping a Batched JE to
+   * GLPosted while its batch is still Pending/Approved (i.e. never dispatched) is forging a posting
+   * — refuse it. Returns the problem, or null when the save is not that transition / is legitimate.
+   */
+  private async validateGLPostedTransition(): Promise<string | null> {
+    if (!this.IsSaved) return null;
+    const oldStatus = this.GetFieldByName('Status')?.OldValue as string | undefined;
+    if (this.Status !== 'GLPosted' || oldStatus === 'GLPosted' || !oldStatus) return null;
+
+    const batchId = this.JournalEntryBatchID;
+    if (!batchId) {
+      return 'A journal entry can be marked GL-posted only as part of a sent batch, and this entry is in no batch.';
+    }
+    const provider = this.ProviderToUse as unknown as IRunViewProvider;
+    const res = await provider.RunView<{ Status: string }>(
+      {
+        EntityName: BATCH_ENTITY,
+        ExtraFilter: `ID=${sqlGuidLiteral(batchId, 'JournalEntryEntityServer.validateGLPostedTransition')}`,
+        Fields: ['Status'],
+        MaxRows: 1,
+        ResultType: 'simple',
+        BypassCache: true,
+      },
+      this.ContextCurrentUser,
     );
-    const startMonth = acp?.FiscalYearStartMonth ?? 1;
-    const startDay = acp?.FiscalYearStartDay ?? 1;
-    const beforeFYStart =
-      d.getUTCMonth() + 1 < startMonth ||
-      (d.getUTCMonth() + 1 === startMonth && d.getUTCDate() < startDay);
-    return beforeFYStart ? d.getUTCFullYear() - 1 : d.getUTCFullYear();
+    // Loud on failure: silently skipping would reopen the forged-posting hole this check closes.
+    if (!res.Success) {
+      throw new Error(`Could not check batch ${batchId}, which holds this journal entry: ${res.ErrorMessage ?? 'unknown error'}`);
+    }
+    const batchStatus = res.Results?.[0]?.Status;
+    if (!batchStatus) {
+      return `This journal entry cannot be marked GL-posted: its batch ${batchId} was not found.`;
+    }
+    if (batchStatus !== 'Sent' && batchStatus !== 'Posted') {
+      return `This journal entry cannot be marked GL-posted: its batch ${batchId} is ${batchStatus}, and only a Sent or Posted batch can mark its entries GL-posted.`;
+    }
+    return null;
   }
 
   // ─── W9: attachment validation ────────────────────────────────────────────
@@ -433,13 +547,16 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
   private async ValidateAttachment(): Promise<void> {
     const fileId = this.FileID;
     if (!fileId) return;
+    // fileId is client-set and interpolated into the filter — a plain UUID or the save fails (W9's
+    // "must reference an existing file" already implies a well-formed id).
+    const fileIdLiteral = sqlGuidLiteral(fileId, 'JournalEntry.FileID (W9)');
     const provider = this.ProviderToUse as unknown as IRunViewProvider;
     const res = await provider.RunView<{ ID: string }>(
-      { EntityName: FILE_ENTITY, ExtraFilter: `ID='${fileId}'`, Fields: ['ID'], ResultType: 'simple' },
+      { EntityName: FILE_ENTITY, ExtraFilter: `ID=${fileIdLiteral}`, Fields: ['ID'], ResultType: 'simple' },
       this.ContextCurrentUser,
     );
     if (res.Success && res.Results.length === 0) {
-      throw new Error(`JournalEntry.FileID ${fileId} does not reference an existing file (W9).`);
+      throw new Error(`The attached file (${fileId}) does not exist. Remove the attachment or attach the file again.`);
     }
   }
 
@@ -449,13 +566,16 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
    * Create a new Pending JE that reverses this one (Dr/Cr swapped, dimension tags carried),
    * back-referenced both ways. Uses the encapsulated pattern: the reversal is assembled as a
    * JournalEntryEntityServer with Lines + Dimensions and persisted in ONE transactional Save().
+   * The reversal's EffectiveDate is the later of today's BUSINESS day (`BusinessTimeZoneEngine`,
+   * not the server clock's calendar day — issue #230) and the original's EffectiveDate, so a
+   * reversal never lands in a period before the entry it reverses (issue #266).
    */
   public async GenerateReversal(
     reason: string,
     contextUser?: UserInfo,
   ): Promise<mjBizAppsAccountingJournalEntryEntity> {
     if (!this.IsSaved) {
-      throw new Error('GenerateReversal: the JournalEntry must be saved before it can be reversed.');
+      throw new Error('The journal entry must be saved before it can be reversed.');
     }
     const user = contextUser ?? this.ContextCurrentUser;
     const provider = this.ProviderToUse as unknown as IMetadataProvider;
@@ -465,10 +585,10 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     // be reversed again (double-reversing would orphan the back-pointer).
     const reversalTypeId = await RequireJournalEntryTypeID('Reversal', user, provider);
     if (this.EntryTypeID?.toLowerCase() === reversalTypeId.toLowerCase() || this.ReversesJournalEntryID) {
-      throw new Error('GenerateReversal: a reversal entry cannot itself be reversed.');
+      throw new Error('A reversal entry cannot itself be reversed.');
     }
     if (this.ReversedByJournalEntryID) {
-      throw new Error(`GenerateReversal: ${this.EntryNumber} has already been reversed (by JE ${this.ReversedByJournalEntryID}).`);
+      throw new Error(`Journal entry ${this.EntryNumber} has already been reversed (by journal entry ${this.ReversedByJournalEntryID}).`);
     }
 
     // Make sure this JE's own lines (+ dimension tags) are hydrated to copy from.
@@ -479,7 +599,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     const reversal = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, user);
     reversal.NewRecord();
     reversal.CompanyID = this.CompanyID;
-    reversal.EffectiveDate = new Date();
+    reversal.EffectiveDate = laterBusinessDate(await loadTodayBusiness(user, provider, this.CompanyID), this.EffectiveDate);
     reversal.EntryTypeID = reversalTypeId;
     reversal.Status = 'Pending';
     reversal.Description = `Reversal of ${this.EntryNumber}: ${reason}`;
@@ -499,7 +619,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     }
 
     if (!(await reversal.Save())) {
-      throw new Error(`GenerateReversal: failed to save reversal: ${reversal.LatestResult?.CompleteMessage ?? 'unknown'}`);
+      throw new Error(`The reversal could not be saved: ${reversal.LatestResult?.CompleteMessage ?? 'unknown error'}`);
     }
     await this.BackReferenceReversal(reversal.ID);
     return reversal;

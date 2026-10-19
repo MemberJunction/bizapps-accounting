@@ -20,7 +20,7 @@ import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-re
 })
 @RegisterClass(BaseDashboard, 'ConfigurationCategoryDashboard')
 export class ConfigurationCategoryComponent extends CategoryShellBase {
-  // Header create verb = the ACTIVE page's create (Marcelo 2026-08-05, orders-style header rule).
+  // Header create verb = the ACTIVE page's create (orders-style header rule).
   public CreateSignalCompanies = 0;
 
   public get CreateVerb(): string | null {
@@ -45,6 +45,7 @@ export class ConfigurationCategoryComponent extends CategoryShellBase {
         // No section header — a single flat group (mj-left-nav renders unlabelled sections as-is).
         items: [
           { id: 'companies', label: 'Companies', icon: 'fa-solid fa-building' },
+          { id: 'erp', label: 'ERP', icon: 'fa-solid fa-cloud-arrow-down' },
           { id: 'users', label: 'Users & roles', icon: 'fa-solid fa-user-shield' },
           { id: 'approvals', label: 'Approvals', icon: 'fa-solid fa-user-check' },
         ],

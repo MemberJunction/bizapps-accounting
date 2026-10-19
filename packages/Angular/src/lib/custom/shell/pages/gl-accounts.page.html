@@ -3,7 +3,7 @@
      column with definite height, so children may size with flex again. -->
 <mj-page-body-interior [Padding]="false">
   <div class="gla-body">
-  <!-- The fused subheader (list-page standard, Marcelo 2026-08-04): no title card — the rail names
+  <!-- The fused subheader (list-page standard): no title card — the rail names
        the page. Stats row + search/type-chips/Filters row in ONE band; Company/Status/Source narrow
        from the Filters disclosure; the page-local "New account" verb rides the toolbar's actions
        slot (an inline create with no workspace to route to). -->
@@ -23,7 +23,7 @@
       (PresetToggled)="OnTypeToggled($event)">
       <label class="gla-field">
         <span class="gla-field__label">Company</span>
-        <!-- CHECKBOX multi-select (Marcelo 2026-08-05): narrow to any set of companies; empty = all. -->
+        <!-- CHECKBOX multi-select: narrow to any set of companies; empty = all. -->
         <mja-check-dropdown
           [Options]="CompanyOptions"
           [SelectedIDs]="FilterCompanyIDs"
@@ -53,7 +53,7 @@
   @if (OrphanCount > 0) {
     <mj-alert
       Variant="warning"
-      Message="Some accounts point at a parent that isn't in this chart, or their parent chain loops back on itself. They're listed at the top of their company's chart and marked, rather than dropped — a rollup parent must be another account in the SAME company's chart.">
+      Message="Some accounts have a parent that is missing from this chart, or a chain of parents that loops back on itself. They are listed at the top of their company's chart and marked. Give each one a parent from the same company's chart, or clear its parent.">
     </mj-alert>
   }
 
@@ -155,7 +155,7 @@
     </section>
   }
 
-  <!-- MJ's house grid (Marcelo 2026-08-05: All accounts uses the STANDARD mj-entity-data-grid,
+  <!-- MJ's house grid (All accounts uses the STANDARD mj-entity-data-grid,
        same as All journal entries / All batches — §8 MJ-wins). The toolbar filters + search feed
        the grid's ExtraFilter (server-side predicate, same shape the client filter used). Clicking
        a row opens the editor above (per-row Edit/Retire buttons retired with the hand-rolled

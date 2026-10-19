@@ -37,7 +37,7 @@ export interface PendingManualEntry {
  *     `Approved` state for an approve verb to move an entry into.
  *   - The server's batch candidate filter (`pendingCandidateFilter`) selects `Status='Pending'`
  *     with no entry-type exclusion, so a manual entry is batchable whether or not anyone reviewed it.
- *   - C.8's shape is unresolved — held as "lean yes" pending Robert (plans/QUESTIONS.md#q6 (3)).
+ *   - C.8's shape is unresolved — held as "lean yes" pending a decision (plans/QUESTIONS.md#q6 (3)).
  * Shipping the verbs would mean inventing the approval model this app has explicitly deferred, and a
  * button that appears to gate the ledger but does not is worse than no button.
  *
@@ -130,7 +130,7 @@ export class JEApprovalsPageComponent extends BaseAngularComponent implements On
         },
         this.ProviderToUse.CurrentUser,
       );
-      if (!res.Success) throw new Error(res.ErrorMessage ?? 'Could not load the review queue.');
+      if (!res.Success) throw new Error(res.ErrorMessage ?? 'Could not load the review queue. Refresh the page to try again.');
 
       const rows = res.Results ?? [];
       const amounts = await this.loadAmounts(rows.map((r) => r.ID));

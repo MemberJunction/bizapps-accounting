@@ -45,7 +45,10 @@
                                         {{ Record.JournalEntryBatch || 'Open batch' }}
                                     </button>
                                 } @else {
-                                    Assigned when the next batch is built.
+                                    <button type="button" class="mja-je-link" (click)="OpenBatchBuilder()">
+                                        Build a batch…
+                                    </button>
+                                    <span class="mja-je-ov-fact__hint">Not yet batched.</span>
                                 }
                             </div>
                         </div>

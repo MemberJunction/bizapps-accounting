@@ -11,6 +11,10 @@
     @if (FailedCount > 0) {
       <mj-stat-badge [Count]="FailedCount" Label="failed" Icon="fa-solid fa-triangle-exclamation" Variant="error"></mj-stat-badge>
     }
+    @if (StrandedEntryCount > 0) {
+      <mj-stat-badge [Count]="StrandedEntryCount" Label="JEs stranded" Icon="fa-solid fa-lock" Variant="error"
+        title="Journal entries held by a failed or partly-posted batch. No scheduled run or build picks them up until the batch is retried or its GL posting is finished."></mj-stat-badge>
+    }
   </div>
 
   <div actions>
@@ -89,7 +93,7 @@
     <section class="ds-attention" aria-label="Failed dispatches">
       <h2 class="ds-attention__title">
         <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
-        {{ FailedBatches.length }} dispatch{{ FailedBatches.length === 1 ? '' : 'es' }} failed — needs a retry
+        {{ FailedBatches.length }} dispatch{{ FailedBatches.length === 1 ? '' : 'es' }} failed — check the ERP before retrying
       </h2>
       @for (b of FailedBatches; track b.ID) {
         <article class="ds-fail">
@@ -98,7 +102,8 @@
             <span class="ds-fail__meta">{{ b.TargetSystem }}</span>
             <!-- SentAt is datetimeoffset (a true instant) → render LOCAL, no 'UTC' arg. Passing
                  'UTC' here would misreport when the send actually happened. -->
-            <span class="ds-fail__meta">Sent {{ b.SentAt ? (b.SentAt | date: 'yyyy-MM-dd HH:mm') : '—' }}</span>
+            <span class="ds-fail__meta">Sent {{ b.SentAt ? (b.SentAt | date: 'yyyy-MM-dd HH:mm') : '—' }}{{ b.SentByUser ? ' by ' + b.SentByUser : '' }}</span>
+            <span class="ds-fail__meta">Attempt {{ b.SendAttemptCount }}</span>
             <span class="ds-fail__meta">{{ b.TotalEntries }} JEs</span>
             <button
               type="button"
@@ -106,7 +111,7 @@
               variant="primary"
               size="sm"
               [disabled]="!CanRetry(b)"
-              [title]="RetryBlockedReason(b) ?? 'Re-attempt the ERP dispatch'"
+              [title]="RetryBlockedReason(b) ?? 'Re-attempt the ERP dispatch. The ERP is checked for the batch number first, so a batch it already holds is not posted twice'"
               (click)="Retry(b)">
               @if (RetryingJournalEntryBatchID === b.ID) {
                 <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Retrying…
@@ -114,8 +119,56 @@
                 <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Retry dispatch
               }
             </button>
+            <button
+              type="button"
+              mjButton
+              variant="secondary"
+              size="sm"
+              [disabled]="!CanCancelBatch(b)"
+              title="Cancel this batch and return its journal entries to the next build, when its content is what needs correcting"
+              (click)="CancelBatch(b)">
+              @if (CancellingJournalEntryBatchID === b.ID) {
+                <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Cancelling…
+              } @else {
+                <i class="fa-solid fa-ban" aria-hidden="true"></i> Cancel batch
+              }
+            </button>
           </div>
-          <p class="ds-fail__error">{{ b.ErrorMessage || 'The ERP send failed but returned no message.' }}</p>
+          <p class="ds-fail__error">{{ b.ErrorMessage || 'The ERP rejected this batch without giving a reason. Check the batch in the ERP before you retry.' }}</p>
+        </article>
+      }
+    </section>
+  }
+
+  <!-- INCOMPLETE GL POSTING — a Posted batch whose member Batched→GLPosted flip did not finish (#145).
+       The ERP already holds the journal, so the verb is Finish GL posting (no ERP call), never Retry:
+       a second send would duplicate the ERP journal. Unfiltered, like the failed strip. -->
+  @if (IncompletePostings.length > 0) {
+    <section class="ds-attention" aria-label="Incomplete GL postings">
+      <h2 class="ds-attention__title">
+        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+        {{ IncompletePostings.length }} posted batch{{ IncompletePostings.length === 1 ? '' : 'es' }} did not finish GL posting — already in the ERP, do not re-dispatch
+      </h2>
+      @for (b of IncompletePostings; track b.batchId) {
+        <article class="ds-fail">
+          <div class="ds-fail__head">
+            <span class="ds-mono">{{ b.batchNumber ?? b.batchId }}</span>
+            <span class="ds-fail__meta">{{ b.journalEntryCount }} JE{{ b.journalEntryCount === 1 ? '' : 's' }} still Batched</span>
+            <button
+              type="button"
+              mjButton
+              variant="primary"
+              size="sm"
+              [disabled]="!CanResume(b.batchId)"
+              title="Mark the remaining journal entries GL-posted. Makes no ERP call."
+              (click)="Resume(b.batchId, b.batchNumber)">
+              @if (ResumingJournalEntryBatchID === b.batchId) {
+                <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Finishing…
+              } @else {
+                <i class="fa-solid fa-check-double" aria-hidden="true"></i> Finish GL posting
+              }
+            </button>
+          </div>
         </article>
       }
     </section>
@@ -127,12 +180,30 @@
       <div class="ds-fail__head">
         <span class="ds-mono">{{ SelectedBatch.JournalEntryBatchNumber }}</span>
         <span class="ds-fail__meta">{{ SelectedBatch.Status }} · {{ SelectedBatch.TargetSystem }}</span>
-        <span class="ds-fail__meta">Sent {{ SelectedBatch.SentAt ? (SelectedBatch.SentAt | date: 'yyyy-MM-dd HH:mm') : '—' }}</span>
+        <span class="ds-fail__meta">Sent {{ SelectedBatch.SentAt ? (SelectedBatch.SentAt | date: 'yyyy-MM-dd HH:mm') : '—' }}{{ SelectedBatch.SentByUser ? ' by ' + SelectedBatch.SentByUser : '' }}</span>
+        @if (SelectedBatch.SendAttemptCount > 0) {
+          <span class="ds-fail__meta">{{ SelectedBatch.SendAttemptCount }} send{{ SelectedBatch.SendAttemptCount === 1 ? '' : 's' }}</span>
+        }
         <span class="ds-fail__meta">Posted {{ SelectedBatch.PostedAt ? (SelectedBatch.PostedAt | date: 'yyyy-MM-dd HH:mm') : '—' }}</span>
         <span class="ds-fail__meta">ERP ref <span class="ds-mono">{{ SelectedBatch.ExternalJournalEntryBatchRef || '—' }}</span></span>
         @if (SelectedBatch.Status === 'Failed') {
           <button type="button" mjButton variant="primary" size="sm" [disabled]="!CanRetry(SelectedBatch)" (click)="Retry(SelectedBatch)">
             <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Retry dispatch
+          </button>
+          <button type="button" mjButton variant="secondary" size="sm" [disabled]="!CanCancelBatch(SelectedBatch)" (click)="CancelBatch(SelectedBatch)"
+            title="Cancel this batch and return its journal entries to the next build, when its content is what needs correcting">
+            <i class="fa-solid fa-ban" aria-hidden="true"></i> Cancel batch
+          </button>
+        }
+        @if (SelectedBatch.Status === 'Posted' && IsIncompletePosting(SelectedBatch.ID)) {
+          <button type="button" mjButton variant="primary" size="sm" [disabled]="!CanResume(SelectedBatch.ID)"
+            (click)="Resume(SelectedBatch.ID, SelectedBatch.JournalEntryBatchNumber)"
+            title="Mark the remaining journal entries GL-posted. Makes no ERP call.">
+            @if (ResumingJournalEntryBatchID === SelectedBatch.ID) {
+              <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Finishing…
+            } @else {
+              <i class="fa-solid fa-check-double" aria-hidden="true"></i> Finish GL posting
+            }
           </button>
         }
         <button type="button" mjButton variant="flat" size="sm" (click)="ClearSelection()" aria-label="Clear selection">
@@ -174,3 +245,116 @@
     </div>
   }
 </mj-page-body-interior>
+
+<!-- RETRY CONFIRMATION — shown only when the server's ERP lookup could not settle whether this Failed
+     batch already posted (#182): the ERP offers no lookup, or the lookup failed. The operator checks,
+     and confirms or cancels. A Mismatch gets its own, stronger dialog below. -->
+<mj-dialog [Visible]="RetryConfirmBatch !== null && RetryConfirmKind !== 'Mismatch'" Title="Check the ERP before retrying" Width="560px" (Close)="CancelRetry()">
+  @if (RetryConfirmBatch) {
+    <p>
+      Batch <span class="ds-mono">{{ RetryConfirmBatch.JournalEntryBatchNumber }}</span> was not retried: the
+      {{ RetryConfirmBatch.TargetSystem }} journal may have posted anyway, and retrying a journal that already posted posts it twice.
+    </p>
+    @if (RetryConfirmReason) {
+      <p>{{ RetryConfirmReason }}</p>
+    }
+    <p>
+      In {{ RetryConfirmBatch.TargetSystem }}, search for document number
+      <span class="ds-mono">{{ RetryConfirmBatch.JournalEntryBatchNumber }}</span>. Retry only if this batch is not there.
+    </p>
+  }
+  <mj-dialog-actions>
+    <button mjButton variant="primary" size="sm" (click)="ConfirmRetry()">
+      <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> It has not posted — retry
+    </button>
+    <button mjButton variant="flat" size="sm" (click)="CancelRetry()">Cancel</button>
+  </mj-dialog-actions>
+</mj-dialog>
+
+<!-- CANCEL (#183, #207) — cancelling a Failed batch returns its entries to the next build, under a NEW
+     document number. The server looks this batch's number up in the ERP first: a posting it finds
+     refuses the cancel, and nothing found lets it through. Only when the lookup cannot settle it does
+     the dialog ask the operator, with the server's reason; a Mismatch needs the number retyped. The
+     reason is required past approval and is the record of why an approved summary was discarded. -->
+<mj-dialog [Visible]="CancelConfirmBatch !== null" Title="Cancel this batch" Width="560px" (Close)="DismissCancelBatch()">
+  @if (CancelConfirmBatch) {
+    <p>
+      Cancelling <span class="ds-mono">{{ CancelConfirmBatch.JournalEntryBatchNumber }}</span> deletes its summary entry and
+      returns its {{ CancelConfirmBatch.TotalEntries }} journal entries to the next build, which needs a new approval.
+    </p>
+    @if (CancelERPCheckReason === null) {
+      <p>
+        {{ CancelConfirmBatch.TargetSystem }} is checked for document number
+        <span class="ds-mono">{{ CancelConfirmBatch.JournalEntryBatchNumber }}</span> first. If the failed send posted anyway,
+        the cancel is refused: retry the batch instead, and the retry records it posted.
+      </p>
+    } @else if (CancelERPCheckKind === 'Mismatch') {
+      <p><strong>{{ CancelConfirmBatch.TargetSystem }} already holds a posting under this document number.</strong> {{ CancelERPCheckReason }}</p>
+      <p>
+        If that posting is this batch, do not cancel: its entries would post a second time. Reconcile it in
+        {{ CancelConfirmBatch.TargetSystem }} instead. To cancel anyway, type the batch number:
+      </p>
+      <input
+        type="text"
+        class="mj-input ds-mono"
+        [(ngModel)]="CancelMismatchText"
+        [attr.aria-label]="'Type ' + CancelConfirmBatch.JournalEntryBatchNumber + ' to cancel anyway'"
+        [placeholder]="CancelConfirmBatch.JournalEntryBatchNumber" />
+    } @else {
+      <p>{{ CancelERPCheckReason }}</p>
+      <p>
+        In {{ CancelConfirmBatch.TargetSystem }}, search for document number
+        <span class="ds-mono">{{ CancelConfirmBatch.JournalEntryBatchNumber }}</span>. Cancel only if it is not there.
+      </p>
+    }
+    <label class="ds-cancel__label" for="ds-cancel-reason">Reason (required)</label>
+    <textarea id="ds-cancel-reason" class="ds-cancel__reason" rows="3" maxlength="500" [(ngModel)]="CancelReason"></textarea>
+  }
+  <mj-dialog-actions>
+    <button mjButton [variant]="CancelERPCheckKind === 'Mismatch' ? 'flat' : 'primary'" size="sm" [disabled]="!CanConfirmCancelBatch" (click)="ConfirmCancelBatch()">
+      <i class="fa-solid fa-ban" aria-hidden="true"></i>
+      @if (CancelERPCheckReason === null) { Cancel batch }
+      @else if (CancelERPCheckKind === 'Mismatch') { It is not this batch — cancel anyway }
+      @else { It has not posted — cancel batch }
+    </button>
+    <button mjButton [variant]="CancelERPCheckKind === 'Mismatch' ? 'primary' : 'flat'" size="sm" (click)="DismissCancelBatch()">Keep batch</button>
+  </mj-dialog-actions>
+</mj-dialog>
+
+<!-- MISMATCH — the ERP holds a posting under this number that differs from the batch. That is most
+     often this very batch, changed by the ERP (tax or VAT entries it added) or by an account mapping
+     change since it posted. Posting again then puts two journals under one number, and every later
+     lookup reads Mismatch, so the check can never protect this batch again. Cancel is the default;
+     the override needs the batch number retyped. -->
+<mj-dialog [Visible]="RetryConfirmBatch !== null && RetryConfirmKind === 'Mismatch'" Title="The ERP already holds this document number" Width="600px" (Close)="CancelRetry()">
+  @if (RetryConfirmBatch) {
+    <p>
+      {{ RetryConfirmBatch.TargetSystem }} already holds a posting under document number
+      <span class="ds-mono">{{ RetryConfirmBatch.JournalEntryBatchNumber }}</span>, and it does not match this batch line for line.
+    </p>
+    @if (RetryConfirmReason) {
+      <p>{{ RetryConfirmReason }}</p>
+    }
+    <p>
+      <strong>This is most likely this batch, already posted.</strong> The ERP may have added entries of its own, such as tax,
+      or an account mapping may have changed since. If so, do not retry: reconcile the posting in
+      {{ RetryConfirmBatch.TargetSystem }}, then archive this batch from Batch approvals.
+    </p>
+    <p>
+      Post again only if you have confirmed that posting belongs to something else. Posting again when it is this batch
+      doubles it in the general ledger. To post again, type the batch number:
+    </p>
+    <input
+      type="text"
+      class="mj-input ds-mono"
+      [(ngModel)]="MismatchConfirmText"
+      [attr.aria-label]="'Type ' + RetryConfirmBatch.JournalEntryBatchNumber + ' to post again'"
+      [placeholder]="RetryConfirmBatch.JournalEntryBatchNumber" />
+  }
+  <mj-dialog-actions>
+    <button mjButton variant="primary" size="sm" (click)="CancelRetry()">Cancel</button>
+    <button mjButton variant="flat" size="sm" [disabled]="!CanConfirmRetry" (click)="ConfirmRetry()">
+      It is not this batch — post again
+    </button>
+  </mj-dialog-actions>
+</mj-dialog>

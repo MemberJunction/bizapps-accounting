@@ -14,7 +14,7 @@
   },
   "include": ["src/**/*"],
   // Tests are NOT part of the shipped library: they'd drag node: built-ins (the purity guard reads
-  // the source tree) and vitest types into an Angular package build. Vitest type-checks them via
-  // its own config/run instead.
+  // the source tree) and vitest types into an Angular package build. Vitest does not type-check
+  // them (it only transpiles); `test:types` does, through tsconfig.spec.json.
   "exclude": ["node_modules", "src/__tests__/**", "src/**/*.test.ts", "src/**/*.dom.test.ts"]
 }

@@ -135,7 +135,7 @@ export class GLAccountFormComponentExtended extends mjBizAppsAccountingGLAccount
         { EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${this.SelectedCompanyID}'`, OrderBy: 'Code ASC', ResultType: 'simple' },
         this.ProviderToUse.CurrentUser,
       );
-      if (!res.Success) { this.TreeError = res.ErrorMessage ?? 'Failed to load chart of accounts.'; this.allAccounts = []; }
+      if (!res.Success) { this.TreeError = res.ErrorMessage ?? 'Could not load the chart of accounts. Refresh the page to try again.'; this.allAccounts = []; }
       else this.allAccounts = res.Results ?? [];
       this.rebuildTree();
     } catch (e) {

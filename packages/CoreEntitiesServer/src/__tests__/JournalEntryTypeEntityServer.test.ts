@@ -50,7 +50,7 @@ describe('JournalEntryTypeEntityServer (system-row lock)', () => {
     row.Code = 'NotReversalAnymore';
     const result = row.Validate();
     expect(result.Success).toBe(false);
-    expect(result.Errors.some(e => /Code is immutable/.test(e.Message))).toBe(true);
+    expect(result.Errors.some(e => /its Code cannot change/.test(e.Message))).toBe(true);
   });
 
   it('blocks flipping IsJournalEntryBatchSummary on a saved IsSystem row', async () => {
@@ -58,7 +58,7 @@ describe('JournalEntryTypeEntityServer (system-row lock)', () => {
     row.IsJournalEntryBatchSummary = true;
     const result = row.Validate();
     expect(result.Success).toBe(false);
-    expect(result.Errors.some(e => /IsJournalEntryBatchSummary is immutable/.test(e.Message))).toBe(true);
+    expect(result.Errors.some(e => /its IsJournalEntryBatchSummary cannot change/.test(e.Message))).toBe(true);
   });
 
   it('allows editing Name / IsActive on a system row', async () => {

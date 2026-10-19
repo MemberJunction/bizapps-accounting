@@ -3,6 +3,12 @@ import type {
     mjBizAppsAccountingJournalEntryEntity,
     mjBizAppsAccountingJournalEntryLineEntity,
 } from '@mj-biz-apps/accounting-entities';
+import {
+    AccountingEngineBase,
+    IsInFiscalYearToDate,
+    type FiscalYearStart,
+} from '@mj-biz-apps/accounting-engine-base';
+import { BusinessTimeZoneEngine, CalendarDayIn, ToCalendarDay } from '@mj-biz-apps/common-entities';
 
 /** A single month's release cell in the waterfall */
 export interface WaterfallMonthCell {
@@ -11,6 +17,8 @@ export interface WaterfallMonthCell {
     MonthShort: string; // e.g. "Jan"
     Year: string; // e.g. "2026"
     Amount: number;
+    /** The part of `Amount` whose entries' recognition day is on or before the business day. */
+    RecognizedAmount: number;
     IsPastOrCurrent: boolean;
     JournalEntry?: mjBizAppsAccountingJournalEntryEntity;
     TermLabel?: string;
@@ -34,6 +42,8 @@ export interface WaterfallRow {
     ContractValue: number;
     DeferredBeginning: number;
     RecognizedToDate: number;
+    /** The part of `RecognizedToDate` recognized since the first day of the entry's company's fiscal year. */
+    RecognizedYTD: number;
     RemainingUnearned: number;
     MonthlyCells: WaterfallMonthCell[];
 }
@@ -41,6 +51,7 @@ export interface WaterfallRow {
 /** Summary statistics for the entire waterfall */
 export interface WaterfallSummary {
     TotalDeferredBeginning: number;
+    TotalRecognizedToDate: number;
     TotalRecognizedYTD: number;
     TotalRemainingUnearned: number;
     MonthlyRunRate: number;
@@ -103,6 +114,8 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
     public Summary: WaterfallSummary = emptySummary();
     public MonthHeaders: MonthHeader[] = [];
 
+    private engineLoadRequested = false;
+
     public ngOnChanges(changes: SimpleChanges): void {
         if (changes['JournalEntries'] || changes['TermLookup']) {
             this.recalculateWaterfall();
@@ -132,17 +145,6 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
         }).format(amount);
     }
 
-    public FormatCompact(amount: number): string {
-        if (amount === 0) return '—';
-        if (Math.abs(amount) >= 1000000) {
-            return `$${(amount / 1000000).toFixed(1)}M`;
-        }
-        if (Math.abs(amount) >= 1000) {
-            return `$${(amount / 1000).toFixed(0)}k`;
-        }
-        return `$${amount.toFixed(0)}`;
-    }
-
     public GetTermBadgeClass(termIndex: number): string {
         const mod = (termIndex % 5) + 1;
         return `mja-term-badge--t${mod}`;
@@ -153,20 +155,35 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
             this.resetEmpty();
             return;
         }
+        this.ensureFiscalYearStartsLoaded();
 
         const activeEntries = selectActiveEntries(this.JournalEntries);
         this.DistinctTerms = this.buildDistinctTerms(activeEntries);
-        this.MonthHeaders = buildMonthHeaders(collectDates(activeEntries));
+        const today = BusinessTimeZoneEngine.Instance.Today();
+        const todayKey = today.slice(0, 7);
+        this.MonthHeaders = buildMonthHeaders(collectMonthKeys(activeEntries), todayKey);
 
-        const todayKey = currentMonthKey();
         const groups = this.groupEntriesByOrigin(activeEntries);
-        const aggregated = this.emptyMonthlyCells();
+        const aggregated = this.emptyMonthlyCells(todayKey);
         const monthTotalsMap = new Map<string, number>();
         this.MonthHeaders.forEach((mh) => monthTotalsMap.set(mh.Key, 0));
 
-        this.Rows = this.buildRows(groups, aggregated, monthTotalsMap, todayKey);
+        this.Rows = this.buildRows(groups, aggregated, monthTotalsMap, today);
         this.YearGroups = buildYearGroups(aggregated);
-        this.Summary = buildSummary(this.Rows, this.MonthHeaders, monthTotalsMap, todayKey);
+        this.Summary = buildSummary(this.Rows, this.MonthHeaders, monthTotalsMap, aggregated, todayKey);
+    }
+
+    /**
+     * Year-to-date reads each company's fiscal-year start from `AccountingEngineBase`, which loads at
+     * startup. If it has not loaded yet, load it and recompute, so a first render that fell back to a
+     * 1 January start is replaced by one using each company's own start.
+     */
+    private ensureFiscalYearStartsLoaded(): void {
+        const engine = AccountingEngineBase.Instance;
+        if (engine.Loaded || this.engineLoadRequested) return;
+        // Once per component: a load that resolves without loading must not recompute in a loop.
+        this.engineLoadRequested = true;
+        void engine.Config().then(() => this.recalculateWaterfall());
     }
 
     private resetEmpty(): void {
@@ -219,17 +236,16 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
         return groups;
     }
 
-    private emptyMonthlyCells(group?: OriginGroup): WaterfallMonthCell[] {
+    private emptyMonthlyCells(todayKey: string, group?: OriginGroup): WaterfallMonthCell[] {
         return this.MonthHeaders.map((mh) => {
-            const [y, mStr] = mh.Key.split('-');
-            const d = new Date(Number(y), Number(mStr) - 1, 1);
             return {
                 MonthKey: mh.Key,
                 MonthLabel: mh.Label,
-                MonthShort: d.toLocaleDateString('en-US', { month: 'short' }),
-                Year: y,
+                MonthShort: monthShort(mh.Key),
+                Year: mh.Year,
                 Amount: 0,
-                IsPastOrCurrent: mh.Key <= currentMonthKey(),
+                RecognizedAmount: 0,
+                IsPastOrCurrent: mh.Key <= todayKey,
                 JournalEntry: undefined,
                 TermLabel: group?.label,
                 TermIndex: group?.termIndex,
@@ -241,11 +257,11 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
         groups: Map<string, OriginGroup>,
         aggregated: WaterfallMonthCell[],
         monthTotalsMap: Map<string, number>,
-        todayKey: string,
+        today: string,
     ): WaterfallRow[] {
         const rows: WaterfallRow[] = [];
         for (const [originId, group] of groups.entries()) {
-            rows.push(this.buildRow(originId, group, aggregated, monthTotalsMap, todayKey));
+            rows.push(this.buildRow(originId, group, aggregated, monthTotalsMap, today));
         }
         return rows;
     }
@@ -255,22 +271,27 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
         group: OriginGroup,
         aggregated: WaterfallMonthCell[],
         monthTotalsMap: Map<string, number>,
-        todayKey: string,
+        today: string,
     ): WaterfallRow {
-        const monthlyCells = this.emptyMonthlyCells(group);
+        const monthlyCells = this.emptyMonthlyCells(today.slice(0, 7), group);
         let rowContractVal = 0;
         let rowRecognized = 0;
+        let rowRecognizedYTD = 0;
 
         for (const je of group.entries) {
-            const dateVal = je.EffectiveDate || je.__mj_CreatedAt;
-            const d = dateVal ? new Date(dateVal) : new Date();
-            const mKey = monthKeyFromDate(d);
+            // Fixed-width `YYYY-MM-DD` days compare lexically in chronological order.
+            const day = entryDay(je) ?? today;
+            const mKey = day.slice(0, 7);
             const amt = resolveEntryAmount(je);
+            const recognized = day <= today;
             rowContractVal += amt;
-            addAmountToCell(monthlyCells.find((c) => c.MonthKey === mKey), amt, je);
-            addAmountToCell(aggregated.find((c) => c.MonthKey === mKey), amt, je, group);
-            if (mKey <= todayKey) {
+            addAmountToCell(monthlyCells.find((c) => c.MonthKey === mKey), amt, recognized, je);
+            addAmountToCell(aggregated.find((c) => c.MonthKey === mKey), amt, recognized, je, group);
+            if (recognized) {
                 rowRecognized += amt;
+            }
+            if (IsInFiscalYearToDate(day, today, fiscalYearStartOf(je))) {
+                rowRecognizedYTD += amt;
             }
             monthTotalsMap.set(mKey, (monthTotalsMap.get(mKey) || 0) + amt);
         }
@@ -283,6 +304,7 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
             ContractValue: rowContractVal,
             DeferredBeginning: rowContractVal,
             RecognizedToDate: rowRecognized,
+            RecognizedYTD: rowRecognizedYTD,
             RemainingUnearned: Math.max(0, rowContractVal - rowRecognized),
             MonthlyCells: monthlyCells,
         };
@@ -292,6 +314,7 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
 function emptySummary(): WaterfallSummary {
     return {
         TotalDeferredBeginning: 0,
+        TotalRecognizedToDate: 0,
         TotalRecognizedYTD: 0,
         TotalRemainingUnearned: 0,
         MonthlyRunRate: 0,
@@ -300,13 +323,32 @@ function emptySummary(): WaterfallSummary {
     };
 }
 
-function currentMonthKey(): string {
-    const now = new Date();
-    return monthKeyFromDate(now);
+/**
+ * The calendar day (`YYYY-MM-DD`) an entry recognizes on, or null when it carries no date.
+ *
+ * `EffectiveDate` is a `DATE` column: a calendar day held as UTC midnight, so it is read from its UTC
+ * parts. The `__mj_CreatedAt` fallback is an instant, so it is placed on the business zone's calendar.
+ */
+function entryDay(je: mjBizAppsAccountingJournalEntryEntity): string | null {
+    const effectiveDay = ToCalendarDay(je.EffectiveDate);
+    if (effectiveDay !== null) return effectiveDay;
+    if (!je.__mj_CreatedAt) return null;
+    const createdAt = new Date(je.__mj_CreatedAt);
+    if (Number.isNaN(createdAt.getTime())) return null;
+    return CalendarDayIn(createdAt, BusinessTimeZoneEngine.Instance.Zone);
 }
 
-function monthKeyFromDate(d: Date): string {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+/** The fiscal-year start of the entry's company (1 January when it has no accounting profile). */
+function fiscalYearStartOf(je: mjBizAppsAccountingJournalEntryEntity): FiscalYearStart {
+    return AccountingEngineBase.Instance.FiscalYearStartFor(je.CompanyID);
+}
+
+/**
+ * A reversed entry and its reversal net to zero, so neither belongs in the schedule. Checking both
+ * pointers keeps the pair out even when a caller loads the reversal, which carries no link of its own.
+ */
+function isReversalPair(je: mjBizAppsAccountingJournalEntryEntity): boolean {
+    return je.ReversedByJournalEntryID != null || je.ReversesJournalEntryID != null;
 }
 
 function isRecognitionEntry(je: mjBizAppsAccountingJournalEntryEntity): boolean {
@@ -318,41 +360,52 @@ function isRecognitionEntry(je: mjBizAppsAccountingJournalEntryEntity): boolean 
 function selectActiveEntries(
     entries: mjBizAppsAccountingJournalEntryEntity[],
 ): mjBizAppsAccountingJournalEntryEntity[] {
-    return entries.some(isRecognitionEntry) ? entries.filter(isRecognitionEntry) : entries;
+    const standing = entries.filter((je) => !isReversalPair(je));
+    return standing.some(isRecognitionEntry) ? standing.filter(isRecognitionEntry) : standing;
 }
 
-function collectDates(entries: mjBizAppsAccountingJournalEntryEntity[]): Date[] {
-    const dates: Date[] = [];
+function collectMonthKeys(entries: mjBizAppsAccountingJournalEntryEntity[]): string[] {
+    const keys: string[] = [];
     for (const je of entries) {
-        const dateVal = je.EffectiveDate || je.__mj_CreatedAt;
-        if (dateVal) {
-            dates.push(new Date(dateVal));
-        }
+        const day = entryDay(je);
+        if (day !== null) keys.push(day.slice(0, 7));
     }
-    return dates;
+    return keys;
 }
 
-function buildMonthHeaders(dates: Date[]): MonthHeader[] {
-    const now = new Date();
-    const sortedDates = dates.length > 0 ? [...dates].sort((a, b) => a.getTime() - b.getTime()) : [now];
-    const minDate = sortedDates[0];
-    const maxDate = sortedDates[sortedDates.length - 1];
-    const startMonthDate = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
-    const endMonthDate = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
-    let totalMonths =
-        (endMonthDate.getFullYear() - startMonthDate.getFullYear()) * 12 +
-        (endMonthDate.getMonth() - startMonthDate.getMonth()) +
-        1;
-    if (totalMonths < 12) totalMonths = 12;
+/** A `YYYY-MM` key as a count of months, so ranges are integer arithmetic with no Date involved. */
+function monthIndex(key: string): number {
+    const [y, m] = key.split('-');
+    return Number(y) * 12 + (Number(m) - 1);
+}
+
+function monthKeyFromIndex(index: number): string {
+    const y = Math.floor(index / 12);
+    const m = (index % 12) + 1;
+    return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}`;
+}
+
+/** "Jan" for "2026-01". Formatted in UTC from UTC midnight, so the machine zone cannot move the month. */
+function monthShort(key: string): string {
+    const [y, m] = key.split('-');
+    return new Date(Date.UTC(Number(y), Number(m) - 1, 1)).toLocaleDateString('en-US', {
+        month: 'short',
+        timeZone: 'UTC',
+    });
+}
+
+function buildMonthHeaders(monthKeys: string[], todayKey: string): MonthHeader[] {
+    // Fixed-width `YYYY-MM` keys sort lexically in chronological order.
+    const sortedKeys = monthKeys.length > 0 ? [...monthKeys].sort() : [todayKey];
+    const startIndex = monthIndex(sortedKeys[0]);
+    const endIndex = monthIndex(sortedKeys[sortedKeys.length - 1]);
+    const totalMonths = Math.max(12, endIndex - startIndex + 1);
 
     const headers: MonthHeader[] = [];
     for (let i = 0; i < totalMonths; i++) {
-        const d = new Date(startMonthDate.getFullYear(), startMonthDate.getMonth() + i, 1);
-        const y = d.getFullYear();
-        const m = d.getMonth() + 1;
-        const key = `${y}-${String(m).padStart(2, '0')}`;
-        const label = d.toLocaleDateString('en-US', { month: 'short' }) + ` '${String(y).slice(2)}`;
-        headers.push({ Key: key, Label: label, Year: String(y) });
+        const key = monthKeyFromIndex(startIndex + i);
+        const year = key.slice(0, 4);
+        headers.push({ Key: key, Label: `${monthShort(key)} '${year.slice(2)}`, Year: year });
     }
     return headers;
 }
@@ -360,11 +413,13 @@ function buildMonthHeaders(dates: Date[]): MonthHeader[] {
 function addAmountToCell(
     cell: WaterfallMonthCell | undefined,
     amt: number,
+    recognized: boolean,
     je: mjBizAppsAccountingJournalEntryEntity,
     group?: OriginGroup,
 ): void {
     if (!cell) return;
     cell.Amount += amt;
+    if (recognized) cell.RecognizedAmount += amt;
     cell.JournalEntry = je;
     if (group) {
         cell.TermLabel = group.label;
@@ -382,7 +437,7 @@ function buildYearGroups(aggregated: WaterfallMonthCell[]): WaterfallYearGroup[]
     return Array.from(yearMap.entries()).map(([year, months]) => ({
         Year: year,
         TotalAmount: months.reduce((sum, m) => sum + m.Amount, 0),
-        ReleasedAmount: months.filter((m) => m.IsPastOrCurrent).reduce((sum, m) => sum + m.Amount, 0),
+        ReleasedAmount: months.reduce((sum, m) => sum + m.RecognizedAmount, 0),
         Months: months,
     }));
 }
@@ -391,15 +446,18 @@ function buildSummary(
     rows: WaterfallRow[],
     monthHeaders: MonthHeader[],
     monthTotalsMap: Map<string, number>,
+    aggregated: WaterfallMonthCell[],
     todayKey: string,
 ): WaterfallSummary {
     const grandDeferred = rows.reduce((sum, r) => sum + r.DeferredBeginning, 0);
     const grandRecognized = rows.reduce((sum, r) => sum + r.RecognizedToDate, 0);
+    const grandRecognizedYTD = rows.reduce((sum, r) => sum + r.RecognizedYTD, 0);
     const grandUnearned = rows.reduce((sum, r) => sum + r.RemainingUnearned, 0);
     const totalMonthsWithAmt = Array.from(monthTotalsMap.values()).filter((v) => v > 0).length || 1;
     return {
         TotalDeferredBeginning: grandDeferred,
-        TotalRecognizedYTD: grandRecognized,
+        TotalRecognizedToDate: grandRecognized,
+        TotalRecognizedYTD: grandRecognizedYTD,
         TotalRemainingUnearned: grandUnearned,
         MonthlyRunRate: grandDeferred / totalMonthsWithAmt,
         PercentRecognized: grandDeferred > 0 ? (grandRecognized / grandDeferred) * 100 : 0,
@@ -409,6 +467,7 @@ function buildSummary(
             MonthShort: mh.Label.split(' ')[0],
             Year: mh.Year,
             Amount: monthTotalsMap.get(mh.Key) || 0,
+            RecognizedAmount: aggregated.find((c) => c.MonthKey === mh.Key)?.RecognizedAmount ?? 0,
             IsPastOrCurrent: mh.Key <= todayKey,
         })),
     };

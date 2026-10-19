@@ -1,0 +1,43 @@
+<div class="erp-page">
+  @if (IsLoading) {
+    <mj-loading text="Loading ERP connections…"></mj-loading>
+  } @else if (LoadError) {
+    <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
+  } @else {
+    <div class="dash-stats">
+      <div class="dash-stat dash-tone--brand">
+        <span class="dash-stat__label">Connections</span>
+        <span class="dash-stat__value">{{ Connections.length }}</span>
+      </div>
+      <div class="dash-stat dash-tone--info">
+        <span class="dash-stat__label">Extensions</span>
+        <span class="dash-stat__value">{{ Extensions.length }}</span>
+      </div>
+    </div>
+
+    <mj-erp-sync-panel [Running]="Running" [Results]="Results" (Run)="OnRun($event)"></mj-erp-sync-panel>
+
+    <div class="erp-grid">
+      @for (c of Connections; track c.CompanyIntegrationID) {
+        <mj-erp-connection-card
+          [Connection]="c"
+          (OpenCompany)="OpenCompany($event)"
+          (OpenIntegration)="OpenIntegration($event)"
+          (RunNow)="OnRunCard($event)">
+        </mj-erp-connection-card>
+      } @empty {
+        <mj-empty-state
+          Icon="fa-solid fa-plug"
+          Title="No ERP connected"
+          Message="Add a Company Integration for Business Central or QuickBooks Online. Accounting and FP&A share it.">
+        </mj-empty-state>
+      }
+    </div>
+
+    <mj-erp-extension-list
+      [Extensions]="Extensions"
+      (OpenExtension)="OpenExtension($event)"
+      (ToggleStatus)="ToggleExtension($event)">
+    </mj-erp-extension-list>
+  }
+</div>

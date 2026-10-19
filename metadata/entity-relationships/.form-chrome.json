@@ -380,7 +380,7 @@
       "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Tasks: Tasks&RelatedEntity=MJ_BizApps_Accounting: Journal Entry Batches&RelatedEntityJoinField=ApprovalTaskID"
     },
     "sync": {
-      "lastModified": "2026-08-27T15:48:02.244Z",
+      "lastModified": "2026-09-02T04:41:42.198Z",
       "checksum": "42e4dcda2244ecf2fe22e8f858fe377ef2b9fb63ed6a77d67e15c195ed27a75b"
     }
   }

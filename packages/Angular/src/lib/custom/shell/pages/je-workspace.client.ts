@@ -29,7 +29,7 @@ export class JEWorkspaceClient {
       draft,
     );
     if (!res.Success || !res.Output) {
-      const msg = res.ErrorMessage ?? 'Could not submit the entry.';
+      const msg = res.ErrorMessage ?? 'The entry was not created. Try again.';
       LogError(`JEWorkspaceClient.Create: ${msg}`);
       throw new Error(msg);
     }

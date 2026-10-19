@@ -1,5 +1,229 @@
 # @mj-biz-apps/accounting-entities
 
+## 0.22.2
+
+## 0.22.1
+
+## 0.22.0
+
+### Patch Changes
+
+- 37536eb: MemberJunction and other BizApps packages are peer dependencies with caret ranges (`^6.1.5`,
+  `^5.50.2` for common, `^1.4.1` for tasks; no `~`, nothing in `dependencies`), so a 6.2 host keeps
+  one copy of each instead of installing a second 6.1 tree. MemberJunction
+  devDependencies and the root `pnpm.overrides` use the same `^6.1.5` floor. Adds `check-dependency-model` to CI.
+
+## 0.21.2
+
+## 0.21.1
+
+### Patch Changes
+
+- fd193bf: Move MemberJunction to the 6.1 LTS line AIDP Next runs (`~6.1.5`) and `@mj-biz-apps/common-*` to `^5.50.2`, leaving one copy of each package. Regenerated from a database built from migrations: `_mj__Latitude` / `_mj__Longitude` are nullable in the GraphQL schema on Accounting Company Profile, Tax Authority and Tax Jurisdiction (#267).
+
+## 0.21.0
+
+### Minor Changes
+
+- 4b5fdac: A company profile's parent may itself have a parent. `trg_ACP_NoChains` (error 50010) now refuses a cycle instead of any chain, so a Division can sit under a legal entity that sits under a holding company. A profile pointing at itself stays refused by `CK_AccountingCompanyProfile_NoSelfParent`. The `ParentAccountingCompanyID` description is rewritten: a Division, Department or Branch uses the books of the first company up the chain of any other type. Includes the CodeGen output for the description.
+
+## 0.20.0
+
+### Minor Changes
+
+- 77e4756: The 0.20 Metadata_Sync seeds the ERP Posting Not Read Back finance exception type (`ERP_POSTING_NOT_READ_BACK`), which the batch engine raises when the ERP accepts a journal batch it cannot then read back, so hosts have the type the new code raises and not only a developer's own database. The seed is idempotent and safe on a host that already ran `mj sync push`. As in 0.17, the Active posting scheduled jobs and the ML bench output under metadata/ are not included.
+- c7a1af4: A journal entry batch can no longer be sent to the ERP twice, and every send is recorded (#184).
+
+  - New trigger `trg_JournalEntryBatch_SendOnce` (error 50030). A send must start from `Approved` or `Failed`
+    and advance `SendAttemptCount` by exactly one; no update may keep a batch `Sent`; and `SentAt`,
+    `SentByUserID` and `SendAttemptCount` change at no other time. When two operators, two browser tabs, or a
+    scheduled run and an operator send the same batch, the second save fails and its ERP call never runs,
+    whether the first send is still `Sent`, has `Posted`, or has `Failed` again.
+  - `sendJournalEntryBatch` throws `JournalEntryBatchSendRefusedError` for that refusal, naming the status the
+    batch reads now. `Accounting.BuildJournalEntryBatches` does not mark the batch `Failed` on it.
+  - New columns `SentByUserID` and `SendAttemptCount` on `JournalEntryBatch`. Every transition into `Sent`
+    stamps them, with `SentAt`, from the context user and the loaded count. The count is dispatch attempts that
+    entered `Sent`, including a retry adopted from the ERP and a first send the pre-flight lookup refuses.
+    Batches sent before this release read `SendAttemptCount = 1`, with no sender.
+  - The batch detail panel and the Dispatch status page show who sent a batch and how many attempts it took.
+  - A successful retry still clears `ErrorMessage`. The earlier value, and each overwritten `SentAt` and
+    sender, remain in `__mj.RecordChange`.
+
+- d3a99ff: A journal entry batch becomes `Posted` or `Failed` only from `Sent`, at the database as well as in the entity (#221). `trg_JournalEntryBatch_Immutability` (50031) let a raw `UPDATE` record a `Pending` or `Approved` batch as `Posted` or `Failed` without it being sent, or a `Failed` batch as `Posted` without a retry; it now refuses these. With `trg_JournalEntryBatch_SendOnce` (50030), which refuses `→ Sent` from anything but `Approved` or `Failed`, the database enforces the whole of `JournalEntryBatchEntityServer`'s transition graph. No engine path changes: every send already saves `Sent` before recording its outcome.
+- b2de2f7: Dimension tags on a locked journal entry line are frozen, and a batch can record that a retry adopted the ERP's posting over a broken approved-content seal (#216).
+
+  - New trigger `trg_JELD_Immutability` (error 50033) refuses insert, update and delete of a `JournalEntryLineDimension` row whose journal entry is `Batched` or `GLPosted`, as `trg_JEL_Immutability` does for the line. The PostgreSQL twin ships as a PG-only migration, since the converter does not convert triggers.
+  - New nullable column `JournalEntryBatch.SealMismatchDetectedAt`: when a Failed batch's retry finds its journal already in the ERP although the batch no longer matches its seal, this records when it was recorded Posted, so the batch can be listed and its local tags reviewed. Existing batches read NULL.
+  - `SealMismatchDetectedAt` is frozen. `trg_JournalEntryBatch_Immutability` (error 50034) lets it be set only by the update that records a retried batch `Posted` (`Sent` → `Posted` with `SendAttemptCount` above 1), and refuses any later change or clear and any insert that carries it. The trigger now also fires on insert. Its PostgreSQL twin is `trg_JournalEntryBatch_SealMismatchFreeze` in the same PG-only migration.
+
+- a8e560f: New nullable column `AccountingCompanyProfile.PostingStartDate` (DATE): the first `EffectiveDate` a company posts to the ERP. Journal entries dated before it are meant never to enter a posting batch, for example history brought in at cutover that the ERP already holds. NULL means no floor; existing profiles read NULL. Includes the CodeGen output for the column (entity subclass, GraphQL types, profile form field).
+
+## 0.19.0
+
+## 0.18.0
+
+### Minor Changes
+
+- cc21d7c: A save or delete refused by an accounting trigger now reports the trigger's own error (for example 50009, "JournalEntryBatch is locked …") instead of SQL Server error 3915, "Cannot use the ROLLBACK statement within an INSERT-EXEC statement" (#211). The entity layer runs each write inside `INSERT … EXEC`, where the `ROLLBACK TRANSACTION` every trigger ran before its `THROW` is itself an error, so the reason for the refusal never reached the caller. Migration `V202610011000` re-creates all twelve triggers with their current conditions, error numbers and messages, minus the `ROLLBACK`: a trigger runs with `XACT_ABORT` on, so `THROW` alone still rolls the write back. Which writes are refused has not changed.
+
+## 0.17.0
+
+### Minor Changes
+
+- 7210151: The 0.17 Metadata_Sync ships the finance-exception review (#228) to hosts. That's the five exception types, the Finance role and its permissions, the clear authorization, the Ready To Close query, and the three finance-exception remote operations. It also ships the user-search curation on accounting's entities. The Active posting jobs and the ML bench output are not included.
+- a36297a: Adds a finance exception list for month-end review (golive #279). New tables `FinanceExceptionType` (the catalog of exception kinds: a stable `Code`, the owning app, `IsActive`, and a JSON `Configuration` of detector thresholds) and `FinanceException` (one row per record a reviewer must look at, unique on type and `DedupeKey`, with `Status` `Open` → `Reviewed` | `Corrected` and a review audit that `CK_FinanceException_Review` keeps consistent with it). Five types are seeded as metadata: `PROGRESS_JUDGMENT_CALL`, `PROGRESS_UNATTESTED`, `WON_DEAL_ORDER_NOT_CONFIRMED`, `PRICE_BELOW_ENGINE_UNAPPROVED` and `OVERLAPPING_SUBSCRIPTION`. Three remote operations: `Accounting.GetFinanceExceptionTypes` returns each type's parsed thresholds; `Accounting.RaiseFinanceExceptions` raises exceptions idempotently (an existing row is returned rather than duplicated, and a repeat raise of an Open row refreshes its creator fields and summary; an inactive type is skipped; an unknown type or entity fails the whole call and writes nothing), joins the caller's transaction, reads under an update lock so a concurrent raise of the same item returns the first one's row, and requires the system user when called through the API, so only server code raises; `Accounting.ClearFinanceException` clears an Open exception with a required note, locking the row so a concurrent clear finds it no longer Open, and requires the new `MJ.BizApps.Accounting.FinanceExceptions.Clear` authorization, held by a new `Finance` role, while refusing the source record's creator and any exception whose creator has no linked login. `FinanceExceptionEntityServer` refuses a status or review change made outside that operation, any change to a cleared exception, and any delete. A saved query, "Finance Exceptions Ready To Close", groups the list by company and month; a month is ready when it has no Open exceptions. Remote operation typed bases are now emitted into `@mj-biz-apps/accounting-entities` (`generated/remote_operations.ts`).
+
+## 0.16.0
+
+### Minor Changes
+
+- 844cb02: Ships the Customer Deposits and Unbilled Receivable GL account roles to hosts. Until now they existed only in `metadata/`, so no install had them. bizapps-orders 5.20 posts to both, and without Customer Deposits it refuses payments on scheduled orders. The seed covers these two roles and nothing else, and it skips a role a host already has.
+
+## 0.15.0
+
+### Minor Changes
+
+- 0587bfa: A `Failed` journal entry batch's content is now frozen, and an `Approved` or `Failed` batch can be cancelled (#183). A `Failed` batch is retried under its original approval, but `trg_JournalEntryBatch_Immutability` did not freeze it, so its `PostingDate` — the journal date the ERP receives — control totals and summary pointer could be edited before the retry, and the dispatch check (self-consistency only) would not notice. The trigger now freezes `Failed` alongside `Approved` / `Sent` / `Posted` / `Archived`, and also `Cancelled`, whose approval pair and cancel audit can no longer be rewritten or deleted. It polices the status door too: `Posted`, `Cancelled` and `Archived` are terminal, no batch returns to `Pending`, only a `Pending` batch is approved, a `Sent` batch is not archived, `Cancelled` is reachable only from `Pending`, `Approved` or `Failed`, and an `Approved`/`Failed` batch becomes `Cancelled` only with its summary pointer cleared in the same update. The cancel audit and ERP check are written only by the update that cancels the batch, and `SentAt` is never cleared once set. So that a batch with genuinely wrong content is not left with only retry or archive, `JournalEntryBatchEntityServer.Cancel(contextUser, { reason, confirmNotAlreadyPostedInERP })` now takes an `Approved` or `Failed` batch — and is the only way to: it marks the batch `Cancelled`, then releases the member entries to the next build and deletes the summary, in one transaction. Past approval, only the company's CFO or the batch's approver may cancel, a reason is required (entity plus `CK_JournalEntryBatch_CancelAudit`) and written to the approval Task, and cancelling a `Failed` batch looks its number up in the ERP first (#207): its entries would otherwise be batched again under a new number that no later lookup can connect to a journal that did post. A matching posting refuses the cancel with no override (retry it instead, which records it `Posted`); nothing found lets it through; a mismatch, a failed lookup or no lookup needs the operator's confirmation, and the operation answers `ConfirmationRequired` / `ConfirmationKind` to ask for it. The check is persisted as `ERPNotPostedConfirmedAt` / `ERPNotPostedConfirmedByUserID` / `ERPNotPostedBasis` (`ERPLookup` or `UserAttested`; `CK_JournalEntryBatch_CancelERPCheck`), and the approval Task comment says whether the lookup or the operator established it. `trg_JournalEntry_Immutability` sanctions the member unlock while the owning batch is `Pending` or `Cancelled`. Approval also writes a new `ApprovedContentHash`, a SHA-256 of the batch header, summary entry and lines and member set, frozen by the trigger; `CheckControlTotalCoherence` compares against it and checks the summary entry carries the batch's date and company, so dispatch refuses a batch that changed since approval. Batches approved before this have no hash and get the other checks. Exposed as the `Accounting.CancelJournalEntryBatch` remote operation (Approved/Failed only; Pending is rejected through Batch approvals) and a Cancel action on Dispatch status, Batch Dispatch and the Batches overview.
+
+## 0.14.0
+
+## 0.13.0
+
+## 0.12.0
+
+### Minor Changes
+
+- a64b1e0: `Predictive_Journal_Entry_Anomaly_Fields` could not apply on a fresh install.
+
+  The migration rebuilds `vwJournalEntries` as a layered view that no longer selects
+  `RootReversesJournalEntryID` or `RootReversedByJournalEntryID`, which
+  `CodeGen_Scoped_SQL_Objects` kept. Their `EntityField` rows stayed at Sequence 25 and 26, and
+  `spUpdateExistingEntityFieldsFromSchema` then moved `ReversedByJournalEntry` onto 25:
+
+      Violation of UNIQUE KEY constraint 'UQ_EntityField_EntityID_Sequence'.
+      The duplicate key value is (<Journal Entries entity ID>, 25).
+
+  A database that already had CodeGen run against it never shows this, because CodeGen deletes
+  fields the base view no longer carries before it renumbers.
+
+  The migration now does the same: after rebuilding the view it calls
+  `spDeleteUnneededEntityFields`, scoped to Journal Entries and skipped when that entity row does
+  not exist. A fresh install ends with the same 35 fields as the generated `JournalEntry` class.
+  Databases that already applied the migration are unaffected, because `mj migrate` does not
+  re-run applied scripts and does not compare checksums. A Flyway or Skyway `validate` against
+  such a database will report a checksum change for this version.
+
+## 0.11.0
+
+## 0.10.0
+
+### Minor Changes
+
+- 2919ad0: Add predictive journal entry anomaly outcome columns, layered base views (vwJournalEntriesGenerated and vwJournalEntries), and scoring binding write-back.
+
+## 0.9.0
+
+### Minor Changes
+
+- b1f3c53: `ArchivedJournalEntryBatchStatus` could not apply on a host whose Journal Entry Batches
+  entity has more fields than the authoring database did.
+
+  The migration parked every existing field into the 100000 band, inserted its new fields at
+  literal sequences 23/24/25/31, then called `spUpdateExistingEntityFieldsFromSchema` **in the
+  same batch**. That proc re-derives every field from the physical schema and puts the parked
+  ones back — onto the sequences the migration had just taken:
+
+      Violation of UNIQUE KEY constraint 'UQ_EntityField_EntityID_Sequence'.
+      The duplicate key value is (87ad37e9-62f9-4f0e-a15b-f64adf009112, 23).
+
+  On AIDP stage sequence 23 is the virtual `Company` field; the authoring database had fewer
+  fields on that entity, so 23 was free there and the literals looked fine.
+
+  Both park-shifts are removed and each new field's `Sequence` is computed per host as
+  `MAX(Sequence) + 1`, so new fields append above whatever the host already has and nothing
+  needs moving out of the way. Each INSERT is its own statement, so successive ones see the
+  previous row.
+
+  Worth noting for this repo: bizapps-orders carries a CI gate for exactly this
+  (`check-migration-entityfield-sequence.mjs`, "EntityField Sequence must not be a literal
+  placeholder"). accounting has no equivalent, which is why this reached a release.
+
+## 0.8.0
+
+### Minor Changes
+
+- 21accf9: A terminal `Archived` status for journal entry batches that must never post to the ERP (golive #214). Until now the only two terminal states were `Posted`, reachable only through a successful ERP send, and `Cancelled`, which releases the member entries back to the candidate pool — so "close this batch, it must never go to Business Central" had no expression. `Archived` is reachable from `Pending`, `Approved` and `Failed` (not from `Sent`, which may still be posting), makes no ERP call, and leaves the member entries locked at `Batched`: they stay invisible to the nightly and monthly builds, and `trg_JournalEntry_Immutability` refuses to unlock them once the owning batch is no longer `Pending`. A required `ArchiveReason` plus `ArchivedAt` / `ArchivedByUserID` are enforced by the entity and by a new `CK_JournalEntryBatch_ArchiveAudit` CHECK, and `trg_JournalEntryBatch_Immutability` now freezes an `Archived` batch alongside `Approved` / `Sent` / `Posted` so its status cannot be edited back to `Pending` by direct SQL. Exposed as `JournalEntryBatchEntityServer.Archive(reason)`, the `Accounting.ArchiveJournalEntryBatch` remote operation, and an Archive action on the Batch Dispatch dashboard.
+
+## 0.7.0
+
+## 0.6.1
+
+### Patch Changes
+
+- 553ee29: License declarations now agree on BUSL-1.1 everywhere.
+
+  The README badge was the last thing in the repo still advertising ISC — `LICENSE`,
+  `package.json`, `mj-app.json` and every workspace package already declare BUSL-1.1.
+  A green ISC badge at the top of the README is the first thing a reader sees, so it
+  outranked all of them in practice. The badge now reads BUSL-1.1 and links to `LICENSE`.
+
+## 0.6.0
+
+### Minor Changes
+
+- 71fc375: `Metadata_Sync` for the ERP release, and the `.mj-sync.json` files that made it possible.
+
+  Release seed coverage flagged 15 metadata primaryKeys in no migration: the `Accounting` action
+  category, 2 Actions with their 11 Action Params (`Build Journal Entry Batches`, `Run ERP Sync`), and
+  the ERP daily-sync Scheduled Job. So `0.5.0` shipped `AccountingERPEngine` and
+  `Accounting.RunERPSync` without the Action rows that expose them.
+
+  They were unshippable for a specific reason: `metadata/action-categories/` and `metadata/actions/` had
+  **no `.mj-sync.json`**. MetadataSync only walks directories that declare their entity, so it skipped
+  both silently — the push reported success across 8 of 10 directories and never mentioned the other
+  two. bizapps-orders and bizapps-common have one in every directory; this repo was missing exactly the
+  two holding its Actions.
+
+  Adds both configs, names all ten directories in `directoryOrder` with categories ahead of what
+  references them, and adds `V202609020600__v0.1.x__Metadata_Sync.sql` (122 records — 15 created,
+  2 updated, 0 errors) generated against a database built from migrations only.
+
+  Minor, not patch: this release carries a migration.
+
+### Patch Changes
+
+- 434df96: Move to MJ `6.1.0-edge.5` and raise the cross-repo floors.
+
+  44 `@memberjunction/*` pins move `^6.1.0-edge.4` → `^6.1.0-edge.5`.
+
+  Floors now match what is published — `@mj-biz-apps/common-*` `^5.34.0` → `>=5.37.0`, and
+  `@mj-biz-apps/tasks-*` `^1.2.3` → `>=1.4.1`. Stale floors are not harmless here: bizapps-orders
+  declared `accounting-* >=0.1.0` and pnpm resolved the _lowest_ satisfying version as a peer, pulling
+  `accounting-server@0.1.0` and 48 MJ packages at edge.2/3/4 into an otherwise-edge.5 tree.
+
+  Verified after a clean install: a single `@memberjunction/core` at edge.5 and build passing.
+
+## 0.5.0
+
+### Minor Changes
+
+- 9966206: Accounting engine extension registry (`AccountingEngineExtension`) — host-visible
+  enable/disable, run order, optional company scope, and a JSON `Configuration` bag
+  typed as `IAccountingEngineExtensionConfiguration`.
+
+  Hook participation is not columns: `BaseAccountingEngineExtension` getters and
+  Before/After overrides (later in this PR). Empty seed — consumers such as FP&A
+  insert their own row. Schema change, so `minor`.
+
+- 51012f5: AccountingERPEngine: Integration Engine pull for COA/dimensions, MJ CreateJournalEntry for batch post, BaseAccountingEngineExtension seam, Accounting.RunERPSync, daily job metadata, and Configuration > ERP sync UI (reusable widgets + Explorer page).
+- fa6ae13: BA-D34: `GLAccountRole.Cardinality` (`One` | `Many`) and the `BankAccount` role.
+
+  Separates "where does a receipt post?" (role `Cash`, One, unchanged) from "what
+  is cash, for a position?" (role `BankAccount`, Many). Existing roles are
+  backfilled to `One`, so payment routing and the BA-D32 tie guard are unaffected.
+  Enables FP&A to build `CashBalance` as the sum of a company's Active
+  `BankAccount` links. Schema change, so `minor`.
+
 ## 0.4.0
 
 ### Minor Changes

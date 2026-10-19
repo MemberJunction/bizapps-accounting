@@ -28,6 +28,10 @@
           },
           "primaryKey": {
             "ID": "8A52D539-7431-4F29-873D-88229F5CDA01"
+          },
+          "sync": {
+            "lastModified": "2026-09-02T04:41:41.890Z",
+            "checksum": "6e51f3308d0ccfc8357b7b7eb5967baba6ced6136f27f224ef8d40e0b33d79fa"
           }
         },
         {
@@ -42,6 +46,28 @@
           },
           "primaryKey": {
             "ID": "9B2735DE-AC19-49BC-8496-DA35B80C1402"
+          },
+          "sync": {
+            "lastModified": "2026-09-02T04:41:41.918Z",
+            "checksum": "0d8f146fe35a0fa96b42549a2e422c45ebb86b6d9b612f4acc796728be7b621d"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "CutoffMode",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "Relative cutoff, resolved in TypeScript at run time because scheduled-job params are Static or SQL-Statement only. 'PriorDay' = everything dated before today (the nightly Order/Payment run); 'PriorMonth' = everything dated before the 1st of the current month (the monthly RevenueRecognition run). Ignored when an explicit Cutoff is supplied."
+          },
+          "primaryKey": {
+            "ID": "DB88A2C5-D62D-4B38-AE64-E87AE03ABD1D"
+          },
+          "sync": {
+            "lastModified": "2026-09-30T19:18:04.007Z",
+            "checksum": "81ec688d1d69c8f2d5c574035f6d92510474f411c8d9aef171d0df962045680f"
           }
         },
         {
@@ -56,6 +82,10 @@
           },
           "primaryKey": {
             "ID": "2C4F1B3E-7284-482F-B059-7CD839AE9803"
+          },
+          "sync": {
+            "lastModified": "2026-09-02T04:41:41.942Z",
+            "checksum": "9a6aaa2a3f2592c246f9be41b207b98c10ab91a8eecf3502d40fc08bfefda0df"
           }
         },
         {
@@ -70,6 +100,10 @@
           },
           "primaryKey": {
             "ID": "7E94BC01-B341-45DF-9824-34FD8A110904"
+          },
+          "sync": {
+            "lastModified": "2026-09-02T04:41:41.965Z",
+            "checksum": "8b80e455bbb119620bca5f6bbd94c3bf694e2b2816534db8ca000e6d2dfb932e"
           }
         },
         {
@@ -84,6 +118,10 @@
           },
           "primaryKey": {
             "ID": "5F89AA32-1594-47CA-8AC4-66E875CD2105"
+          },
+          "sync": {
+            "lastModified": "2026-09-02T04:41:41.989Z",
+            "checksum": "9046b19f3a59b23ef9b47819f4cc3c534490c6fa4899b0502a5815b4c20c39ae"
           }
         },
         {
@@ -98,6 +136,28 @@
           },
           "primaryKey": {
             "ID": "3CD124AB-9A52-4752-94C0-4822B1489006"
+          },
+          "sync": {
+            "lastModified": "2026-09-02T04:41:42.010Z",
+            "checksum": "e62132e3ea8de44c9b9287a8fd419c4ecabfebd7540b72f6b4df5e7440d55627"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "AutoPost",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "When true the run is UNATTENDED (scheduled posting, A-US5/A-US6): the CFO approval Task is waived, ApprovedByUserID is stamped with the context user (the MJ System user under the scheduler), and each batch is approved and dispatched to the ERP in the same run rather than parked in Pending. Requires an explicit EntryTypeCodes include-list and rejects ExcludeEntryTypeCodes — auto-post policy is an include-list, never a blacklist. Defaults to false: the attended path (A-US7) builds only, behind the bizapps-tasks approval gate."
+          },
+          "primaryKey": {
+            "ID": "BA072B0D-046B-43AE-9DF5-8B470B4F735B"
+          },
+          "sync": {
+            "lastModified": "2026-09-30T19:18:04.062Z",
+            "checksum": "f4ef82781015cf40ab87ea92d7d21d1d8e0de291b2447315da3e9b121428ed48"
           }
         },
         {
@@ -112,6 +172,10 @@
           },
           "primaryKey": {
             "ID": "1738AB44-013D-47C5-8592-AE91B248CD07"
+          },
+          "sync": {
+            "lastModified": "2026-09-02T04:41:42.029Z",
+            "checksum": "8461701ebd836749775a87e24c21c01aa1901204d4e4e20563639785924ccf45"
           }
         },
         {
@@ -126,9 +190,95 @@
           },
           "primaryKey": {
             "ID": "2837AC55-124E-48D6-96A3-BF02C359DE08"
+          },
+          "sync": {
+            "lastModified": "2026-09-02T04:41:42.049Z",
+            "checksum": "6745aecb500ef064dd7415d9b047aaf86c8c3cd4b86f8675f649ff22744f3e35"
           }
         }
       ]
+    },
+    "sync": {
+      "lastModified": "2026-09-02T04:41:41.643Z",
+      "checksum": "5e77f59745a2827f25693d2abecb009d0845df436b93d9489759fb2863f2db9e"
+    }
+  },
+  {
+    "fields": {
+      "Name": "Run ERP Sync",
+      "CategoryID": "@lookup:MJ: Action Categories.Name=Accounting",
+      "Description": "Pulls chart of accounts, dimensions, and dimension values from every credentialed Company Integration via AccountingERPEngine.SyncMasterData. One job, all companies. Hosts disable the scheduled job rather than deleting this action.",
+      "Type": "Custom",
+      "DriverClass": "Accounting.RunERPSync",
+      "IconClass": "fa-solid fa-cloud-arrow-down",
+      "UserPrompt": "Sync ERP master data for accounting.",
+      "CodeApprovalStatus": "Approved",
+      "Status": "Active"
+    },
+    "primaryKey": {
+      "ID": "A839FB12-5813-4B85-8022-DF8943729BA2"
+    },
+    "relatedEntities": {
+      "MJ: Action Params": [
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "Objects",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": true,
+            "IsRequired": false,
+            "Description": "Subset of accounts | dimensions | dimensionValues. Omit for all three."
+          },
+          "primaryKey": {
+            "ID": "A839FB12-5813-4B85-8022-DF8943729BB1"
+          },
+          "sync": {
+            "lastModified": "2026-09-02T04:41:42.072Z",
+            "checksum": "a84a51c73b56a9a2f686a69ca37164c0f7ae9f1f2e0ead89cf9d6537a6899230"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "CompanyIDs",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": true,
+            "IsRequired": false,
+            "Description": "Optional company filter. Omit for every credentialed company."
+          },
+          "primaryKey": {
+            "ID": "A839FB12-5813-4B85-8022-DF8943729BB2"
+          },
+          "sync": {
+            "lastModified": "2026-09-02T04:41:42.092Z",
+            "checksum": "889904614dd1d7ec021ea89f1a36b71d27a620978a28a623dbe08beff6f29d6a"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "Results",
+            "Type": "Output",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "Per-company sync results."
+          },
+          "primaryKey": {
+            "ID": "A839FB12-5813-4B85-8022-DF8943729BB3"
+          },
+          "sync": {
+            "lastModified": "2026-09-02T04:41:42.118Z",
+            "checksum": "a138adea7ebe14602c376b99de922250cb602ee55c94024a555fdcb24ff926aa"
+          }
+        }
+      ]
+    },
+    "sync": {
+      "lastModified": "2026-09-02T04:41:41.661Z",
+      "checksum": "b4fac10fc9fb4f00737248aa2203c784c4739fd68ca9d455f87ab1a950378ba5"
     }
   }
 ]

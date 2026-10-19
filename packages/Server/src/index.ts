@@ -9,17 +9,18 @@
 // Import entity and action packages to trigger @RegisterClass decorators
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-actions';
+import { LoadCreateBusinessCentralJournalEntryWithDimensionsAction } from '@mj-biz-apps/accounting-actions';
 
 // Server-side entity subclasses — must come after accounting-entities so
 // @RegisterClass auto-increment gives these higher priority
 import '@mj-biz-apps/accounting-core-entities-server';
-import { LoadJournalEntryBatchOperations, LoadCreateJournalEntriesOperation, LoadCreateJournalEntryOperation, LoadGenerateReversalOperation } from '@mj-biz-apps/accounting-core-entities-server';
+import { LoadFinanceExceptionEntityServer, LoadFinanceExceptionOperations, LoadJournalEntryBatchOperations, LoadCreateJournalEntriesOperation, LoadCreateJournalEntryOperation, LoadGenerateReversalOperation, LoadGetJournalEntryStatesOperation, LoadRunERPSyncOperation, LoadAccountingERPEngine, LoadAccountingERPProviders } from '@mj-biz-apps/accounting-core-entities-server';
 
 // Import generated GraphQL resolvers
 import './generated/generated.js';
 
 // NO custom hand-written resolvers remain: every custom server action travels the Remote
-// Operations stack (four-surface doctrine, Amith 2026-07-28) — see JournalEntryBatchOperations.ts /
+// Operations stack (four-surface doctrine) — see JournalEntryBatchOperations.ts /
 // GenerateReversalOperation.ts / CreateJournalEntr(y|ies)Operation.ts in core-entities-server.
 // (BatchDispatchResolver, ReadModelsResolver, and JournalEntryResolver were deleted 2026-07-29.)
 
@@ -56,4 +57,14 @@ export function LoadBizAppsAccountingServer(): void {
     LoadCreateJournalEntriesOperation(); // tree-shaking anchor for 'Accounting.CreateJournalEntries' (the SET op)
     LoadJournalEntryBatchOperations(); // tree-shaking anchor for the Accounting.BuildJournalEntryBatch/RegenerateJournalEntryBatch/DispatchJournalEntryBatch/RecordBatchDecision/GetBatchApprovalState ops
     LoadGenerateReversalOperation(); // tree-shaking anchor for 'Accounting.GenerateJournalEntryReversal'
+    LoadGetJournalEntryStatesOperation(); // tree-shaking anchor for 'Accounting.GetJournalEntryStates' (read-only)
+    LoadRunERPSyncOperation();
+    LoadFinanceExceptionEntityServer(); // status guard: FinanceException status changes only through Accounting.ClearFinanceException
+    LoadFinanceExceptionOperations(); // tree-shaking anchor for Accounting.GetFinanceExceptionTypes / RaiseFinanceExceptions / ClearFinanceException
+    LoadAccountingERPEngine();
+    LoadAccountingERPProviders();
+    // tree-shaking anchor for the BC journal-post override that carries dimension tags.
+    // Its @RegisterClass must run AFTER the MJ platform's own registration for the same
+    // plugin key so the ClassFactory's priority auto-increment resolves to this subclass.
+    LoadCreateBusinessCentralJournalEntryWithDimensionsAction();
 }

@@ -26,6 +26,7 @@
 import { BaseEntity, IRunViewProvider, ValidationResult, ValidationErrorInfo } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import { mjBizAppsAccountingIntercompanyAccountMatchEntity } from '@mj-biz-apps/accounting-entities';
+import { isSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
 
 const IAM_ENTITY = 'MJ_BizApps_Accounting: Intercompany Account Matches';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
@@ -71,6 +72,15 @@ export class IntercompanyAccountMatchEntityServer extends mjBizAppsAccountingInt
   private async checkAccountOrientation(fail: (message: string) => void): Promise<void> {
     if (!this.DueToGLAccountID || !this.DueFromGLAccountID) return;
 
+    // Client-set FK values that get interpolated into a SQL filter — a malformed one can never be
+    // a valid FK, so refuse it with a readable message before it reaches SQL.
+    for (const [name, value] of [['DueToGLAccountID', this.DueToGLAccountID], ['DueFromGLAccountID', this.DueFromGLAccountID]] as const) {
+      if (!isSqlGuid(value)) {
+        fail(`${name} '${value}' is not a valid UUID.`);
+        return;
+      }
+    }
+
     const accounts = await this.loadAccounts([this.DueToGLAccountID, this.DueFromGLAccountID]);
     const dueTo = accounts.get(this.DueToGLAccountID.toLowerCase());
     const dueFrom = accounts.get(this.DueFromGLAccountID.toLowerCase());
@@ -80,25 +90,25 @@ export class IntercompanyAccountMatchEntityServer extends mjBizAppsAccountingInt
     if (dueTo) {
       if (!sameID(dueTo.CompanyID, this.SourceCompanyID)) {
         fail(
-          `DueTo account ${dueTo.Code} belongs to a different company than SourceCompanyID. ` +
-            `The Due To liability sits on the books of the company that COLLECTED the cash and therefore owes. ` +
-            `If the pair looks backwards, swap SourceCompanyID and TargetCompanyID rather than the accounts.`,
+          `Due To account ${dueTo.Code} belongs to a different company than the source company. ` +
+            `The Due To liability sits on the books of the company that collected the cash and therefore owes. ` +
+            `If the pair looks backwards, swap the source and target companies rather than the accounts.`,
         );
       }
       if (dueTo.AccountType !== 'Liability') {
-        fail(`DueTo account ${dueTo.Code} is ${dueTo.AccountType}; an intercompany payable must be a Liability account.`);
+        fail(`Due To account ${dueTo.Code} is ${dueTo.AccountType}; an intercompany payable must be a Liability account.`);
       }
     }
 
     if (dueFrom) {
       if (!sameID(dueFrom.CompanyID, this.TargetCompanyID)) {
         fail(
-          `DueFrom account ${dueFrom.Code} belongs to a different company than TargetCompanyID. ` +
-            `The Due From receivable sits on the books of the company that OWNS the line the cash settled.`,
+          `Due From account ${dueFrom.Code} belongs to a different company than the target company. ` +
+            `The Due From receivable sits on the books of the company that owns the line the cash settled.`,
         );
       }
       if (dueFrom.AccountType !== 'Asset') {
-        fail(`DueFrom account ${dueFrom.Code} is ${dueFrom.AccountType}; an intercompany receivable must be an Asset account.`);
+        fail(`Due From account ${dueFrom.Code} is ${dueFrom.AccountType}; an intercompany receivable must be an Asset account.`);
       }
     }
   }
@@ -113,6 +123,13 @@ export class IntercompanyAccountMatchEntityServer extends mjBizAppsAccountingInt
   private async checkNoAmbiguousTie(fail: (message: string) => void): Promise<void> {
     if (this.Status !== 'Active') return;
     if (!this.SourceCompanyID || !this.TargetCompanyID) return;
+    // Same interpolation hazard as checkAccountOrientation — these company ids build the filter below.
+    for (const [name, value] of [['SourceCompanyID', this.SourceCompanyID], ['TargetCompanyID', this.TargetCompanyID]] as const) {
+      if (!isSqlGuid(value)) {
+        fail(`${name} '${value}' is not a valid UUID.`);
+        return;
+      }
+    }
 
     const startedAt = this.StartedAt ? new Date(this.StartedAt).toISOString() : null;
     const sameStart = startedAt === null ? `StartedAt IS NULL` : `StartedAt = '${startedAt}'`;
@@ -130,21 +147,21 @@ export class IntercompanyAccountMatchEntityServer extends mjBizAppsAccountingInt
     // whole point of this check is that the ambiguity is otherwise invisible.
     if (!res.Success) {
       throw new Error(
-        `IntercompanyAccountMatchEntityServer: failed to check for a conflicting active pair: ${res.ErrorMessage ?? 'unknown error'}`,
+        `Could not check for a conflicting active intercompany pair: ${res.ErrorMessage ?? 'unknown error'}`,
       );
     }
 
     if ((res.Results?.length ?? 0) > 0) {
       fail(
-        `Another Active intercompany pair already exists for these companies with the same StartedAt ` +
-          `(${startedAt ?? 'unset'}). Resolution picks the latest StartedAt, so two rows sharing one would resolve ` +
-          `arbitrarily. To supersede the existing mapping, set its EndedAt and give this row a later StartedAt.`,
+        `Another active intercompany pair already exists for these companies with the same start date ` +
+          `(${startedAt ?? 'none'}). The pair is picked by the latest start date, so two pairs sharing one would be picked ` +
+          `at random. To replace the existing pair, give it an end date and give this one a later start date.`,
       );
     }
   }
 
   private async loadAccounts(ids: string[]): Promise<Map<string, AccountShape>> {
-    const quoted = ids.map((id) => `'${id}'`).join(',');
+    const quoted = ids.map((id) => sqlGuidLiteral(id, 'IntercompanyAccountMatchEntityServer.loadAccounts')).join(',');
     const provider = this.ProviderToUse as unknown as IRunViewProvider;
     const res = await provider.RunView<AccountShape>(
       {
@@ -158,7 +175,7 @@ export class IntercompanyAccountMatchEntityServer extends mjBizAppsAccountingInt
     );
     if (!res.Success) {
       throw new Error(
-        `IntercompanyAccountMatchEntityServer: failed to load GL accounts for validation: ${res.ErrorMessage ?? 'unknown error'}`,
+        `Could not load the GL accounts to check this intercompany pair: ${res.ErrorMessage ?? 'unknown error'}`,
       );
     }
     return new Map((res.Results ?? []).map((a) => [String(a.ID).toLowerCase(), a]));
