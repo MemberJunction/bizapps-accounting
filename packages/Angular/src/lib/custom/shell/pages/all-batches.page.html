@@ -1,9 +1,9 @@
 <mj-page-body-interior [Padding]="false">
   <!-- The page owns the gutter (16px sides) so the strip / toolbar / grid bubbles align edge-for-edge
        with the header-interior bubble above (whose margin is 16px) — body-interior's responsive
-       24/32px default made every bubble narrower than the header (Marcelo 2026-08-04). -->
+       24/32px default made every bubble narrower than the header. -->
   <div class="abt-body">
-  <!-- The ONE subheader band: stats + toolbar fused (Marcelo 2026-08-04); the title card is gone —
+  <!-- The ONE subheader band: stats + toolbar fused; the title card is gone —
        the rail already names the page. Figures are filtered COUNTs over the grid's own predicate. -->
   <div class="abt-subheader">
   <mja-summary-strip
@@ -26,7 +26,7 @@
     (PresetToggled)="OnPresetToggled($event)">
     <label class="abt-field">
       <span class="abt-field__label">Company</span>
-      <!-- CHECKBOX multi-select (Marcelo 2026-08-05): narrow to any set of companies; empty = all. -->
+      <!-- CHECKBOX multi-select: narrow to any set of companies; empty = all. -->
       <mja-check-dropdown
         [Options]="Companies"
         [SelectedIDs]="CompanyIDs"

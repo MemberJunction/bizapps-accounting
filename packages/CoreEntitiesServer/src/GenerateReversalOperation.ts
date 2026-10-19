@@ -1,7 +1,7 @@
 /**
  * GenerateReversalOperation — 'Accounting.GenerateJournalEntryReversal' as a code-only Remote
- * Operation. Replaces the hand-written JournalEntryResolver (four-surface doctrine, Amith
- * 2026-07-28: an action that runs entity/engine logic server-side travels the remote-op stack).
+ * Operation. Replaces the hand-written JournalEntryResolver (four-surface doctrine:
+ * an action that runs entity/engine logic server-side travels the remote-op stack).
  *
  * Thin by design: the business logic — a NEW Pending JE with Dr/Cr swapped, dimension tags +
  * counterparty carried, typed Code='Reversal', back-referenced both ways, the no-double-reverse /

@@ -85,7 +85,7 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
   public Model: AccountEditModel = this.blankModel();
   /** The valid AccountType values, sourced from entity metadata (rule 2c — not a hand-copied union). */
   public AccountTypeOptions: AccountType[] = [];
-  /** Seeded currency roster for the editor's searchable combobox (Marcelo 2026-07-30: free-text
+  /** Seeded currency roster for the editor's searchable combobox (free text
    *  invited typos the DB then rejected). Label = "CODE — Name" so the combobox's contains-filter
    *  matches typing either the actual code ("USD") or the name ("dollar"). */
   public get CurrencyOptions(): Array<{ Code: string; Name: string; Label: string }> {
@@ -102,7 +102,7 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
   public AccountTypeFilter: AccountType | 'All' = 'All';
   public Search = '';
 
-  // ─── list-page standard chrome (fused subheader — Marcelo 2026-08-04) ────────
+  // ─── list-page standard chrome (fused subheader) ─────────────────────────────
 
   public get SummaryFigures(): Array<{ Label: string; Value: string; Tone?: 'default' | 'credit' | 'muted' | 'success' | 'warning' | 'danger' | 'info' }> {
     return [
@@ -225,7 +225,7 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
 
   public readonly ParentNoneDefault = { ID: null, Label: '— none (top level) —' };
 
-  /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = every company's tree. */
+  /** MULTI-select company narrowing: empty = every company's tree. */
   public SelectedCompanyIDs: string[] = [];
 
   public OnCompanyIDsChanged(ids: string[]): void {

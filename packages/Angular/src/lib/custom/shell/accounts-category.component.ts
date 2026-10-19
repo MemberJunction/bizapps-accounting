@@ -20,7 +20,7 @@ import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-re
 })
 @RegisterClass(BaseDashboard, 'AccountsCategoryDashboard')
 export class AccountsCategoryComponent extends CategoryShellBase {
-  // ── Header create verb (Marcelo 2026-08-05: every New-<x> lives in the CATEGORY header,
+  // ── Header create verb (every New-<x> lives in the CATEGORY header,
   // orders-style). The verb is the ACTIVE PAGE's create — label and action swap with the page,
   // and pages with no create show none. Signals are monotonic counters the pages watch via input.
   public CreateSignalAccounts = 0;
@@ -57,7 +57,7 @@ export class AccountsCategoryComponent extends CategoryShellBase {
       {
         // No section header — a single flat group (mj-left-nav renders unlabelled sections as-is).
         items: [
-          // The roster Marcelo asked for: "a page for account viewing that shows all the accounts".
+          // The roster: one page for viewing every account.
           { id: 'accounts', label: 'All accounts', icon: 'fa-solid fa-list-ul' },
           { id: 'coa', label: 'Chart of accounts', icon: 'fa-solid fa-sitemap' },
           { id: 'links', label: 'Account links', icon: 'fa-solid fa-link' },

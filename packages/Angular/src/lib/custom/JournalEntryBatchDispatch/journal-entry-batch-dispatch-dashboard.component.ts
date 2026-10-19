@@ -19,9 +19,10 @@ type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
  * batch + a terminal Task Decision), so we resolve it via the gate-backed `JournalEntryBatchApprovalState` query.
  */
 /**
- * The batch's own fields are PICKED from the generated entity class, never re-declared (Amith,
- * PR #148 review). Only the genuinely non-entity parts — the gate result and the per-row
- * in-flight flag, neither of which is a column — are declared here.
+ * The batch's own fields are PICKED from the generated entity class, never re-declared, so the
+ * compiler checks every field name and type against the schema. Only the genuinely non-entity
+ * parts — the gate result and the per-row in-flight flag, neither of which is a column — are
+ * declared here.
  */
 type BatchRow = Pick<
   mjBizAppsAccountingJournalEntryBatchEntity,
@@ -75,7 +76,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
   }
 
   /** The category header's Refresh reaches this dashboard through the shared channel —
-   *  the inline mj-refresh-button was removed (Marcelo 2026-08-05: the header owns the ONE
+   *  the inline mj-refresh-button was removed (the header owns the ONE
    *  refresh control, orders-style). Subscribing is also what makes the header button SHOW
    *  while this page is mounted (CanRefreshActivePage = HasSubscriber). */
   /** OPTIONAL: provided per category shell; a directly-mounted resource (or a bare TestBed) has none. */
