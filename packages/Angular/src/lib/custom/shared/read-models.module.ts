@@ -4,8 +4,8 @@ import { MJACheckDropdownComponent } from './check-dropdown.component';
  * (embedded by the Batches category shell).
  *
  * Its former siblings — TrialBalanceAR, RevenueTax, IntercompanyFlow — were DELETED 2026-07-29
- * (Amith PR-27 dead-code sweep): their vw_* read-model backends were removed 2026-07-22 ("overdone
- * — revisit if ever needed") and the category shells replaced their nav items. When reporting
+ * (dead-code sweep): their vw_* read-model backends were removed 2026-07-22 as more than the app
+ * needed (revisit if ever needed) and the category shells replaced their nav items. When reporting
  * returns (item f), each report is rebuilt as-needed on RunQuery (four-surface doctrine) — the old
  * dashboards live in git history as reference only. The module name is kept to avoid churning the
  * package surface; fold BatchStatus into another module and delete this one whenever convenient.

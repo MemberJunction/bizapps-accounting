@@ -59,7 +59,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 })
 export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
   /**
-   * The section's create verb (Marcelo 2026-07-30) — same contract as the dashboards'
+   * The section's create verb — same contract as the dashboards'
    * AccountingDashboardBase: the page cannot navigate itself (Explorer resources are not routed),
    * so the header button emits the intent and the hosting shell decides what "create" does
    * (today: GoToPage('workspace')).
@@ -109,7 +109,7 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
    * Per-page company narrowing, mirroring All batches' Company select. This ANDs *inside* the
    * app-wide company scope (the rail chip) — it narrows the scope, it never widens it.
    */
-  /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = no narrowing ("All companies"). */
+  /** MULTI-select company narrowing: empty = no narrowing ("All companies"). */
   public CompanyIDs: string[] = [];
 
   /**
@@ -151,7 +151,7 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
     { field: 'Status', title: 'Status', width: 110, sortable: true },
     { field: 'EntryType', title: 'Type', width: 100, sortable: true },
     // The JE's free-text meaning. The field is `Description` (there is no `Memo` column on the
-    // Journal Entry entity), but the ratified naming model (Marcelo 2026-07-17) calls it the MEMO —
+    // Journal Entry entity), but the ratified naming model calls it the MEMO —
     // the human label people scan by — so the column is TITLED "Memo". `width: 'auto'` gives it the
     // most room; the grid ellipsises overflow so a long memo stays on one readable line.
     // `width: 'auto'` lets Memo claim the row's leftover width instead of truncating at a fixed size.
@@ -239,7 +239,7 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
 
   /**
    * Server-side search over the HUMAN fields first — the MEMO (`Description`) and the entry NUMBER —
-   * plus the full record ID. Marcelo 2026-07-17: the database IDs are meaningless to users, so the
+   * plus the full record ID. The database IDs are meaningless to users, so the
    * memo and number lead; but the id stays searchable in full so a support/paste lookup still works.
    * `likeContains` matches `ID` fine — SQL Server implicitly converts the uniqueidentifier for LIKE.
    * Escaped via the shared seam — this text is composed into a SQL predicate string (RunView's

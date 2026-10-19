@@ -8,7 +8,7 @@
      paints its card chrome (background + border + shadow + row padding): a blank bubble.
      Note MJ tightens <mj-page-body-interior>'s TOP padding to 8px on the assumption a header sits
      above it, so this card starts a little higher than a header card would on a sibling page. Left
-     as-is pending Marcelo's eye on the live result. -->
+     as-is pending a visual check of the live result. -->
 
 <!-- <mj-page-body-interior> is the interior primitive <mj-left-nav-content> expects; it owns the
      gutters that keep content off the rail and off the page edge (elements were hitting the screen
@@ -140,7 +140,7 @@
 
       <label class="bw-field">
         <span>Company</span>
-        <!-- Single-select (Marcelo 2026-07-21): a batch is single-company (clean single-CFO approval).
+        <!-- Single-select: a batch is single-company (clean single-CFO approval).
              "All companies" is kept for now so the sweep-all path + existing engine still work; the
              enforce-exactly-one-company invariant lands with the single-company engine change. -->
         <!-- Single-select ON PURPOSE: this is a BUILD CRITERION (batches are single-company,

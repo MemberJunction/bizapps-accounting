@@ -1,5 +1,5 @@
 <mj-page-layout>
-  <!-- The fused subheader (list-page standard, Marcelo 2026-08-04): no title card — the rail names
+  <!-- The fused subheader (list-page standard): no title card — the rail names
        the page. Stats + type chips + search in ONE band; the Company narrowing lives behind the
        Filters disclosure; the page-local New Account verb rides the toolbar's actions slot (an
        inline dialog create — no workspace to route to). The tree below keeps its own idiom. -->
@@ -18,7 +18,7 @@
       (PresetToggled)="OnTypeToggled($event)">
       <label class="coa-field">
         <span class="coa-field__label">Company</span>
-        <!-- CHECKBOX multi-select (Marcelo 2026-08-05): show any subset of companies' trees; empty = all. -->
+        <!-- CHECKBOX multi-select: show any subset of companies' trees; empty = all. -->
         <mja-check-dropdown
           [Options]="CompanyScopeOptions"
           [SelectedIDs]="SelectedCompanyIDs"
@@ -116,9 +116,9 @@
         </label>
         <label class="coa-field">
           <span class="coa-field__label">Currency</span>
-          <!-- Searchable combobox (Marcelo 2026-07-30): the label is "CODE — Name", and the combobox
-               filters on that text, so typing either the actual code ("USD") or the name ("dollar")
-               finds it. Empty = inherit the company's functional currency. -->
+          <!-- Searchable combobox (free text invited typos the DB then rejected): the label is
+               "CODE — Name", and the combobox filters on that text, so typing either the actual code
+               ("USD") or the name ("dollar") finds it. Empty = inherit the company's functional currency. -->
           <mj-combobox
             [Data]="CurrencyOptions"
             TextField="Label"

@@ -27,7 +27,7 @@ import {
 
 /**
  * The batch fields this page reads, PICKED from the generated entity class rather than
- * re-declared (Amith, PR #148 review: a hand-written interface mirroring an entity is an
+ * re-declared (a hand-written interface mirroring an entity is an
  * MJ anti-pattern). The compiler now checks every field name and type against the schema,
  * so `Status` carries the real CHECK-constraint union — widening it is a CodeGen concern,
  * never a hand edit here.

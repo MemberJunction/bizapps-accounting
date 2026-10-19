@@ -12,8 +12,10 @@
  *     (posting date <day>)" Task linked to the batch (polymorphic Task Link), assigned to the CFO's
  *     Person (#387). The Tasks app lists a viewer's tasks by their Person, so a task assigned to
  *     the User record reached no one's inbox.
- *   assertApproved(batchId): find the Task linked to the batch; require a terminal Approved /
- *     ApprovedWithConditions Task Decision; otherwise THROW (blocks the send).
+ *   assertApproved(batchId): load the Task named by the batch's stamped ApprovalTaskID (not a Task
+ *     Link, which anyone with tasks-app write access can create); require a terminal Approved /
+ *     ApprovedWithConditions Task Decision; otherwise THROW (blocks the send). Fails closed when
+ *     ApprovalTaskID is empty.
  *   recordDecision(batchId, outcome, decidedByPersonId, notes): resolve the batch's Task and record
  *     the decision via TaskOrchestrationService. The shared entry point for BOTH the in-app approve
  *     control and the Tasks inbox.
