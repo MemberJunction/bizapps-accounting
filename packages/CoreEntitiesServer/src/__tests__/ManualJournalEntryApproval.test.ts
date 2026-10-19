@@ -168,6 +168,10 @@ interface World {
   controlAccounts?: string[];
   roleHolders?: Array<{ ID: string; IsActive: boolean }>;
   deciderHoldsRole?: boolean;
+  /** Whether the decider may update Journal Entries (MJ entity permission); default true. */
+  deciderMayUpdate?: boolean;
+  /** The JournalEntryID a dimension tag's line read returns (AssertStandaloneDimensionChangeAllowed). */
+  lineParentId?: string | null;
   taskStatus?: string;
   taskLoads?: boolean;
   entry?: Partial<FakeEntry>;
@@ -231,7 +235,10 @@ function fakeEntry(world: World): FakeEntry & Record<string, unknown> {
     LoadLines: async () => entry.lines,
     Load: async () => true,
     LatestResult: { CompleteMessage: 'save failed' },
-    Save: async () => {
+    CheckPermissions: () => world.deciderMayUpdate !== false,
+    SaveApprovalStamp: async (approvedByUserID: string, approvedAt: Date) => {
+      entry.ApprovedAt = approvedAt;
+      entry.ApprovedByUserID = approvedByUserID;
       world.saves.push({ ApprovedAt: entry.ApprovedAt, ApprovedByUserID: entry.ApprovedByUserID });
       return entry.saveResult;
     },
@@ -284,6 +291,8 @@ function stub(world: World): { provider: IMetadataProvider; entry: ReturnType<ty
           return { Success: true, Results: [{ ID: PERSON }] };
         case 'MJ_BizApps_Accounting: Journal Entries':
           return { Success: true, Results: world.parentHeader ? [world.parentHeader] : [] };
+        case 'MJ_BizApps_Accounting: Journal Entry Lines':
+          return { Success: true, Results: world.lineParentId ? [{ JournalEntryID: world.lineParentId }] : [] };
         default:
           throw new Error(`stub: unexpected view ${params.EntityName}`);
       }
@@ -477,6 +486,21 @@ describe('ManualJournalEntryApprovalService.RecordDecision', () => {
     expect(tasks.recordDecision).not.toHaveBeenCalled();
   });
 
+  it('refuses an approval up front, before any write, when the decider may not update Journal Entries', async () => {
+    const w = world({ deciderHoldsRole: true, deciderMayUpdate: false, entry: awaiting });
+    await expect(new ManualJournalEntryApprovalService(stub(w).provider).RecordDecision(JE_ID, 'Approved', undefined, user(APPROVER_A)))
+      .rejects.toThrow(/none of your roles may update Journal Entries/);
+    expect(tasks.recordDecision).not.toHaveBeenCalled();
+    expect(w.tx.begin).toBe(0);
+  });
+
+  it('still records a rejection without Update on Journal Entries: a rejection does not write the entry', async () => {
+    const w = world({ deciderHoldsRole: true, deciderMayUpdate: false, entry: awaiting });
+    const result = await new ManualJournalEntryApprovalService(stub(w).provider).RecordDecision(JE_ID, 'Rejected', undefined, user(APPROVER_A));
+    expect(result.Approved).toBe(false);
+    expect(tasks.recordDecision).toHaveBeenCalledTimes(1);
+  });
+
   it('refuses a request that was already decided or closed', async () => {
     const w = world({ deciderHoldsRole: true, taskStatus: 'Cancelled', entry: awaiting });
     await expect(new ManualJournalEntryApprovalService(stub(w).provider).RecordDecision(JE_ID, 'Approved', undefined, user(APPROVER_A)))
@@ -523,5 +547,27 @@ describe('ManualJournalEntryApprovalService.AssertStandaloneLineChangeAllowed â€
     const { provider } = stub(world());
     const failing = { ...provider, RunView: async () => ({ Success: false, ErrorMessage: 'timeout', Results: [] }) } as unknown as IMetadataProvider;
     await expect(new ManualJournalEntryApprovalService(failing).AssertStandaloneLineChangeAllowed(JE_ID, user(CREATOR))).rejects.toThrow(/timeout/);
+  });
+});
+
+describe('ManualJournalEntryApprovalService.AssertStandaloneDimensionChangeAllowed â€” a tag written on its own', () => {
+  const LINE_ID = 'cccccccc-0000-4000-8000-000000000001';
+  const pendingManual = { EntryNumber: 'JE-ACME-2026-0001', Status: 'Pending', CompanyID: COMPANY, LinkedEntityID: null, LinkedRecordID: null, ApprovalLevel: 'Standard' };
+
+  it("is refused when the tag's line belongs to a Pending manual entry under approval", async () => {
+    const w = world({ lineParentId: JE_ID, parentHeader: pendingManual });
+    await expect(new ManualJournalEntryApprovalService(stub(w).provider).AssertStandaloneDimensionChangeAllowed(LINE_ID, user(CREATOR)))
+      .rejects.toThrow(/only by saving the journal entry itself/);
+    expect(w.views).toEqual(['MJ_BizApps_Accounting: Journal Entry Lines', 'MJ_BizApps_Accounting: Journal Entries']);
+  });
+
+  it('is allowed on a booking-path entry, and leaves a missing line or malformed id to the FK', async () => {
+    const booked = world({ lineParentId: JE_ID, parentHeader: { ...pendingManual, LinkedEntityID: 'entity', LinkedRecordID: 'order-line' } });
+    await expect(new ManualJournalEntryApprovalService(stub(booked).provider).AssertStandaloneDimensionChangeAllowed(LINE_ID, user(CREATOR))).resolves.toBeUndefined();
+    const missing = world({ lineParentId: null, parentHeader: pendingManual });
+    await expect(new ManualJournalEntryApprovalService(stub(missing).provider).AssertStandaloneDimensionChangeAllowed(LINE_ID, user(CREATOR))).resolves.toBeUndefined();
+    const malformed = world({ lineParentId: JE_ID, parentHeader: pendingManual });
+    await expect(new ManualJournalEntryApprovalService(stub(malformed).provider).AssertStandaloneDimensionChangeAllowed('nope', user(CREATOR))).resolves.toBeUndefined();
+    expect(malformed.views).toEqual([]);
   });
 });

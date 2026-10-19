@@ -45,6 +45,12 @@
 -- CK_JournalEntry_ApprovedBeforeBatch is the database floor under the batch
 -- engine's candidate filter: an entry that needs approval cannot carry a
 -- JournalEntryBatchID until it is approved.
+-- trg_JournalEntry_ApprovalIntegrity is the floor under the approval columns
+-- themselves and under the origin pair: never approved by the requester, a
+-- stamp only from the Approval CFO or an approver-role holder on an entry with
+-- an approval Task, no level cleared while the company has a threshold, the
+-- approval frozen once Batched/GLPosted, and the origin pair fixed after
+-- insert (50035-50039).
 --
 -- Existing rows: every new column is NULL or defaults to 0, so no existing
 -- entry needs approval and nothing already Pending is held back. Every new
@@ -104,6 +110,115 @@ GO
 -- against stale views, that sync drops the new Journal Entry fields it has just inserted.
 EXEC sp_refreshview N'__mj_BizAppsAccounting.vwJournalEntriesGenerated';
 EXEC sp_refreshview N'__mj_BizAppsAccounting.vwJournalEntries';
+GO
+
+-- -----------------------------------------------------------------------------
+-- trg_JournalEntry_ApprovalIntegrity — the database floor under the approval
+-- columns and the origin pair (PR #463 review)
+-- -----------------------------------------------------------------------------
+-- Every layer of the approval gate (the batch candidate filter, the explicit-ID
+-- refusal, the view drop, CK_JournalEntry_ApprovedBeforeBatch) reads the
+-- approval columns, and whether an entry needs approval at all is read from the
+-- D25 origin pair. JournalEntryEntityServer.Validate refuses any save that
+-- writes them other than its own approval routing and the decision path; this
+-- trigger holds the rules a database can check whoever writes the row:
+--   50035  an entry is never approved by the user who raised its approval.
+--   50036  an approval stamp, when it is set or changed, is recorded on an
+--          entry that has an approval Task, by the company's Approval CFO or —
+--          for a Standard entry — by a holder of its manual-entry approver role.
+--   50037  an approval level is not cleared while the entry's company still
+--          has a ManualJournalEntryApprovalThreshold.
+--   50038  the approval columns are frozen once the entry is Batched or
+--          GLPosted (trg_JournalEntry_Immutability's frozen list predates them).
+--   50039  the origin pair (LinkedEntityID, LinkedRecordID) never changes after
+--          the entry is created, in any status.
+-- THROW without ROLLBACK, per V202610011000 (#211).
+-- The PostgreSQL twin is hand-written in
+-- migrations-pg/V202610181301__v0.23.x__Manual_Journal_Entry_Approval_Integrity.pg-only.sql
+-- (the converter does not convert triggers).
+CREATE TRIGGER __mj_BizAppsAccounting.trg_JournalEntry_ApprovalIntegrity
+ON __mj_BizAppsAccounting.JournalEntry
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM inserted WHERE ApprovedByUserID IS NOT NULL AND ApprovedByUserID = ApprovalRequestedByUserID)
+    BEGIN
+        THROW 50035, 'A journal entry cannot be approved by the user who raised its approval (ApprovedByUserID = ApprovalRequestedByUserID).', 1;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted i
+        LEFT JOIN deleted d ON d.ID = i.ID
+        LEFT JOIN __mj_BizAppsAccounting.AccountingCompanyProfile acp ON acp.ID = i.CompanyID
+        WHERE i.ApprovedAt IS NOT NULL
+          AND (
+              d.ID IS NULL OR d.ApprovedAt IS NULL OR d.ApprovedAt <> i.ApprovedAt
+              OR ISNULL(d.ApprovedByUserID, '00000000-0000-0000-0000-000000000000') <> i.ApprovedByUserID
+          )
+          AND NOT (
+              i.ApprovalTaskID IS NOT NULL
+              AND (
+                  i.ApprovedByUserID = acp.ApprovalCFOUserID
+                  OR (
+                      i.ApprovalLevel = 'Standard'
+                      AND EXISTS (
+                          SELECT 1 FROM __mj.UserRole ur
+                          WHERE ur.UserID = i.ApprovedByUserID AND ur.RoleID = acp.ManualJournalEntryApproverRoleID
+                      )
+                  )
+              )
+          )
+    )
+    BEGIN
+        THROW 50036, 'A journal entry approval must be recorded on an entry with an approval Task, by the company''s Approval CFO or, for a Standard-level entry, by a holder of its manual-entry approver role.', 1;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted i
+        JOIN deleted d ON d.ID = i.ID
+        JOIN __mj_BizAppsAccounting.AccountingCompanyProfile acp ON acp.ID = i.CompanyID
+        WHERE d.ApprovalLevel IS NOT NULL
+          AND i.ApprovalLevel IS NULL
+          AND acp.ManualJournalEntryApprovalThreshold IS NOT NULL
+    )
+    BEGIN
+        THROW 50037, 'A journal entry''s approval level cannot be cleared while its company has a manual journal entry approval threshold.', 1;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted i
+        JOIN deleted d ON d.ID = i.ID
+        WHERE d.Status IN ('Batched','GLPosted')
+          AND (
+              ISNULL(i.ApprovalLevel, N'')                                                 <> ISNULL(d.ApprovalLevel, N'')                                                 OR
+              ISNULL(i.ApprovalRequestedByUserID, '00000000-0000-0000-0000-000000000000') <> ISNULL(d.ApprovalRequestedByUserID, '00000000-0000-0000-0000-000000000000') OR
+              ISNULL(i.ApprovalTaskID,            '00000000-0000-0000-0000-000000000000') <> ISNULL(d.ApprovalTaskID,            '00000000-0000-0000-0000-000000000000') OR
+              ISNULL(i.ApprovedByUserID,          '00000000-0000-0000-0000-000000000000') <> ISNULL(d.ApprovedByUserID,          '00000000-0000-0000-0000-000000000000') OR
+              (i.ApprovedAt IS NULL AND d.ApprovedAt IS NOT NULL) OR
+              (i.ApprovedAt IS NOT NULL AND d.ApprovedAt IS NULL) OR
+              i.ApprovedAt <> d.ApprovedAt
+          )
+    )
+    BEGIN
+        THROW 50038, 'A journal entry''s approval (ApprovalLevel, ApprovalRequestedByUserID, ApprovalTaskID, ApprovedAt, ApprovedByUserID) cannot change once it is Batched or GLPosted.', 1;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted i
+        JOIN deleted d ON d.ID = i.ID
+        WHERE ISNULL(i.LinkedEntityID, '00000000-0000-0000-0000-000000000000') <> ISNULL(d.LinkedEntityID, '00000000-0000-0000-0000-000000000000')
+           OR ISNULL(i.LinkedRecordID, N'')                                    <> ISNULL(d.LinkedRecordID, N'')
+    )
+    BEGIN
+        THROW 50039, 'A journal entry''s origin pair (LinkedEntityID, LinkedRecordID) cannot change after the entry is created: it records the booking that created it, and an entry without it is a manual entry that needs approval.', 1;
+    END;
+END;
 GO
 
 EXEC sp_addextendedproperty @name = N'MS_Description',

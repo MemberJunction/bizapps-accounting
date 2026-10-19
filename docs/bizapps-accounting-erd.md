@@ -35,7 +35,8 @@
 >   `ManualJournalEntryApproverRoleID` (FK `__mj.Role`); on `JournalEntry`, `ApprovalLevel`
 >   (`Standard` | `CFO`; set = needs approval), `ApprovalRequestedByUserID`, `ApprovalTaskID` (FK
 >   `__mj_BizAppsTasks.Task`), `ApprovedAt`, `ApprovedByUserID`. `CK_JournalEntry_ApprovedBeforeBatch`
->   keeps an unapproved entry out of every batch.
+>   keeps an unapproved entry out of every batch; `trg_JournalEntry_ApprovalIntegrity` (50035-50039)
+>   guards the approval columns and fixes the origin pair (`LinkedEntityID`/`LinkedRecordID`) after insert.
 >
 > **Earlier (to 2026-08-29):**
 > - **NEW `AccountingEngineExtension`** (ERP provider layer Rev 2) — host registry for Open App

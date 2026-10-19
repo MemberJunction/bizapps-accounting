@@ -85,6 +85,12 @@ SET standard_conforming_strings = on;
 -- CK_JournalEntry_ApprovedBeforeBatch is the database floor under the batch
 -- engine's candidate filter: an entry that needs approval cannot carry a
 -- JournalEntryBatchID until it is approved.
+-- trg_JournalEntry_ApprovalIntegrity is the floor under the approval columns
+-- themselves and under the origin pair: never approved by the requester, a
+-- stamp only from the Approval CFO or an approver-role holder on an entry with
+-- an approval Task, no level cleared while the company has a threshold, the
+-- approval frozen once Batched/GLPosted, and the origin pair fixed after
+-- insert (50035-50039).
 --
 -- Existing rows: every new column is NULL or defaults to 0, so no existing
 -- entry needs approval and nothing already Pending is held back. Every new
@@ -1087,6 +1093,11 @@ $do$;
 
 
 -- ===================== Triggers =====================
+
+-- SKIPPED: trigger (auto-conversion not supported)
+-- -- -----------------------------------------------------------------------------
+-- trg_JournalEntry_ApprovalIntegrity — the database floor under the approval
+-- columns and the origin pair (PR #463 r
 
 -- SKIPPED: trigger (auto-conversion not supported)
 -- CREATE TRIGGER [__mj_BizAppsAccounting].trgUpdateAccountingCompanyProfile

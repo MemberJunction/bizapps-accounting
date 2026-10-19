@@ -25,7 +25,15 @@
  * ID. A later change to an entry's amounts, accounts, date or company re-plans: the open Task is
  * closed, ApprovedAt/ApprovedByUserID are cleared, and a new Task is raised, so an approval always
  * covers the content that will be batched. `RecordDecision` is the decision path
- * (`Accounting.RecordManualJournalEntryDecision`).
+ * (`Accounting.RecordManualJournalEntryDecision`), and stamps through
+ * `JournalEntryEntityServer.SaveApprovalStamp`.
+ *
+ * INTEGRITY (PR #463 review): the gate's answer is read from the approval columns and, for "does it
+ * need approval", from the D25 origin pair — so neither is writable by an ordinary save.
+ * JournalEntryEntityServer.Validate refuses the approval columns except from its own routing and
+ * SaveApprovalStamp, and refuses any change to the origin pair after insert; ValidateAsync requires
+ * a new entry's pair to name a real record. trg_JournalEntry_ApprovalIntegrity (50035-50039) is the
+ * database floor.
  *
  * BATCHING: the batch engine's candidate filter leaves out entries with an ApprovalLevel and no
  * ApprovedAt; CK_JournalEntry_ApprovedBeforeBatch is the database floor under it.
@@ -34,13 +42,14 @@
  * TaskOrchestrationService from @mj-biz-apps/tasks-core.
  *
  * CONNECTS TO:
- *   READS:  Accounting Company Profiles · GL Accounts · Journal Entry Types · MJ: User Roles ·
- *           MJ: Users · Task Types · Tasks · People
+ *   READS:  Accounting Company Profiles · GL Accounts · Journal Entries · Journal Entry Lines ·
+ *           Journal Entry Types · MJ: User Roles · MJ: Users · Task Types · Tasks · People
  *   WRITES: Journal Entries (approval stamps) · Tasks, Task Links, Task Assignments, Task Decisions
  *           (via TaskOrchestrationService) · Tasks (Status, closing a superseded request)
- *   CALLERS: JournalEntryEntityServer.Save · ManualJournalEntryOperations
+ *   CALLERS: JournalEntryEntityServer.Save · JournalEntryLineEntityServer ·
+ *            JournalEntryLineDimensionEntityServer · ManualJournalEntryOperations
  */
-import { DatabaseProviderBase, IMetadataProvider, IRunViewProvider, LogError, UserInfo } from '@memberjunction/core';
+import { DatabaseProviderBase, EntityPermissionType, IMetadataProvider, IRunViewProvider, LogError, UserInfo } from '@memberjunction/core';
 import { UUIDsEqual } from '@memberjunction/global';
 import { IsApprovalOutcome, TaskOrchestrationService, type TaskDecisionOutcomeCode } from '@mj-biz-apps/tasks-core';
 import type { mjBizAppsTasksTaskEntity, mjBizAppsTasksTaskTypeEntity } from '@mj-biz-apps/tasks-entities';
@@ -52,6 +61,7 @@ import { LookupJournalEntryTypeByID } from './JournalEntryTypes.js';
 import { isSqlGuid, requireSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
+const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 const TASK_ENTITY = 'MJ_BizApps_Tasks: Tasks';
@@ -412,6 +422,29 @@ export class ManualJournalEntryApprovalService {
     );
   }
 
+  /**
+   * The same refusal for a dimension tag saved or deleted ON ITS OWN (not through its line's Save):
+   * tags are part of what an approval covers, and only the entry's Save re-routes it.
+   */
+  public async AssertStandaloneDimensionChangeAllowed(journalEntryLineId: string, contextUser: UserInfo): Promise<void> {
+    if (!isSqlGuid(journalEntryLineId)) return; // the FK refuses a bad id
+    const res = await this.viewProvider.RunView<{ JournalEntryID: string }>(
+      {
+        EntityName: JEL_ENTITY,
+        ExtraFilter: `ID=${sqlGuidLiteral(journalEntryLineId, 'ManualJournalEntryApproval.AssertStandaloneDimensionChangeAllowed')}`,
+        Fields: ['JournalEntryID'],
+        MaxRows: 1,
+        ResultType: 'simple',
+        BypassCache: true,
+      },
+      contextUser,
+    );
+    if (!res.Success) throw new Error(`Could not check the journal entry line this dimension tag belongs to: ${res.ErrorMessage ?? 'unknown error'}`);
+    const journalEntryId = res.Results?.[0]?.JournalEntryID;
+    if (!journalEntryId) return; // a missing line is the FK's to refuse
+    await this.AssertStandaloneLineChangeAllowed(journalEntryId, contextUser);
+  }
+
   /** Close an approval Task nobody needs any more (the entry changed, or no longer needs approval). */
   public async CloseSupersededTask(taskId: string, contextUser: UserInfo): Promise<void> {
     const task = await this.provider.GetEntityObject<mjBizAppsTasksTaskEntity>(TASK_ENTITY, contextUser);
@@ -473,6 +506,15 @@ export class ManualJournalEntryApprovalService {
 
     const personId = await this.resolvePersonIdForUser(contextUser);
     const approved = IsApprovalOutcome(outcome);
+    // An approval is recorded by saving the entry AS THE DECIDER, and MJ refuses that save without
+    // Update on Journal Entries. Say so before anything is written, not as a rolled-back save.
+    if (approved && !je.CheckPermissions(EntityPermissionType.Update, false)) {
+      throw new ManualJournalEntryApprovalError(
+        `${label}: you may approve this entry, but none of your roles may update Journal Entries, so the approval cannot be recorded on it. ` +
+        'Ask an administrator to grant the manual-entry approver role Update on Journal Entries.',
+      );
+    }
+    const approvedAt = new Date();
     const dbProvider = this.provider as unknown as DatabaseProviderBase;
     await dbProvider.BeginTransaction();
     try {
@@ -481,9 +523,7 @@ export class ManualJournalEntryApprovalService {
         contextUser,
       );
       if (approved) {
-        je.ApprovedAt = new Date();
-        je.ApprovedByUserID = contextUser.ID;
-        if (!(await je.Save())) {
+        if (!(await je.SaveApprovalStamp(contextUser.ID, approvedAt))) {
           throw new Error(`${label}: recording the approval on the entry failed: ${je.LatestResult?.CompleteMessage ?? 'unknown error'}`);
         }
       }
@@ -496,7 +536,7 @@ export class ManualJournalEntryApprovalService {
       }
       throw e;
     }
-    return { Approved: approved, ApprovedAt: approved ? je.ApprovedAt : null };
+    return { Approved: approved, ApprovedAt: approved ? approvedAt : null };
   }
 
   /** The company's approvers for a decision. Unlike planning, the threshold does not matter here. */

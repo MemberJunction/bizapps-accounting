@@ -32,7 +32,7 @@ import {
   ValidationErrorInfo,
   ValidationResult,
 } from '@memberjunction/core';
-import { RegisterClass } from '@memberjunction/global';
+import { RegisterClass, UUIDsEqual } from '@memberjunction/global';
 import {
   mjBizAppsAccountingJournalEntryEntity,
   JournalEntryEntity,
@@ -60,6 +60,22 @@ const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const FILE_ENTITY = 'Files'; // __mj.File
+
+/**
+ * The manual-entry approval columns (golive #353). Every layer of the approval gate — the batch
+ * candidate filter, the explicit-ID refusal, the view drop and CK_JournalEntry_ApprovedBeforeBatch —
+ * reads them, so no ordinary save may write them: only this entity's own approval routing (all five)
+ * and the decision path (`SaveApprovalStamp`, the two stamp columns). trg_JournalEntry_ApprovalIntegrity
+ * is the database floor under this rule.
+ */
+const APPROVAL_FIELDS = ['ApprovalLevel', 'ApprovalRequestedByUserID', 'ApprovalTaskID', 'ApprovedAt', 'ApprovedByUserID'] as const;
+type ApprovalField = (typeof APPROVAL_FIELDS)[number];
+const APPROVAL_STAMP_FIELDS: ReadonlySet<ApprovalField> = new Set<ApprovalField>(['ApprovedAt', 'ApprovedByUserID']);
+const ALL_APPROVAL_FIELDS: ReadonlySet<ApprovalField> = new Set<ApprovalField>(APPROVAL_FIELDS);
+const NO_APPROVAL_FIELDS: ReadonlySet<ApprovalField> = new Set<ApprovalField>();
+
+/** The D25 origin pair. It decides whether an entry is manual, so it is fixed once the entry exists. */
+const ORIGIN_PAIR_FIELDS = ['LinkedEntityID', 'LinkedRecordID'] as const;
 
 /**
  * The legal JE status graph (plan §7 + the DB triggers' sanctioned carve-outs):
@@ -94,6 +110,12 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
   public override get DefaultSkipAsyncValidation(): boolean {
     return false;
   }
+
+  /**
+   * The approval columns the save in progress may write. Empty outside this entity's own approval
+   * routing and `SaveApprovalStamp`, so a client save that types into them is refused by Validate.
+   */
+  private writableApprovalFields: ReadonlySet<ApprovalField> = NO_APPROVAL_FIELDS;
 
   // ─── Line Collection ─────────────────────────────────────────────────────────
 
@@ -252,6 +274,30 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       }
     }
 
+    // Manual-entry approval (golive #353, PR #463 review): the approval columns are written only by
+    // this entity's approval routing and the decision path. Typed in by anyone else — e.g. the
+    // entry's author filling in Approved At / Approved By on the form — the gate would read its
+    // answer out of columns the gated person wrote.
+    const forgedApprovalFields = APPROVAL_FIELDS.filter(f =>
+      !this.writableApprovalFields.has(f) &&
+      (this.IsSaved ? this.GetFieldByName(f)?.Dirty === true : this.Get(f) !== null && this.Get(f) !== undefined),
+    );
+    if (forgedApprovalFields.length > 0) {
+      fail(
+        `${forgedApprovalFields.join(', ')} cannot be set directly. A manual journal entry's approval is raised when the entry is saved ` +
+        'and recorded through Approve or Reject (Accounting.RecordManualJournalEntryDecision).',
+      );
+    }
+
+    // The D25 origin pair decides whether the entry is manual and so needs approval; it is set once,
+    // by the booking path that creates the entry, and never changed afterwards (trg 50039 under it).
+    if (this.IsSaved) {
+      const changedPair = ORIGIN_PAIR_FIELDS.filter(f => this.GetFieldByName(f)?.Dirty === true);
+      if (changedPair.length > 0) {
+        fail(`${changedPair.join(' and ')} cannot change once a journal entry exists: they record the booking that created it, and an entry without them is a manual entry.`);
+      }
+    }
+
     const blank = (this.Lines.Items as JournalEntryLineEntityServer[])
       .map((line, i) => ({ line, number: i + 1 }))
       .filter(({ line }) => line.IsEmpty);
@@ -330,6 +376,22 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       result.Success = false;
       result.Errors.push(
         new ValidationErrorInfo('JournalEntryEntityServer.ValidateAsync', e.message || String(e), null),
+      );
+    }
+
+    // Rule 8 (golive #353, PR #463 review): a new entry's origin pair must name a real source record.
+    // The pair is what marks an entry as booked rather than manual, so a pair pointing at nothing would
+    // switch manual-entry approval off for an entry no booking created.
+    try {
+      const originError = await this.validateOriginPair();
+      if (originError) {
+        result.Success = false;
+        result.Errors.push(new ValidationErrorInfo('JournalEntryEntityServer.ValidateAsync', originError, null));
+      }
+    } catch (e: unknown) {
+      result.Success = false;
+      result.Errors.push(
+        new ValidationErrorInfo('JournalEntryEntityServer.ValidateAsync', e instanceof Error ? e.message : String(e), null),
       );
     }
 
@@ -428,6 +490,11 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     // entry nobody may approve is refused before anything is written, as numbering is above.
     const approval = await this.planApproval();
 
+    // This save's own approval routing may write every approval column; a caller's allowance
+    // (SaveApprovalStamp) is kept and restored afterwards.
+    const callerWritableApprovalFields = this.writableApprovalFields;
+    if (approval) this.writableApprovalFields = ALL_APPROVAL_FIELDS;
+
     try {
       await dbProvider.BeginTransaction();
 
@@ -486,6 +553,27 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
         LogError(`Failed to rollback transaction during JournalEntryEntityServer.Save(): ${rollbackErr}`);
       }
       return false;
+    } finally {
+      this.writableApprovalFields = callerWritableApprovalFields;
+    }
+  }
+
+  /**
+   * Record an approval on this entry: the ONLY save that may set ApprovedAt / ApprovedByUserID.
+   * Called by `ManualJournalEntryApprovalService.RecordDecision` after it has checked the decider
+   * (never the requester; the role or the Approval CFO, read at decision time). Server-only: no
+   * client save reaches it, and Validate refuses the same columns on every other save.
+   */
+  public async SaveApprovalStamp(approvedByUserID: string, approvedAt: Date): Promise<boolean> {
+    if (!approvedByUserID) throw new Error('An approval must name the user who approved it.');
+    this.ApprovedAt = approvedAt;
+    this.ApprovedByUserID = approvedByUserID;
+    const previous = this.writableApprovalFields;
+    this.writableApprovalFields = APPROVAL_STAMP_FIELDS;
+    try {
+      return await this.Save();
+    } finally {
+      this.writableApprovalFields = previous;
     }
   }
 
@@ -637,6 +725,59 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     }
     if (batchStatus !== 'Sent' && batchStatus !== 'Posted') {
       return `This journal entry cannot be marked GL-posted: its batch ${batchId} is ${batchStatus}, and only a Sent or Posted batch can mark its entries GL-posted.`;
+    }
+    return null;
+  }
+
+  // ─── Origin pair (D25) ─────────────────────────────────────────────────────
+
+  /**
+   * On a NEW entry with an origin pair: the entity must exist and the record must exist in it. Returns
+   * the problem, or null. A saved entry's pair cannot change (Validate), so it is checked only here.
+   */
+  private async validateOriginPair(): Promise<string | null> {
+    if (this.IsSaved) return null;
+    const entityId = this.LinkedEntityID;
+    const recordId = this.LinkedRecordID;
+    if (!entityId && !recordId) return null;
+    if (!entityId || !recordId) {
+      return 'LinkedEntityID and LinkedRecordID are set together or not at all.';
+    }
+    const provider = this.ProviderToUse as unknown as IMetadataProvider;
+    const entity = provider.Entities.find(e => UUIDsEqual(e.ID, entityId));
+    if (!entity) return `LinkedEntityID ${entityId} is not an entity.`;
+    const keys = entity.PrimaryKeys;
+    if (keys.length !== 1) {
+      return `The source entity ${entity.Name} has a composite key, which a journal entry's origin pair cannot name.`;
+    }
+    const key = keys[0];
+    let literal: string;
+    if (key.NeedsQuotes) {
+      if (key.Type.toLowerCase() === 'uniqueidentifier' && !isSqlGuid(recordId)) {
+        return `LinkedRecordID '${recordId}' is not a valid ${entity.Name} ID.`;
+      }
+      literal = `'${recordId.replace(/'/g, "''")}'`;
+    } else {
+      if (!/^-?\d+$/.test(recordId)) return `LinkedRecordID '${recordId}' is not a valid ${entity.Name} ID.`;
+      literal = recordId;
+    }
+    const res = await (this.ProviderToUse as unknown as IRunViewProvider).RunView<Record<string, unknown>>(
+      {
+        EntityName: entity.Name,
+        ExtraFilter: `${key.Name}=${literal}`,
+        Fields: [key.Name],
+        MaxRows: 1,
+        ResultType: 'simple',
+        BypassCache: true,
+      },
+      this.ContextCurrentUser,
+    );
+    // Loud: treating a failed read as "the source exists" would let a made-up pair skip approval.
+    if (!res.Success) {
+      throw new Error(`Could not check the journal entry's source record (${entity.Name} ${recordId}): ${res.ErrorMessage ?? 'unknown error'}`);
+    }
+    if ((res.Results ?? []).length === 0) {
+      return `The journal entry's source record (${entity.Name} ${recordId}) does not exist. An entry created by hand is a manual entry and leaves LinkedEntityID and LinkedRecordID empty.`;
     }
     return null;
   }

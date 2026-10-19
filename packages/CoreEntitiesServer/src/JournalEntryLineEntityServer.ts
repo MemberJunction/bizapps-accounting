@@ -11,6 +11,8 @@
  *   - Delete() removes the line's dimension rows first (FK children), then the line.
  *   - Save() and Delete() written on their own (not through the parent entry) are refused for a
  *     Pending manual entry under approval, because only the entry's Save re-routes it (golive #353).
+ *     A tag written on its own is refused the same way by JournalEntryLineDimensionEntityServer; the
+ *     tags this line saves or deletes are marked as going through it.
  *   - Validate() checks the dimension pairs: both IDs present, one value per dimension
  *     (UQ_JELDimension_Line_Dimension), and — when the AccountingEngineBase cache is
  *     loaded — that the value belongs to the dimension it tags.
@@ -33,6 +35,7 @@ import {
 } from '@mj-biz-apps/accounting-entities';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 
+import { WithDimensionsSavedThroughLine } from './JournalEntryLineDimensionEntityServer.js';
 import { ManualJournalEntryApprovalService } from './ManualJournalEntryApproval.js';
 
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
@@ -125,12 +128,16 @@ export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
    * entry under approval (golive #353): only the entry's Save raises its approval again.
    */
   public override async Save(options?: EntitySaveOptions): Promise<boolean> {
-    if (this.changesWhatApprovalCovers()) await this.assertStandaloneChangeAllowed();
-    return super.Save(options);
+    if (this.ChangesWhatApprovalCovers()) await this.assertStandaloneChangeAllowed();
+    // The tags this save writes are covered by the check above (or by the entry's own routing).
+    return WithDimensionsSavedThroughLine([...this.Dimensions.Items, ...this.Dimensions.Removed], () => super.Save(options));
   }
 
-  /** True for a line written on its own that adds, re-accounts, re-amounts or re-tags a line. */
-  private changesWhatApprovalCovers(): boolean {
+  /**
+   * True for a line written on its own that adds, re-accounts, re-amounts or re-tags a line — the
+   * saves that must pass the standalone approval guard. Public so the guard's wiring is testable.
+   */
+  public ChangesWhatApprovalCovers(): boolean {
     if (this.SavingThroughJournalEntry || !this.JournalEntryID) return false;
     return !this.IsSaved ||
       ['GLAccountID', 'DebitAmount', 'CreditAmount'].some(f => this.GetFieldByName(f)?.Dirty) ||
@@ -155,7 +162,7 @@ export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
       await this.Dimensions.Load();
       for (const dim of [...this.Dimensions.Items]) {
         if (!dim.IsSaved) continue;
-        const deleted = await dim.Delete(options);
+        const deleted = await WithDimensionsSavedThroughLine([dim], () => dim.Delete(options));
         if (!deleted) {
           LogError(`JournalEntryLineEntityServer.Delete: failed to delete dimension ${dim.ID} before line delete: ${dim.LatestResult?.CompleteMessage ?? 'unknown error'}`);
           return false;
