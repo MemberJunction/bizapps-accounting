@@ -8,8 +8,9 @@ import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-en
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import { AddDays, BusinessTimeZoneEngine, DayStartUtc, IsCalendarDay } from '@mj-biz-apps/common-entities';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
-import { CancelJournalEntryBatchResult, DispatchConfirmationKind, JournalEntryBatchDispatchClient, StrandedJournalEntryBatchWire } from '../../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
+import { CancelJournalEntryBatchResult, JournalEntryBatchDispatchClient, StrandedJournalEntryBatchWire } from '../../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 import { BatchActionDialogState } from '../../JournalEntryBatchDispatch/batch-action-dialog/batch-action-dialog.state';
+import { RetryConfirmState } from '../../JournalEntryBatchDispatch/retry-confirm-dialog/retry-confirm-dialog.state';
 import { CompanyApprovers, IsErpAcceptedFailedBatch, LoadCompanyApprovers, MayCancelApprovedBatch } from '../../JournalEntryBatchDispatch/batch-action-permission';
 import { TIME_WINDOWS, TimeWindowId, timeWindowRange, toSqlDate, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
 import { sqlLiteral, likeContains } from '../../../transfer-pending/list-scaffold/sql-filter';
@@ -118,16 +119,9 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   public RetryingJournalEntryBatchID: string | null = null;
   /**
    * The Failed batch whose retry waits on the operator's ERP check: the server's lookup could not
-   * settle whether it already posted (#182), and `RetryConfirmReason` says why.
+   * settle whether it already posted (#182). Shared with the Batches overview (#466).
    */
-  public RetryConfirmBatch: mjBizAppsAccountingJournalEntryBatchEntity | null = null;
-  public RetryConfirmReason: string | null = null;
-  public RetryConfirmKind: DispatchConfirmationKind | null = null;
-  /**
-   * What the operator typed to override a `Mismatch`. The ERP holds something under this number, and it
-   * may be this very batch, so posting again is gated on retyping the batch number, not a single click.
-   */
-  public MismatchConfirmText = '';
+  public RetryConfirm = new RetryConfirmState<mjBizAppsAccountingJournalEntryBatchEntity>();
   /**
    * The cancel dialog (#183, #405), shared with Batch approvals and the Batches overview. Cancelling
    * returns the entries to the next build under a NEW document number, so the server looks this
@@ -518,15 +512,8 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   }
 
   public CancelRetry(): void {
-    this.clearRetryConfirm();
+    this.RetryConfirm.Close();
     this.cdr.markForCheck();
-  }
-
-  /** A `Mismatch` override is enabled only once the batch number has been retyped exactly. */
-  public get CanConfirmRetry(): boolean {
-    if (!this.RetryConfirmBatch) return false;
-    if (this.RetryConfirmKind !== 'Mismatch') return true;
-    return this.MismatchConfirmText.trim() === (this.RetryConfirmBatch.JournalEntryBatchNumber ?? '');
   }
 
   /**
@@ -535,18 +522,11 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
    * a retry of a journal the ERP already holds posts it twice.
    */
   public async ConfirmRetry(): Promise<void> {
-    const batch = this.RetryConfirmBatch;
-    if (!batch || !this.CanConfirmRetry) return;
-    this.clearRetryConfirm();
+    const batch = this.RetryConfirm.Batch;
+    if (!batch || !this.RetryConfirm.CanConfirm) return;
+    this.RetryConfirm.Close();
     if (!this.CanRetry(batch)) return;
     await this.dispatchRetry(batch, true);
-  }
-
-  private clearRetryConfirm(): void {
-    this.RetryConfirmBatch = null;
-    this.RetryConfirmReason = null;
-    this.RetryConfirmKind = null;
-    this.MismatchConfirmText = '';
   }
 
   /**
@@ -561,10 +541,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
     try {
       const res = await this.client().DispatchJournalEntryBatch(batch.ID, confirmNotAlreadyPostedInERP);
       if (res.Success && res.ConfirmationRequired) {
-        this.RetryConfirmBatch = batch;
-        this.RetryConfirmReason = res.ConfirmationRequired;
-        this.RetryConfirmKind = res.ConfirmationKind ?? null;
-        this.MismatchConfirmText = '';
+        this.RetryConfirm.Open(batch, res.ConfirmationRequired, res.ConfirmationKind ?? null);
       } else if (res.Success && res.Status === 'Posted') {
         this.ActionMessage = `Re-dispatched ${batch.JournalEntryBatchNumber}${res.ExternalJournalEntryBatchRef ? ` — ERP ref ${res.ExternalJournalEntryBatchRef}` : ''}.`;
         this.ActionIsError = false;

@@ -923,3 +923,151 @@ describe('AccountingBatchesPageComponent — Build Batch needs the batch-operato
     expect(fixture.componentInstance.BuildModalVisible).toBe(false);
   });
 });
+
+/**
+ * #466: the Batches page is the app's one batch list, so the batch built here is approved and sent
+ * from here too. Approve and Reject show on a Pending batch to the company's approver who did not
+ * build it (#339); Dispatch on an Approved batch and Retry on a Failed one to holders of the
+ * batch-operator grant (#448). The server stays the authority for each.
+ */
+describe('AccountingBatchesPageComponent — Approve, Reject, Dispatch and Retry (#466, DOM)', () => {
+  const PENDING = LISTED_BATCH;
+  const APPROVED: BatchItem = {
+    ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000002', JournalEntryBatchNumber: 'JEB-TEST-0002', Status: 'Approved', ApprovedByUserID: APPROVER_USER_ID,
+  };
+  const FAILED: BatchItem = {
+    ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000003', JournalEntryBatchNumber: 'JEB-TEST-0003', Status: 'Failed', ApprovedByUserID: APPROVER_USER_ID,
+  };
+  let batchReads: number;
+
+  beforeEach(() => {
+    batchReads = 0;
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName === BATCH_ENTITY) {
+        batchReads++;
+        return viewResult([PENDING, APPROVED, FAILED]);
+      }
+      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
+      return viewResult([], 0);
+    });
+  });
+
+  /** Sign in as `userId`, holding the batch-operator grant or not. */
+  function signInHolding(userId: string, holdsGrant: boolean): void {
+    const user = new UserInfo();
+    user.ID = userId;
+    const provider = {
+      CurrentUser: user,
+      Authorizations: BatchOperatorCatalog(holdsGrant ? [userId] : []),
+      // The Reject dialog reads the cancel reason's limit from the batch entity's metadata when it opens (#307).
+      EntityByName: (name: string) => (name === BATCH_ENTITY ? { Fields: [{ Name: 'CancelReason', MaxLength: 1000 }, { Name: 'ArchiveReason', MaxLength: 500 }] } : undefined),
+    };
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue(provider as unknown as IMetadataProvider);
+  }
+
+  async function render(): Promise<ComponentFixture<AccountingBatchesPageComponent>> {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  /** Each row's batch number and its action buttons' labels. */
+  function rowActions(fixture: ComponentFixture<AccountingBatchesPageComponent>): Record<string, string[]> {
+    const rows: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('tbody tr'));
+    return Object.fromEntries(rows.map(row => [
+      row.querySelector('.mja-batch-num')?.textContent?.trim() ?? '',
+      Array.from(row.querySelectorAll('button')).map(b => b.textContent?.trim() ?? ''),
+    ]));
+  }
+
+  it("shows the company's approver Approve and Reject on a Pending batch, Dispatch on an Approved one and Retry on a Failed one", async () => {
+    signInHolding(APPROVER_USER_ID, true);
+    const actions = rowActions(await render());
+    expect(actions['JEB-TEST-0001'].slice(0, 2)).toEqual(['Approve', 'Reject']);
+    expect(actions['JEB-TEST-0002'][0]).toBe('Dispatch');
+    expect(actions['JEB-TEST-0003'][0]).toBe('Retry');
+  });
+
+  it('shows the builder no Approve or Reject on their own batch (separation of duties)', async () => {
+    signInHolding(BUILDER_USER_ID, true);
+    const actions = rowActions(await render());
+    expect(actions['JEB-TEST-0001']).not.toContain('Approve');
+    expect(actions['JEB-TEST-0001']).not.toContain('Reject');
+  });
+
+  it('shows Dispatch and Retry only to holders of the batch-operator grant', async () => {
+    signInHolding(OTHER_USER_ID, false);
+    const actions = rowActions(await render());
+    expect(actions['JEB-TEST-0002']).not.toContain('Dispatch');
+    expect(actions['JEB-TEST-0003']).not.toContain('Retry');
+  });
+
+  it('Approve records the decision, reloads the list and does not open the record', async () => {
+    signInHolding(APPROVER_USER_ID, true);
+    const decide = vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'RecordDecision').mockResolvedValue({ Success: true });
+    const fixture = await render();
+    const page = fixture.componentInstance;
+    const opened = vi.spyOn(page, 'OpenBatchRecord').mockImplementation(() => undefined);
+    const before = batchReads;
+
+    const approve = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('tbody tr button')).find(b => b.textContent?.trim() === 'Approve');
+    approve?.click();
+    await vi.waitFor(() => expect(page.DecidingBatchID).toBeNull());
+
+    expect(decide).toHaveBeenCalledWith(PENDING.ID, 'Approved');
+    expect(opened).not.toHaveBeenCalled();
+    expect(batchReads).toBeGreaterThan(before);
+    expect(page.ActionMessageIsError).toBe(false);
+    expect(page.ActionMessage).toBe('Approved batch JEB-TEST-0001. It can now be dispatched to BusinessCentral.');
+  });
+
+  it('Reject asks for a reason and records it as the decision notes', async () => {
+    signInHolding(APPROVER_USER_ID, true);
+    const decide = vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'RecordDecision').mockResolvedValue({ Success: true });
+    const page = (await render()).componentInstance;
+
+    page.OnReject(PENDING, new Event('click'));
+    expect(page.ActionDialog.Action).toBe('Reject');
+    expect(decide).not.toHaveBeenCalled();
+
+    page.ActionDialog.Reason = '  wrong posting date  ';
+    await page.ConfirmActionDialog();
+    expect(decide).toHaveBeenCalledWith(PENDING.ID, 'Rejected', 'wrong posting date');
+    expect(page.ActionDialog.IsOpen).toBe(false);
+    expect(page.DecidingBatchID).toBeNull();
+  });
+
+  it('Dispatch reports a batch that did not post as an error', async () => {
+    signInHolding(APPROVER_USER_ID, true);
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'DispatchJournalEntryBatch').mockResolvedValue({ Success: true, Status: 'Failed' });
+    const page = (await render()).componentInstance;
+
+    await page.OnDispatch(APPROVED, new Event('click'));
+    expect(page.ActionMessageIsError).toBe(true);
+    expect(page.ActionMessage).toContain('JEB-TEST-0002 did not post; it is Failed.');
+  });
+
+  it("Retry opens the retry dialog when the ERP lookup cannot settle it, and retries with the operator's word", async () => {
+    signInHolding(APPROVER_USER_ID, true);
+    const confirms: boolean[] = [];
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'DispatchJournalEntryBatch').mockImplementation(async (_id, confirm = false) => {
+      confirms.push(confirm);
+      return confirm
+        ? { Success: true, Status: 'Posted', ExternalJournalEntryBatchRef: 'BC-1' }
+        : { Success: true, Status: 'Failed', ConfirmationRequired: 'the ERP lookup failed', ConfirmationKind: 'Unavailable' };
+    });
+    const page = (await render()).componentInstance;
+
+    await page.OnDispatch(FAILED, new Event('click'));
+    expect(page.RetryConfirm.Batch).toBe(FAILED);
+    expect(page.DispatchingBatchID).toBeNull();
+
+    await page.ConfirmRetry();
+    expect(confirms).toEqual([false, true]);
+    expect(page.RetryConfirm.IsOpen).toBe(false);
+    expect(page.ActionMessage).toBe('Dispatched batch JEB-TEST-0003 to BusinessCentral: Posted (ref BC-1).');
+  });
+});
