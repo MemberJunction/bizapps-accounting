@@ -143,6 +143,39 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     expect(approverErrors(batch.Validate())).toEqual([]);
   });
 
+  it('does not ask for a signed-in user on a save of an Approved batch that leaves its approver alone', () => {
+    batch.SetMany({ ID: 'B1', JournalEntryBatchNumber: 'JEB-000001', Status: 'Approved', ApprovedAt: new Date(), ApprovedByUserID: 'CFO_USER' }, true, true);
+    batch.ErrorMessage = 'touch';
+    expect(approverErrors(batch.Validate())).toEqual([]);
+  });
+
+  // Review probe A: the approval edge with no signed-in user used to skip the check.
+  it('refuses a Pending → Approved save that names an approver when there is no signed-in user', () => {
+    batch.SetMany({ ID: 'B1', JournalEntryBatchNumber: 'JEB-000001', Status: 'Pending' }, true, true);
+    batch.Status = 'Approved';
+    batch.ApprovedAt = new Date();
+    batch.ApprovedByUserID = 'CFO_USER';
+    const result = batch.Validate();
+    expect(result.Success).toBe(false);
+    expect(approverErrors(result).map(getErrorText)).toEqual([expect.stringMatching(/has no signed-in user, so ApprovedByUserID CFO_USER cannot be checked/)]);
+  });
+
+  // Review probe B: rewriting an Approved batch's approver is checked here, not only by the T-SQL trigger.
+  it('refuses rewriting an Approved batch\'s approver to someone other than the signed-in user', () => {
+    batch.SetMany({ ID: 'B1', JournalEntryBatchNumber: 'JEB-000001', Status: 'Approved', ApprovedAt: new Date(), ApprovedByUserID: 'OLD_APPROVER' }, true, true);
+    batch.ContextCurrentUser = { ID: 'FINANCE_USER' } as UserInfo;
+    batch.ApprovedByUserID = 'CFO_USER';
+    const result = batch.Validate();
+    expect(result.Success).toBe(false);
+    expect(approverErrors(result).map(getErrorText)).toEqual([expect.stringMatching(/ApprovedByUserID must be you, not CFO_USER/)]);
+  });
+
+  it('refuses rewriting an Approved batch\'s approver when there is no signed-in user', () => {
+    batch.SetMany({ ID: 'B1', JournalEntryBatchNumber: 'JEB-000001', Status: 'Approved', ApprovedAt: new Date(), ApprovedByUserID: 'OLD_APPROVER' }, true, true);
+    batch.ApprovedByUserID = 'CFO_USER';
+    expect(approverErrors(batch.Validate()).map(getErrorText)).toEqual([expect.stringMatching(/has no signed-in user/)]);
+  });
+
   // ─── the saved-record transition graph (golive #214 added Archived) ───────
 
   /**

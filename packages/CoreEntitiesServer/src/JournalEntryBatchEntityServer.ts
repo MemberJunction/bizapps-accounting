@@ -311,10 +311,18 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
 
     // WHO is the user approving (golive #320 §3): an approval cannot be recorded in someone else's
     // name. TasksAppApprovalGate.assertApproved trusts ApprovedByUserID for a decision that names no
-    // Person, so a save naming the CFO while signed in as someone else must not land.
-    const approver = this.ContextCurrentUser?.ID;
-    if (this.isApproving && approver && this.ApprovedByUserID && !UUIDsEqual(this.ApprovedByUserID, approver)) {
-      fail(`An approval is recorded in the name of the user approving: ApprovedByUserID must be you, not ${this.ApprovedByUserID}.`);
+    // Person, so a save naming the CFO while signed in as someone else must not land. Checked on the
+    // approval edge AND whenever the field itself changes (an Approved batch's approver rewritten),
+    // so the entity layer holds without the T-SQL freeze trigger, which PostgreSQL has no copy of.
+    // A save that names an approver with no signed-in user fails rather than skipping the check.
+    const approverChanged = this.isApproving || !!this.GetFieldByName('ApprovedByUserID')?.Dirty;
+    if (approverChanged && this.ApprovedByUserID) {
+      const approver = this.ContextCurrentUser?.ID;
+      if (!approver) {
+        fail(`An approval is recorded in the name of the user approving, but this save has no signed-in user, so ApprovedByUserID ${this.ApprovedByUserID} cannot be checked.`);
+      } else if (!UUIDsEqual(this.ApprovedByUserID, approver)) {
+        fail(`An approval is recorded in the name of the user approving: ApprovedByUserID must be you, not ${this.ApprovedByUserID}.`);
+      }
     }
 
     // Archive audit triple: an Archived batch says WHY it will never post, plus who and when.
