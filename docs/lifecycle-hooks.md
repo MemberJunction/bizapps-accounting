@@ -264,7 +264,8 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   company's Pending JEs into ONE single-company batch (D7; netting keys on company × account × dims; the
   ERP receives **account numbers**); `approveJournalEntryBatch` flips Pending→Approved with
   audit stamps; `sendJournalEntryBatch` requires Approved (or Failed, for a retry) + the CFO gate
-  (`TasksAppApprovalGate` — one Task assigned to the batch company's CFO, `ApprovalCFOUserID`) → Sent →
+  (`TasksAppApprovalGate` — one Task assigned to the Person linked to the batch company's CFO, `ApprovalCFOUserID`;
+  a CFO with no active linked Person refuses the build, #387) → Sent →
   **Posted** + JEs→GLPosted. A send the ERP rejects, or whose poster throws, returns normally with the batch `Failed`,
   and so does one the ERP accepted whose `Sent → Posted` save failed: that batch keeps the ERP
   reference and its `ErrorMessage` says the journal posted, so the retry's lookup records it `Posted`;
