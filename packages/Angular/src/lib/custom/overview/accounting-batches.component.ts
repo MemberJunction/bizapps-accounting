@@ -252,53 +252,55 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                             <strong>{{ batch.TotalDebits | currency }}</strong>
                                         </td>
                                         <td class="mja-td-action">
-                                            <!-- Confirm/affirmative LEFT, then secondary, per the MJ button convention. -->
-                                            @if (CanDispatch(batch)) {
-                                                <button mjButton variant="primary" size="sm" type="button"
-                                                        [disabled]="DispatchingBatchID === batch.ID"
-                                                        [title]="'Send this approved batch to ' + batch.TargetSystem + '.'"
-                                                        (click)="OnDispatch(batch, $event)">
-                                                    <i class="fa-solid fa-paper-plane"></i> Dispatch
-                                                </button>
-                                            }
-                                            @if (CanRetry(batch)) {
-                                                <button mjButton variant="primary" size="sm" type="button"
-                                                        [disabled]="DispatchingBatchID === batch.ID"
-                                                        [title]="'Send this batch to ' + batch.TargetSystem + ' again. The ERP is checked first, so a batch it already holds is not posted twice.'"
-                                                        (click)="OnDispatch(batch, $event)">
-                                                    <i class="fa-solid fa-rotate-right"></i> Retry
-                                                </button>
-                                            }
-                                            @if (CanDecide(batch)) {
-                                                <button mjButton variant="success" size="sm" type="button"
-                                                        [disabled]="DecidingBatchID === batch.ID"
-                                                        title="Approve this batch so it can be dispatched to the ERP."
-                                                        (click)="OnApprove(batch, $event)">
-                                                    <i class="fa-solid fa-thumbs-up"></i> Approve
-                                                </button>
-                                                <button mjButton variant="danger" size="sm" type="button"
-                                                        [disabled]="DecidingBatchID === batch.ID"
-                                                        title="Reject this batch. It is cancelled and its journal entries return to the next build."
-                                                        (click)="OnReject(batch, $event)">
-                                                    <i class="fa-solid fa-thumbs-down"></i> Reject
-                                                </button>
-                                            }
-                                            @if (CanArchive(batch)) {
-                                                <button mjButton variant="secondary" size="sm" type="button"
-                                                        [disabled]="ArchivingBatchID === batch.ID"
-                                                        title="Close this batch permanently without sending it to the ERP. Its journal entries stay locked to it."
-                                                        (click)="OnArchive(batch, $event)">
-                                                    <i class="fa-solid fa-box-archive"></i> Archive
-                                                </button>
-                                            }
-                                            @if (CanCancel(batch)) {
-                                                <button mjButton variant="secondary" size="sm" type="button"
-                                                        [disabled]="CancellingBatchID === batch.ID"
-                                                        title="Cancel this batch and return its journal entries to the next build."
-                                                        (click)="OnCancel(batch, $event)">
-                                                    <i class="fa-solid fa-ban"></i> Cancel
-                                                </button>
-                                            }
+                                            <div class="mja-row-actions">
+                                                <!-- Confirm/affirmative LEFT, then secondary, per the MJ button convention. -->
+                                                @if (CanDispatch(batch)) {
+                                                    <button mjButton variant="primary" size="sm" type="button"
+                                                            [disabled]="DispatchingBatchID === batch.ID"
+                                                            [title]="'Send this approved batch to ' + batch.TargetSystem + '.'"
+                                                            (click)="OnDispatch(batch, $event)">
+                                                        <i class="fa-solid fa-paper-plane"></i> Dispatch
+                                                    </button>
+                                                }
+                                                @if (CanRetry(batch)) {
+                                                    <button mjButton variant="primary" size="sm" type="button"
+                                                            [disabled]="DispatchingBatchID === batch.ID"
+                                                            [title]="'Send this batch to ' + batch.TargetSystem + ' again. The ERP is checked first, so a batch it already holds is not posted twice.'"
+                                                            (click)="OnDispatch(batch, $event)">
+                                                        <i class="fa-solid fa-rotate-right"></i> Retry
+                                                    </button>
+                                                }
+                                                @if (CanDecide(batch)) {
+                                                    <button mjButton variant="success" size="sm" type="button"
+                                                            [disabled]="DecidingBatchID === batch.ID"
+                                                            title="Approve this batch so it can be dispatched to the ERP."
+                                                            (click)="OnApprove(batch, $event)">
+                                                        <i class="fa-solid fa-thumbs-up"></i> Approve
+                                                    </button>
+                                                    <button mjButton variant="danger" size="sm" type="button"
+                                                            [disabled]="DecidingBatchID === batch.ID"
+                                                            title="Reject this batch. It is cancelled and its journal entries return to the next build."
+                                                            (click)="OnReject(batch, $event)">
+                                                        <i class="fa-solid fa-thumbs-down"></i> Reject
+                                                    </button>
+                                                }
+                                                @if (CanArchive(batch)) {
+                                                    <button mjButton variant="secondary" size="sm" type="button"
+                                                            [disabled]="ArchivingBatchID === batch.ID"
+                                                            title="Close this batch permanently without sending it to the ERP. Its journal entries stay locked to it."
+                                                            (click)="OnArchive(batch, $event)">
+                                                        <i class="fa-solid fa-box-archive"></i> Archive
+                                                    </button>
+                                                }
+                                                @if (CanCancel(batch)) {
+                                                    <button mjButton variant="secondary" size="sm" type="button"
+                                                            [disabled]="CancellingBatchID === batch.ID"
+                                                            title="Cancel this batch and return its journal entries to the next build."
+                                                            (click)="OnCancel(batch, $event)">
+                                                        <i class="fa-solid fa-ban"></i> Cancel
+                                                    </button>
+                                                }
+                                            </div>
                                             <i class="fa-solid fa-arrow-up-right-from-square"></i>
                                         </td>
                                     </tr>
@@ -907,7 +909,22 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
         }
 
         .mja-td-action > * { vertical-align: middle; }
-        .mja-td-action > button + i { margin-left: 10px; }
+        .mja-td-action > .mja-row-actions + i { margin-left: 10px; }
+
+        /* Up to four buttons (Approve, Reject, Archive, Cancel on a Pending batch, #466): they wrap
+           two to a line instead of widening the table past the page. The min-width keeps a pair on
+           one line, since the shrink-to-fit cell would otherwise stack them one per line. */
+        .mja-row-actions {
+            display: inline-flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 6px;
+            min-width: 210px;
+            max-width: 220px;
+            white-space: nowrap;
+        }
+        /* A row with no actions (Posted, Archived) keeps no blank 210px. */
+        .mja-row-actions:empty { display: none; }
 
         .mja-loading {
             display: flex;
