@@ -220,7 +220,7 @@ The package seeds one role, `Finance`, holding `MJ.BizApps.Accounting.FinanceExc
 | `ClearUnattributed` | only its holders clear an exception whose creator is unresolved or the system user (otherwise an unresolved creator is refused, and a system creator follows the type) |
 | `EscalatedCreator` + `ClearEscalated` | an exception on a record created by an `EscalatedCreator` holder is cleared only by a `ClearEscalated` holder (both must be granted) |
 
-Precedence: an unattributed creator first, then an escalated creator, then the type's right, then `Clear`. For example, to let only a `CFO` role clear `PRICE_BELOW_ENGINE_UNAPPROVED`:
+Precedence: an unattributed creator first, then an escalated creator, then the type's right, then `Clear`. The source record's creator can never clear its exception, so the escalated lane is how a senior person's own work reaches their peers: grant `EscalatedCreator` and `ClearEscalated` to the same senior roles (say `CFO` and a senior finance lead role) and an exception on a CFO-created record is cleared by the lead, one on a lead-created record by the CFO or another lead, never by the creator. It comes before the type's right deliberately: when the creator is the only holder of that type's right, the exception would otherwise be clearable by nobody. `ClearEscalated` applies to every type, so grant it only to roles trusted to clear any type. A rule is in force only while it has a grant row; to say "nobody may clear this type", grant its right to a role with no members. For example, to let only a `CFO` role clear `PRICE_BELOW_ENGINE_UNAPPROVED`:
 
 ```json
 {

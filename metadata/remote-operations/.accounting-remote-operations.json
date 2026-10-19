@@ -57,7 +57,7 @@
     "fields": {
       "Name": "Clear Finance Exception",
       "OperationKey": "Accounting.ClearFinanceException",
-      "Description": "Clear an Open finance exception as Reviewed (the judgement stands) or Corrected (the data was fixed), with a required note. Requires the MJ.BizApps.Accounting.FinanceExceptions.Clear authorization. Refused to the source record's creator, and refused while the creator has no linked login. The only way an exception's status changes.",
+      "Description": "Clear an Open finance exception as Reviewed (the judgement stands) or Corrected (the data was fixed), with a required note. Always refused to the source record's creator. Which authorization the reviewer needs is decided per exception: MJ.BizApps.Accounting.FinanceExceptions.ClearUnattributed when the creator is unresolved or the system user and that right is granted (otherwise an unresolved creator is refused); ClearEscalated when the creator holds the EscalatedCreator marker; the type's ClearType.<TYPE CODE> when granted; otherwise FinanceExceptions.Clear. A rule right is in force only while granted to some role. The only way an exception's status changes.",
       "InputTypeName": "AccountingClearFinanceExceptionInput",
       "InputTypeDefinition": "@file:types/accounting-clear-finance-exception.input.ts",
       "OutputTypeName": "AccountingClearFinanceExceptionOutput",

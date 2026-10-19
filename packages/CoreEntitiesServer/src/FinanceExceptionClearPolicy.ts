@@ -34,6 +34,19 @@
  *   4. FinanceExceptions.Clear.
  * The first rule that applies decides; a later one is not consulted.
  *
+ * WHY ESCALATED COMES BEFORE TYPE, AND DOES NOT ALSO NEED THE TYPE RIGHT. The source record's creator
+ * may never clear its exception. When the creator is the only holder of a type's right (say the CFO,
+ * for a type only the CFO clears), a rule that put Type first, or that required the escalated
+ * reviewer to hold the type right as well, would leave that exception clearable by nobody. The
+ * escalated lane is how a host sends a senior person's own work to their peers: grant
+ * EscalatedCreator and ClearEscalated to the same senior roles (for example the CFO and the senior
+ * finance leads), and the creator's peers clear it, whatever the type. Because ClearEscalated
+ * applies to every type, grant it only to roles trusted to clear any type.
+ *
+ * A RULE IS ONLY AS STRONG AS ITS GRANT ROW. Removing the last grant of a rule right turns the rule
+ * OFF and its exceptions fall back to the broad right — the zero-impact upgrade depends on that.
+ * To say "nobody may clear this type", grant its right to a role that has no members.
+ *
  * The package ships a ClearType row for each seeded type. A type another app adds later has none
  * until one is added (by that app or the host), and is cleared under the default right meanwhile.
  * `MJ: Authorizations.Name` is 100 characters, so a type code longer than 50 cannot have one.
@@ -43,7 +56,7 @@
  * Finance role type by type without removing the package's own grant. The default right keeps the
  * MJ convention (a grant of an ancestor covers it).
  */
-import { AuthorizationEvaluator, AuthorizationInfo, AuthorizationRoleInfo, RoleInfo, UserInfo } from '@memberjunction/core';
+import { AuthorizationEvaluator, AuthorizationInfo, AuthorizationRoleInfo, AuthorizationRoleType, RoleInfo, UserInfo } from '@memberjunction/core';
 import { UUIDsEqual } from '@memberjunction/global';
 
 const AUTH_PREFIX = 'MJ.BizApps.Accounting.FinanceExceptions';
@@ -100,8 +113,13 @@ function findAuthorization(context: FinanceExceptionClearContext, name: string):
   return context.Authorizations.find(a => a.Name === name);
 }
 
+/**
+ * The Allow grants of a right. `Type` is read through MJ's own `AuthorizationType()`, which trims and
+ * ignores case, so a hand-authored `"allow"` row counts here exactly as it does in `UserCanExecute`.
+ * An exact `=== 'Allow'` would see no grant, turn the rule OFF and fall through to the broad default.
+ */
 function allowGrants(context: FinanceExceptionClearContext, auth: AuthorizationInfo): AuthorizationRoleInfo[] {
-  return context.AuthorizationRoles.filter(ar => UUIDsEqual(ar.AuthorizationID, auth.ID) && ar.Type === 'Allow');
+  return context.AuthorizationRoles.filter(ar => UUIDsEqual(ar.AuthorizationID, auth.ID) && ar.AuthorizationType() === AuthorizationRoleType.Allow);
 }
 
 /** A rule right is ON when its row exists, is active, and is granted (Allow) to at least one role. */

@@ -263,8 +263,10 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   hold: (1) an unattributed creator — `CreatorUnresolved`, or the MJ system user — needs
   `FinanceExceptions.ClearUnattributed`; (2) a creator holding the `FinanceExceptions.EscalatedCreator`
   marker needs `FinanceExceptions.ClearEscalated`; (3) otherwise the type's
-  `FinanceExceptions.ClearType.<CODE>`; (4) otherwise `FinanceExceptions.Clear`. A rule is on only
-  while its authorization is active and granted (Allow) to some role; the package grants none of
+  `FinanceExceptions.ClearType.<CODE>`; (4) otherwise `FinanceExceptions.Clear`. (2) precedes (3) so
+  that when the creator is the only holder of a type's right, their peers in `ClearEscalated` can
+  still clear it: grant `EscalatedCreator` and `ClearEscalated` to the same senior roles. A rule is on only
+  while its authorization is active and granted (Allow, read as MJ reads it: trimmed, any case) to some role; the package grants none of
   them, so by default (4) decides every row, (1) refuses an unresolved creator as before
   (`CREATOR_UNRESOLVED`), and a system-created row follows its type. The rule rights are direct
   grants with no parent, so holding `Clear` never confers them. Before any read the operation still

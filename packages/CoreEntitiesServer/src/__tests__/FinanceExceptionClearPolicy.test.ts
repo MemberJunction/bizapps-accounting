@@ -4,7 +4,8 @@
  * at least one matching Allow) reproduced by the fake AuthorizationInfo below.
  */
 import { describe, it, expect } from 'vitest';
-import type { AuthorizationInfo, AuthorizationRoleInfo, RoleInfo, UserInfo } from '@memberjunction/core';
+import { AuthorizationRoleInfo, AuthorizationRoleType } from '@memberjunction/core';
+import type { AuthorizationInfo, RoleInfo, UserInfo } from '@memberjunction/core';
 import {
   FINANCE_EXCEPTIONS_CLEAR_AUTH,
   FINANCE_EXCEPTIONS_CLEAR_ESCALATED_AUTH,
@@ -50,7 +51,8 @@ const SUPERVISOR = user('U-SUPERVISOR', 'Supervisor');
 const SELLER = user('U-SELLER', 'Seller');
 const USERS = [FINANCE, SENIOR, SENIOR_2, CFO, SUPERVISOR, SELLER];
 
-type Grants = Record<string, { allow?: RoleKey[]; deny?: RoleKey[]; inactive?: boolean }>;
+/** `allowAs` writes the Allow rows' Type as given (a hand-authored row may not say exactly 'Allow'). */
+type Grants = Record<string, { allow?: RoleKey[]; deny?: RoleKey[]; inactive?: boolean; allowAs?: string }>;
 
 const TYPE_CODES = [
   'WON_DEAL_ORDER_NOT_CONFIRMED',
@@ -89,13 +91,16 @@ function buildContext(grants: Grants, users: UserInfo[] = USERS): FinanceExcepti
   const authorizations = [FINANCE_EXCEPTIONS_CLEAR_AUTH, ...RULE_AUTH_NAMES].map((name, i) => {
     const id = `A0000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
     const grant = grants[name] ?? {};
-    for (const r of grant.allow ?? []) authorizationRoles.push({ AuthorizationID: id, RoleID: ROLE[r], Type: 'Allow' } as AuthorizationRoleInfo);
-    for (const r of grant.deny ?? []) authorizationRoles.push({ AuthorizationID: id, RoleID: ROLE[r], Type: 'Deny' } as AuthorizationRoleInfo);
+    // Real MJ AuthorizationRoleInfo rows, so their Type is read the way MJ reads it (trimmed, any case).
+    for (const r of grant.allow ?? []) authorizationRoles.push(new AuthorizationRoleInfo({ AuthorizationID: id, RoleID: ROLE[r], Type: grant.allowAs ?? 'Allow' }));
+    for (const r of grant.deny ?? []) authorizationRoles.push(new AuthorizationRoleInfo({ AuthorizationID: id, RoleID: ROLE[r], Type: 'Deny' }));
     const IsActive = !grant.inactive;
     const UserCanExecute = (u: UserInfo): boolean => {
       if (!IsActive) return false;
       const mine = authorizationRoles.filter(ar => ar.AuthorizationID === id && u.UserRoles.some(ur => ur.RoleID === ar.RoleID));
-      return !mine.some(ar => ar.Type === 'Deny') && mine.some(ar => ar.Type === 'Allow');
+      return (
+        !mine.some(ar => ar.AuthorizationType() === AuthorizationRoleType.Deny) && mine.some(ar => ar.AuthorizationType() === AuthorizationRoleType.Allow)
+      );
     };
     return { ID: id, Name: name, ParentID: null, IsActive, UserCanExecute } as unknown as AuthorizationInfo;
   });
@@ -220,6 +225,71 @@ describe('the section 4 configuration', () => {
   });
 });
 
+describe('escalation shared by the CFO and the senior finance leads (creator never clears)', () => {
+  // EscalatedCreator and ClearEscalated both granted to CFO and Senior Finance (AR): an exception on a
+  // record one of them created is cleared by one of the others, never by its creator, whatever the type.
+  const SHARED_ESCALATION: Grants = {
+    ...SECTION_4,
+    [FINANCE_EXCEPTIONS_ESCALATED_CREATOR_AUTH]: { allow: ['CFO', 'SeniorAR'] },
+    [FINANCE_EXCEPTIONS_CLEAR_ESCALATED_AUTH]: { allow: ['CFO', 'SeniorAR'] },
+  };
+  const context = buildContext(SHARED_ESCALATION);
+
+  it.each(TYPE_CODES)('a CFO-created %s exception is cleared by Senior Finance, not by Finance', code => {
+    const s = subject({ TypeCode: code, SourceCreatedByUserID: CFO.ID });
+    expect(decide(context, s, SENIOR)).toBe('ALLOWED:Escalated');
+    expect(decide(context, s, FINANCE)).toBe('ESCALATED_NOT_AUTHORIZED');
+    expect(decide(context, s, SUPERVISOR)).toBe('ESCALATED_NOT_AUTHORIZED');
+  });
+
+  it('keeps a CFO-created exception of a CFO-only type clearable (Type first would leave only the creator)', () => {
+    const s = subject({ TypeCode: 'PRICE_BELOW_ENGINE_UNAPPROVED', SourceCreatedByUserID: CFO.ID });
+    expect(decide(context, s, SENIOR)).toBe('ALLOWED:Escalated');
+    // Without the shared escalation the only holder of the type right is the creator.
+    expect(decide(buildContext(SECTION_4), s, SENIOR)).toBe('TYPE_NOT_AUTHORIZED');
+  });
+
+  it('sends a Senior-Finance-created exception to the CFO or another Senior Finance holder', () => {
+    const s = subject({ TypeCode: 'OVERLAPPING_SUBSCRIPTION', SourceCreatedByUserID: SENIOR.ID });
+    expect(decide(context, s, CFO)).toBe('ALLOWED:Escalated');
+    expect(decide(context, s, SENIOR_2)).toBe('ALLOWED:Escalated');
+    expect(decide(context, s, FINANCE)).toBe('ESCALATED_NOT_AUTHORIZED');
+  });
+
+  it("names both roles in the refusal", () => {
+    const resolution = ResolveFinanceExceptionClearRule(subject({ SourceCreatedByUserID: CFO.ID }), context);
+    if (!('Rule' in resolution)) throw new Error('expected a rule');
+    expect(FinanceExceptionClearRuleRefusal(context, resolution.Rule, 'WON_DEAL_ORDER_NOT_CONFIRMED').Message).toContain(
+      '(granted to: CFO, Senior Finance (AR))',
+    );
+  });
+  // That the creator themself is refused is the operation's check (CREATOR_CANNOT_CLEAR), pinned in
+  // FinanceExceptionOperations.test.ts, which runs before this rule is consulted.
+});
+
+describe('the grant row Type is read the way MJ reads it', () => {
+  it.each(['allow', 'ALLOW', ' Allow '])('a %j grant turns the type rule on, so the default right no longer clears it', allowAs => {
+    const context = buildContext({
+      ...PACKAGE_DEFAULT,
+      [FinanceExceptionClearTypeAuthName('PRICE_BELOW_ENGINE_UNAPPROVED')]: { allow: ['CFO'], allowAs },
+    });
+    const s = subject({ TypeCode: 'PRICE_BELOW_ENGINE_UNAPPROVED' });
+    expect(IsFinanceExceptionRuleGranted(context, FinanceExceptionClearTypeAuthName('PRICE_BELOW_ENGINE_UNAPPROVED'))).toBe(true);
+    expect(decide(context, s, FINANCE)).toBe('TYPE_NOT_AUTHORIZED');
+    expect(decide(context, s, CFO)).toBe('ALLOWED:Type');
+  });
+
+  it('names a role granted by a non-canonical Allow row in the refusal', () => {
+    const context = buildContext({
+      ...PACKAGE_DEFAULT,
+      [FinanceExceptionClearTypeAuthName('PRICE_BELOW_ENGINE_UNAPPROVED')]: { allow: ['CFO'], allowAs: 'allow' },
+    });
+    const resolution = ResolveFinanceExceptionClearRule(subject({ TypeCode: 'PRICE_BELOW_ENGINE_UNAPPROVED' }), context);
+    if (!('Rule' in resolution)) throw new Error('expected a rule');
+    expect(FinanceExceptionClearRuleRefusal(context, resolution.Rule, 'PRICE_BELOW_ENGINE_UNAPPROVED').Message).toContain('(granted to: CFO)');
+  });
+});
+
 describe('partial and unusual configurations', () => {
   it('ignores escalation unless both the marker and the escalated right are granted', () => {
     const context = buildContext({
@@ -235,6 +305,14 @@ describe('partial and unusual configurations', () => {
       [FinanceExceptionClearTypeAuthName('WON_DEAL_ORDER_NOT_CONFIRMED')]: { allow: ['SeniorAR'], inactive: true },
     });
     expect(decide(context, subject(), FINANCE)).toBe('ALLOWED:Default');
+  });
+
+  it('lets a host say "nobody clears this type" by granting it to a role none of the reviewers hold', () => {
+    // A rule is ON while it has an Allow row; whether anyone holds that role does not matter.
+    const context = buildContext({ ...PACKAGE_DEFAULT, [FinanceExceptionClearTypeAuthName('WON_DEAL_ORDER_NOT_CONFIRMED')]: { allow: ['Seller'] } });
+    for (const reviewer of [FINANCE, SENIOR, CFO, SUPERVISOR]) {
+      expect(decide(context, subject({ SourceCreatedByUserID: FINANCE.ID === reviewer.ID ? CFO.ID : FINANCE.ID }), reviewer)).toBe('TYPE_NOT_AUTHORIZED');
+    }
   });
 
   it('treats a right granted only by Deny rows as off', () => {

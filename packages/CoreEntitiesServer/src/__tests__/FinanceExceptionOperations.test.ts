@@ -3,8 +3,9 @@
  * answers the type catalog, the locking reads and entity creation, and records what was written,
  * whether a transaction was opened, and the order of transaction and SQL calls.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { AuthorizationInfo, AuthorizationRoleInfo, EntityInfo, IMetadataProvider, RemoteOpServerContext, UserInfo } from '@memberjunction/core';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { AuthorizationRoleInfo } from '@memberjunction/core';
+import type { AuthorizationInfo, EntityInfo, IMetadataProvider, RemoteOpServerContext, UserInfo } from '@memberjunction/core';
 import type { AccountingFinanceExceptionToRaise } from '@mj-biz-apps/accounting-entities';
 
 const SYSTEM_USER = { ID: '00000000-0000-4000-8000-00000000000a', Name: 'System' } as UserInfo;
@@ -20,7 +21,9 @@ import {
 } from '../FinanceExceptionOperations.js';
 import {
   FINANCE_EXCEPTIONS_CLEAR_AUTH,
+  FINANCE_EXCEPTIONS_CLEAR_ESCALATED_AUTH,
   FINANCE_EXCEPTIONS_CLEAR_UNATTRIBUTED_AUTH,
+  FINANCE_EXCEPTIONS_ESCALATED_CREATOR_AUTH,
   FinanceExceptionClearTypeAuthName,
 } from '../FinanceExceptionClearPolicy.js';
 
@@ -117,7 +120,7 @@ function stubProvider(options: StubOptions = {}) {
   const provider = {
     Entities: [ORDER_LINES] as unknown as EntityInfo[],
     Authorizations: [auth, ...rules] as unknown as AuthorizationInfo[],
-    AuthorizationRoles: rules.map(r => ({ AuthorizationID: r.ID, RoleID: 'ROLE-ANY', Type: 'Allow' })) as unknown as AuthorizationRoleInfo[],
+    AuthorizationRoles: rules.map(r => new AuthorizationRoleInfo({ AuthorizationID: r.ID, RoleID: 'ROLE-ANY', Type: 'Allow' })),
     TransactionDepth: options.transactionDepth ?? 0,
     BeginTransaction: tx.begin,
     CommitTransaction: tx.commit,
@@ -310,6 +313,15 @@ describe('Accounting.ClearFinanceException', () => {
     expect(s.saved).toHaveLength(0);
   });
 
+  it("refuses the source record's creator whatever the GUID casing", async () => {
+    // Hex letters in the ID, so the casings genuinely differ (an all-digit ID would not test this).
+    const lettered = { ID: 'CFCFCFCF-ABCD-4EF0-8ABC-DEFABCDEF012', Name: 'Lettered' } as UserInfo;
+    const s = stubProvider({ stored: openRow({ SourceCreatedByUserID: lettered.ID.toLowerCase() }), authHolders: [lettered.ID] });
+    const result = await clear(s, {}, lettered);
+    expect(result.Output?.Errors?.[0].Code).toBe('CREATOR_CANNOT_CLEAR');
+    expect(s.saved).toHaveLength(0);
+  });
+
   it('refuses while the creator has no linked login', async () => {
     const s = stubProvider({ stored: openRow({ SourceCreatedByUserID: null, CreatorUnresolved: true, Summary: 'Deal owner Pat Example has no linked login.' }) });
     const result = await clear(s, {});
@@ -404,6 +416,54 @@ describe('Accounting.ClearFinanceException', () => {
     });
     const result = await clear(s, {}, SUPERVISOR);
     expect(result.Output?.Errors?.[0].Code).toBe('CREATOR_CANNOT_CLEAR');
+  });
+
+  describe('escalation shared by the CFO and Senior Finance: the creator never clears, a peer does', () => {
+    const CFO = { ID: 'C0C0C0C0-0000-4000-8000-0000000000C1', Name: 'CFO' } as UserInfo;
+    const SENIOR = { ID: 'C0C0C0C0-0000-4000-8000-0000000000A1', Name: 'Senior Finance (AR)' } as UserInfo;
+    const SENIOR_2 = { ID: 'C0C0C0C0-0000-4000-8000-0000000000A2', Name: 'Senior Finance (AR) 2' } as UserInfo;
+    const seniors = [CFO.ID, SENIOR.ID, SENIOR_2.ID];
+    // TYPES[0] is PRICE_BELOW_ENGINE_UNAPPROVED, narrowed to the CFO alone.
+    const grantedRules = [
+      { Name: FinanceExceptionClearTypeAuthName(TYPES[0].Code), holders: [CFO.ID] },
+      { Name: FINANCE_EXCEPTIONS_ESCALATED_CREATOR_AUTH, holders: seniors },
+      { Name: FINANCE_EXCEPTIONS_CLEAR_ESCALATED_AUTH, holders: seniors },
+    ];
+    beforeEach(() => {
+      cachedUsers.list = [CFO, SENIOR, SENIOR_2, REVIEWER];
+    });
+    afterEach(() => {
+      cachedUsers.list = [];
+    });
+
+    it('refuses the CFO an exception on a record the CFO created, even of a type only the CFO clears', async () => {
+      const s = stubProvider({ stored: openRow({ SourceCreatedByUserID: CFO.ID }), grantedRules });
+      expect((await clear(s, {}, CFO)).Output?.Errors?.[0].Code).toBe('CREATOR_CANNOT_CLEAR');
+      expect(s.saved).toHaveLength(0);
+    });
+
+    it('lets Senior Finance clear it', async () => {
+      const s = stubProvider({ stored: openRow({ SourceCreatedByUserID: CFO.ID }), grantedRules });
+      expect((await clear(s, {}, SENIOR)).Output).toEqual({ Success: true, Status: 'Reviewed' });
+      expect(s.saved[0]).toMatchObject({ ReviewedByUserID: SENIOR.ID });
+    });
+
+    it('refuses a plain Finance holder of the default right', async () => {
+      const s = stubProvider({ stored: openRow({ SourceCreatedByUserID: CFO.ID }), grantedRules });
+      expect((await clear(s, {}, REVIEWER)).Output?.Errors?.[0].Code).toBe('ESCALATED_NOT_AUTHORIZED');
+    });
+
+    it('sends a Senior-Finance-created exception to the CFO or another Senior Finance holder, never its creator', async () => {
+      for (const [reviewer, expected] of [
+        [SENIOR, 'CREATOR_CANNOT_CLEAR'],
+        [CFO, 'Reviewed'],
+        [SENIOR_2, 'Reviewed'],
+      ] as const) {
+        const s = stubProvider({ stored: openRow({ SourceCreatedByUserID: SENIOR.ID }), grantedRules });
+        const output = (await clear(s, {}, reviewer)).Output;
+        expect(output?.Success ? output.Status : output?.Errors?.[0].Code).toBe(expected);
+      }
+    });
   });
 
   it('rolls back and reports SAVE_FAILED when the save fails', async () => {
