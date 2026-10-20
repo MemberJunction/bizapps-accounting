@@ -12,5 +12,33 @@
       "lastModified": "2026-09-30T19:18:14.543Z",
       "checksum": "e8f0a3af2c6c1a8c9d934199bf58bfed2253e6920be452f2c08477a0d0312982"
     }
+  },
+  {
+    "fields": {
+      "AuthorizationID": "@lookup:MJ: Authorizations.Name=MJ.BizApps.Accounting.BooksClosedThroughDate.Set",
+      "RoleID": "@lookup:MJ: Roles.Name=Finance",
+      "Type": "Allow"
+    },
+    "primaryKey": {
+      "ID": "A9EBD6CF-6EF5-4B12-A4D0-1014C4F4689A"
+    },
+    "sync": {
+      "lastModified": "2026-10-20T13:24:04.639Z",
+      "checksum": "ab153a861e5e59644b32c269e8751c1a6bd15530112969a2aac5c40f9f501956"
+    }
+  },
+  {
+    "fields": {
+      "AuthorizationID": "@lookup:MJ: Authorizations.Name=MJ.BizApps.Accounting.JournalEntryBatches.Operate",
+      "RoleID": "@lookup:MJ: Roles.Name=Finance",
+      "Type": "Allow"
+    },
+    "primaryKey": {
+      "ID": "CEA898E5-DF81-413B-A46F-FAA50FCB1059"
+    },
+    "sync": {
+      "lastModified": "2026-10-20T13:24:04.648Z",
+      "checksum": "8499480de48b381f9fbe946f0d6d75edaa05a5cec8a60e45dd267ff2223e45d0"
+    }
   }
 ]

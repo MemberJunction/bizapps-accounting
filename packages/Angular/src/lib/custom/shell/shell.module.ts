@@ -28,6 +28,8 @@ import { WorkspaceCardComponent } from '../../transfer-pending/workspace-tabs/wo
 import { WorkspaceTipDirective } from '../../transfer-pending/workspace-tabs/workspace-tip.directive';
 
 import { JournalEntryBatchDispatchModule } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.module';
+import { BatchActionDialogComponent } from '../JournalEntryBatchDispatch/batch-action-dialog/batch-action-dialog.component';
+import { RetryConfirmDialogComponent } from '../JournalEntryBatchDispatch/retry-confirm-dialog/retry-confirm-dialog.component';
 import { ChartOfAccountsModule } from '../ChartOfAccounts/chart-of-accounts.module';
 import { CompanySetupModule } from '../CompanySetup/company-setup.module';
 import { ReadModelsModule } from '../shared/read-models.module';
@@ -135,6 +137,8 @@ import { DimensionsResourceComponent } from '../resources/dimensions-resource.co
     MJAlertComponent,
     MJDialogComponent,
     MJDialogActionsComponent,
+    BatchActionDialogComponent, // the shared Reject / Archive / Cancel dialog (#405)
+    RetryConfirmDialogComponent, // the shared retry confirmation for a Failed batch (#466)
     CompanyScopeChipComponent,
     GlResolutionPreviewComponent,
     WorkspaceTabStripComponent,

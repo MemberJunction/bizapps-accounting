@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { RunView, RunViewParams } from '@memberjunction/core';
+import { IMetadataProvider, Metadata, RunView, RunViewParams, UserInfo } from '@memberjunction/core';
 import { AccountingOverviewPageComponent } from './accounting-overview.component';
 import { AUGUST_CLOSE_IN_CHICAGO, useBusinessClock, viewResult } from '../../../__tests__/support/business-clock';
+import { BatchOperatorCatalog } from '../../../__tests__/support/batch-operator';
 
 /**
  * The overview reads two DATE columns — `PostingDate` (recent batches) and `EffectiveDate` (the
@@ -71,5 +72,38 @@ describe('AccountingOverviewPageComponent — DATE columns read as the stored da
     const row = fixture.nativeElement.querySelector('.mja-batch-num')?.closest('tr') as HTMLTableRowElement | null;
     expect(row, 'the recent-batches row rendered').not.toBeNull();
     expect(row!.cells[2].textContent?.trim()).toBe('Oct 1, 2026');
+  });
+});
+
+describe('AccountingOverviewPageComponent — Build Batch needs the batch-operator grant (#448, DOM)', () => {
+  const USER_ID = '00000000-0000-0000-0000-0000000000a1';
+
+  beforeEach(() => {
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
+      p.EntityName === BATCH_ENTITY ? viewResult([BATCH]) : viewResult([], 0),
+    );
+  });
+
+  async function buildButtonsFor(holdsGrant: boolean): Promise<string[]> {
+    const user = new UserInfo();
+    user.ID = USER_ID;
+    const provider = { CurrentUser: user, Authorizations: BatchOperatorCatalog(holdsGrant ? [USER_ID] : []) };
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue(provider as unknown as IMetadataProvider);
+    const fixture = TestBed.createComponent(AccountingOverviewPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    fixture.detectChanges();
+    return [...fixture.nativeElement.querySelectorAll('button')]
+      .map((b: HTMLButtonElement) => b.textContent?.trim() ?? '')
+      .filter((label: string) => label.startsWith('Build Batch'));
+  }
+
+  it('shows a holder both Build Batch buttons', async () => {
+    expect(await buildButtonsFor(true)).toEqual(['Build Batch', 'Build Batch']);
+  });
+
+  it('shows anyone else none', async () => {
+    expect(await buildButtonsFor(false)).toEqual([]);
   });
 });

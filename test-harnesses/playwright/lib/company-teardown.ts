@@ -4,20 +4,19 @@
  * Company-rooted raw SQL, same pattern as batching-fixture teardown. The spec's company has no
  * JEs/links by construction. Safe to re-run (idempotent deletes).
  *
- * Usage (cwd = instance worktree root): npx tsx …/lib/company-teardown.ts PWCO-XXXX
+ * Usage (from the repo root): npx tsx …/lib/company-teardown.ts PWCO-XXXX
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'node:path';
+import { LoadHarnessEnv } from '../../harness-paths.mjs';
 
 const SCHEMA = '__mj_BizAppsAccounting';
 
 async function main(): Promise<void> {
   const code = process.argv[2];
   if (!code || !/^PWCO-/.test(code)) throw new Error('company-teardown requires a PWCO-* company code (spec-created only)');
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   const { DB_HOST: host, DB_DATABASE: database, DB_USERNAME: user, DB_PASSWORD: password } = process.env;
-  if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env — run from the instance worktree root.');
+  if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env (looked in the working directory, then the repo root and each folder above it).');
   const pool = await new sql.ConnectionPool({
     server: host, port: Number(process.env.DB_PORT ?? 1433), user, password, database,
     options: { encrypt: false, trustServerCertificate: true },

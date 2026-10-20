@@ -210,6 +210,30 @@ Set your JE's origin so drill-through works: `LinkedEntityID` = your entity's MJ
 
 Seed data (GL account roles, default per-company COA scaffolding) is authored as **metadata** (`metadata/`), never hand-written SQL INSERTs — customizable per deployment. It reaches a host through the `…__Metadata_Sync.sql` migration generated at release ([docs/database-migrations.md](docs/database-migrations.md)). There are no system-level default accounts: **GL account defaults start at the company level** as company-scoped `GLAccountLink` rows (D12).
 
+### Who may clear finance exceptions
+
+The package seeds one role, `Finance`, holding `MJ.BizApps.Accounting.FinanceExceptions.Clear`: out of the box any Finance holder who did not create the source record may clear any exception. A host narrows that by granting these authorizations (all shipped, none granted) to its own roles, as `MJ: Authorization Roles` rows in its own metadata:
+
+| Authorization (`MJ.BizApps.Accounting.FinanceExceptions.` …) | Once granted to a role |
+|---|---|
+| `ClearType.<TYPE CODE>` | only its holders clear that type; holding `Clear` no longer does |
+| `ClearUnattributed` | only its holders clear an exception whose creator is unresolved or the system user (otherwise an unresolved creator is refused, and a system creator follows the type) |
+| `EscalatedCreator` + `ClearEscalated` | an exception on a record created by an `EscalatedCreator` holder is cleared only by a `ClearEscalated` holder (both must be granted) |
+
+Precedence: an unattributed creator first, then an escalated creator, then the type's right, then `Clear`. The source record's creator can never clear its exception, so the escalated lane is how a senior person's own work reaches their peers: grant `EscalatedCreator` and `ClearEscalated` to the same senior roles (say `CFO` and a senior finance lead role) and an exception on a CFO-created record is cleared by the lead, one on a lead-created record by the CFO or another lead, never by the creator. It comes before the type's right deliberately: when the creator is the only holder of that type's right, the exception would otherwise be clearable by nobody. `ClearEscalated` applies to every type, so grant it only to roles trusted to clear any type. A rule is in force only while it has a grant row; to say "nobody may clear this type", grant its right to a role with no members. For example, to let only a `CFO` role clear `PRICE_BELOW_ENGINE_UNAPPROVED`:
+
+```json
+{
+  "fields": {
+    "AuthorizationID": "@lookup:MJ: Authorizations.Name=MJ.BizApps.Accounting.FinanceExceptions.ClearType.PRICE_BELOW_ENGINE_UNAPPROVED",
+    "RoleID": "@lookup:MJ: Roles.Name=CFO",
+    "Type": "Allow"
+  }
+}
+```
+
+The rules and refusal codes are in [docs/lifecycle-hooks.md](docs/lifecycle-hooks.md) §2c. Saved query "Finance Exceptions Cleared" lists every clearing decision by month.
+
 ---
 
 ## Database Support
@@ -255,6 +279,7 @@ MJ_CORE_SCHEMA=__mj
 ```bash
 pnpm run mj:migrate                   # Apply migrations (creates __mj_BizAppsAccounting schema)
 pnpm run mj sync push --dir metadata  # Load seed metadata into your dev database (hosts get it from the release's Metadata_Sync migration)
+pnpm run demo:load                     # Optional: the predictive-scoring bench (demo-data/), never shipped to hosts
 pnpm run mj:codegen                   # Generate TypeScript / GraphQL / Angular code
 pnpm run build                        # Build all packages (Turborepo)
 ```
@@ -301,12 +326,13 @@ bizapps-accounting/
 │   └── IntegrationTests/          # @mj-biz-apps/accounting-integration-tests (private)
 ├── migrations/                    # T-SQL baseline + incremental V migrations (source of truth)
 ├── migrations-pg/                 # PG migrations (converter output)
+├── demo-data/                     # Opt-in records, never shipped (pnpm run demo:load)
 ├── metadata/                      # Seed data + entity metadata (synced via mj-sync)
 ├── docs/                          # Architecture, ERD, lifecycle hooks, binding rules, seeding guides
 ├── plans/
 │   └── bizapps-accounting-master.md  # THE design doc & decision log
 ├── test-harnesses/                # Live test tiers (see test-harnesses/README.md)
-├── scripts/                       # rebuild-db.sh (new empty database only), append-codegen.sh
+├── scripts/                       # rebuild-db.sh (new empty database only)
 └── ci/                            # Release scripts
 ```
 

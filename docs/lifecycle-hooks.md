@@ -24,7 +24,7 @@ friendly thing happen; the trigger is the floor that catches anything — even r
 
 | # | Hook | Entity | What causes it to fire | How | Status |
 |---|---|---|---|---|---|
-| **W1** | Profile init (TZ default removed, #158; COA seed = explicit only, 2026-07-30) | `AccountingCompanyProfile` | a saved profile's **`EntityType`** changes | check auto · `ValidateAsync()`; seed via explicit `SeedDefaultChartOfAccounts()` | ✅ |
+| **W1** | Profile init (TZ default removed, #158; COA seed = explicit only, 2026-07-30) | `AccountingCompanyProfile` | a saved profile's **`EntityType`** changes, or **`BooksClosedThroughDate`** changes | check auto · `ValidateAsync()`; seed via explicit `SeedDefaultChartOfAccounts()` | ✅ |
 | **W2** | JE numbering (per company, per FY) | `JournalEntry` | a **new** JE is saved with **no `EntryNumber`** | auto · `Save()` | ✅ |
 | **W3** | Batch numbering (GLOBAL) | `JournalEntryBatch` | a **new** batch is saved with **no `JournalEntryBatchNumber`** | auto · `Save()` | ✅ |
 | **W4** | Adjusting-entry routing | — | — | — | 🚫 retired 2026-07-06 (periods removed, CH-1) |
@@ -53,13 +53,18 @@ refused while the company owns an active GL account. Those types keep no books: 
 their legal entity's accounts (`AccountingEngineBase.LegalEntityFor`). `GLAccountEntityServer`
 refuses the same state from the account side: creating or reactivating an active account on such a
 company.
+**Validates (bc-aidp-next-golive#316):** setting, moving or clearing `BooksClosedThroughDate` is
+refused unless the saving user holds `MJ.BizApps.Accounting.BooksClosedThroughDate.Set` (the Finance
+role). An authorization missing from the catalog is held by nobody. Other edits are not checked.
 - *(The profile's 5 default GL-account refs were RETIRED 2026-07-23 — role/link model replaces them.)*
 - *(Period generation was REMOVED 2026-07-06 — no `AccountingPeriod` rows exist to create.)*
 
 ### W2 — JE numbering *(✅ `JournalEntryEntityServer.ts` + `SequenceService.ts`)*
 **Fires:** on a brand-new JournalEntry with no number.
 **Does:** calls the atomic sproc `spAssignNextJournalEntryNumber(@CompanyID, @FiscalYear)` (HOLDLOCK/UPDLOCK — gap-free
-under concurrency) and sets **`EntryNumber = JE-{CompanyCode}-{FY}-{seq:000000}`** before `super.Save()`. FY is the
+under concurrency) and sets **`EntryNumber = JE-{CompanyCode}-{FY}-{seq:000000}`** before `super.Save()`. On PostgreSQL it
+calls the function of the same name (row-locked `INSERT … ON CONFLICT DO UPDATE`, same format, same gap-free rule);
+`SequenceService` picks the SQL by the provider's `PlatformKey`. FY is the
 fiscal year `EffectiveDate` falls in, from the company's fiscal-year start on its profile (`FiscalYearOf`).
 **The sequence is per company, per fiscal year** (D19, BA-D31; the 2026-07-06 global sequence, D-SEQ, is retired
 for JEs).
@@ -67,7 +72,7 @@ for JEs).
 ### W3 — Batch numbering *(✅ `JournalEntryBatchEntityServer.ts` + `SequenceService.ts`)*
 **Fires:** on a brand-new batch with no number.
 **Does:** `spAssignNextJournalEntryBatchNumber()` → **`JournalEntryBatchNumber = BATCH-{seq:000000}`** — a single **GLOBAL** counter
-(D19: batch numbering stays global, though each batch belongs to one company, D7).
+(D19: batch numbering stays global, though each batch belongs to one company, D7). On PostgreSQL, the function of the same name.
 
 ### W6 — Reversal generation *(✅ `JournalEntryEntityServer.GenerateReversal(reason)`)*
 **Fires:** only when code explicitly calls it on a saved JE.
@@ -139,6 +144,40 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   retry, `recordFailedBatchPosted`) and `→Posted` (`markBatchPosted`) saves are its only callers, so a
   generic-form or GraphQL save cannot mark a batch Sent and then Posted without the ERP being called.
   `Sent → Failed` stays a plain save: recording a failure calls no ERP.
+- **`JournalEntryBatchEntityServer.Validate` — `Approved` and `Archived` are their verbs' (#447, #448).**
+  A saved batch moves to `Approved` only through `Approve(contextUser)` and to `Archived` only through
+  `Archive(reason, contextUser)`, each raising a transient flag for its one save, as `Cancel()` does.
+  `Approve()` writes `ApprovedAt` / `ApprovedByUserID` from the user it acts as; it does not decide who
+  may approve. That is `TasksAppApprovalGate.recordDecision`, which `Accounting.RecordJournalEntryBatchDecision`
+  runs first, or the auto-post waiver's system-user check. `approveJournalEntryBatch` refuses an
+  `approvedByUserId` other than the context user. So the generic form or the GraphQL update cannot
+  record an approval no configured approver made, under an approver of the caller's choosing.
+- **`JournalEntryBatchEntityServer.Validate` — the audit fields are the server's (#451).** On a saved
+  batch, `BatchedAt`, `BatchedByUserID`, the approval, archive, cancel and send who/when pairs and
+  `ERPNotPostedConfirmedAt` / `ERPNotPostedConfirmedByUserID` change only while a verb is saving
+  (`Approve`, `Archive`, `Cancel`/`CancelAfterTeardown`, `SaveDispatchTransition`); a plain save that
+  changes one is refused. Values are compared as instants and case-insensitive IDs, so a form that sends
+  back what it loaded passes. The fields stay `AllowUpdateAPI = 1` on purpose: MJ leaves a field with it
+  off out of the create and update procedures, so the server's own stamps would not persist either.
+- **`JournalEntryBatchEntityServer.Archive()` authorizes itself (#448)** through the resolved cancel gate's
+  `assertMayArchive`, before anything is written and before the status checks (whose messages name the ERP's reference): before approval only the company's `ApprovalCFOUserID`
+  (the builder may cancel a Pending batch but not archive it, since an archive cannot be undone), past
+  approval the CFO or the batch's approver (who must then have a linked Person). The batch pages show
+  Archive only to those users (`MayArchiveBatch`).
+- **Build, Regenerate, Dispatch and Archive require the Finance role (#448).** Each of the four Remote
+  Operations first checks the `MJ.BizApps.Accounting.JournalEntryBatches.Operate` Authorization, granted to
+  the Finance role in `metadata/authorizations/` and `metadata/authorization-roles/`, through
+  `UserCanOperateJournalEntryBatches` (accounting-engine-base, shared with the pages), before reading anything.
+  It fails closed: an Authorization missing from the catalog is held by nobody. The scheduled build and
+  auto-post (`Accounting.BuildJournalEntryBatches`) call the engine directly as the system user, not these
+  operations, so they are unaffected. The batch pages hide Dispatch, Regenerate, Archive, Build and Retry
+  from users without the grant.
+- **`TasksAppApprovalGate.assertApproved` re-checks who approved (#446).** Besides a terminal approval on
+  the stamped Task, the batch must record an approver (written only by `Approve()`) who is not its builder,
+  and the approval must not be attributed to anyone else: Task Decisions are writable through the tasks
+  app, so a decision whose `DecidedByPersonID` resolves to another user, or to no user, does not count. A
+  decision with no Person still counts (an approver with no linked Person records one); the batch's own
+  approver record is what binds it.
 - **`JournalEntryBatchEntityServer.CheckControlTotalCoherence()`** — the Pending→Approved footing +
   member-count check is now a public method shared with the engine: `sendJournalEntryBatch` re-runs
   it **before** every `→Sent` (`Approved→Sent`, and `Failed→Sent` on a retry), so a batch whose member
@@ -177,8 +216,8 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   unlocks only while its batch is `Pending` or `Cancelled`; a batch becomes Cancelled only with its
   pointer cleared). From `Approved`/`Failed`, and from a `Pending` batch nobody rejected (golive #302), a
   reason is required. A rolled-back cancel reloads the
-  instance. `Save()` stamps `CancelledAt` / `CancelledByUserID` on the transition, as it does for the
-  approval and archive pairs.
+  instance. `Cancel()` and `CancelAfterTeardown()` write `CancelledAt` / `CancelledByUserID` from the
+  user they act as; a plain save cannot set them (#451, below).
   **`Cancel()` authorizes itself (#214)**, before anything is written, so a server caller that loads the
   entity and calls it directly meets the same rules as the engine. It requires a context user and
   resolves its gate and ERP lookup through `JournalEntryBatchDispatchServices` (below). The options
@@ -224,7 +263,10 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   `JournalEntryBatchDispatchServices` (MJ ClassFactory; the defaults are `TasksAppApprovalGate` and
   the AccountingERPEngine lookup). A caller cannot pass them, so it cannot swap in a gate that allows
   everything or leave the lookup out. A higher-priority ClassFactory registration in the same process
-  does replace them; unit tests rely on that, and it is the one way around the check.
+  replaces them only where that is deliberate (#452): in a unit-test run (Vitest sets `VITEST`), or when
+  the server's `ACCOUNTING_DISPATCH_SERVICES_OVERRIDE` environment variable names the subclass. Anywhere
+  else `Resolve()` logs an error naming the registered class and uses the real services; an allowed
+  replacement is logged too.
   A **Pending** cancel needs either a terminal rejection on the approval Task (`isRejected`), which
   `RecordJournalEntryBatchDecision` records before cancelling, or (golive #302) a reason from the company's
   CFO or the user who built the batch (`assertMayCancelPending`); that cancel comments on the approval Task
@@ -233,7 +275,14 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   (`CancelAfterTeardown()`) needs no rejection: it is limited to a Pending batch whose teardown has run.
 - **`TasksAppApprovalGate.recordDecision`** — now requires `contextUser` to BE the batch company's
   `AccountingCompanyProfile.ApprovalCFOUserID` (no CFO configured ⇒ hard-fail). Previously any
-  authenticated user could approve any batch, including their own.
+  authenticated user could approve any batch, including their own. The decision is recorded on the
+  batch's stamped `ApprovalTaskID`, as `assertApproved`, `isRejected` and the cancel paths read it, never
+  the newest Task Link, which is writable through the tasks app; a batch with no stamp is refused (#313).
+- **`JournalEntryBatchEntityServer.Validate` — the approval Task is set once (#313).** A saved batch whose
+  loaded `ApprovalTaskID` is set refuses any other value, so a Pending batch cannot be pointed at another
+  batch's approved Task. Setting it on a batch with none (the build's stamp) passes. The database enforces
+  the same rule for `ApprovalTaskID` and `ApprovalTaskRaisedAt` on raw SQL
+  (`trg_JournalEntryBatch_ApprovalTaskSetOnce`, 50035), and a filtered unique index keeps one batch per Task.
 - **SQL-predicate id validation (`SqlGuards.ts`)** — `isSqlGuid`/`requireSqlGuid`/`sqlGuidLiteral`
   (extracted from the engine's private `sqlGuid`) now guard every client-supplied id that is
   interpolated into an `ExtraFilter`: the batch remote ops, the gate's Task-Link lookups, W9's
@@ -253,17 +302,36 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   ordinary save: they are not guarded), so a creator identified later unlocks a row raised as
   unresolved; a terminal row is never touched. It is marked `RequiresSystemUser`, so through the API
   only the system user may raise; the consuming apps' detectors call it in-process, where that gate
-  does not apply. It reads existing rows with `UPDLOCK, HOLDLOCK`, so a concurrent raise of the same
-  item waits and returns the first one's row.
-- **`Accounting.ClearFinanceException`** locks the row (`UPDLOCK`) in its transaction before reading
-  it, so of two concurrent clears the second finds the row no longer Open (`NOT_OPEN`).
+  does not apply. It reads existing rows with `UPDLOCK, HOLDLOCK` on SQL Server; on PostgreSQL it
+  first takes a transaction-scoped advisory lock per (type, DedupeKey), then reads with `FOR UPDATE`.
+  Either way a concurrent raise of the same item waits and returns the first one's row.
+- **`Accounting.ClearFinanceException`** locks the row (`UPDLOCK` on SQL Server, `FOR UPDATE` on
+  PostgreSQL) in its transaction before reading it, so of two concurrent clears the second finds the
+  row no longer Open (`NOT_OPEN`).
+- **Who may clear which exception (golive #320 §4)** is decided per row by
+  `FinanceExceptionClearPolicy.ts`, after the checks that always apply (still Open, not the source
+  record's creator, a note). The first rule that applies names the authorization the reviewer must
+  hold: (1) an unattributed creator — `CreatorUnresolved`, or the MJ system user — needs
+  `FinanceExceptions.ClearUnattributed`; (2) a creator holding the `FinanceExceptions.EscalatedCreator`
+  marker needs `FinanceExceptions.ClearEscalated`; (3) otherwise the type's
+  `FinanceExceptions.ClearType.<CODE>`; (4) otherwise `FinanceExceptions.Clear`. (2) precedes (3) so
+  that when the creator is the only holder of a type's right, their peers in `ClearEscalated` can
+  still clear it: grant `EscalatedCreator` and `ClearEscalated` to the same senior roles. A rule is on only
+  while its authorization is active and granted (Allow, read as MJ reads it: trimmed, any case) to some role; the package grants none of
+  them, so by default (4) decides every row, (1) refuses an unresolved creator as before
+  (`CREATOR_UNRESOLVED`), and a system-created row follows its type. The rule rights are direct
+  grants with no parent, so holding `Clear` never confers them. Before any read the operation still
+  refuses a caller who holds no clearing right at all (`NOT_AUTHORIZED`); a holder of the wrong one
+  gets `UNATTRIBUTED_NOT_AUTHORIZED`, `ESCALATED_NOT_AUTHORIZED` or `TYPE_NOT_AUTHORIZED`, naming the
+  authorization and the roles granted it. Exceptions do not close themselves when their condition is
+  fixed (an open question, §4 rule 2); the `FinanceExceptions.ts` header says where that would go.
 
 ## 3. Related (not `Save()` hooks)
 
 - **S1 batch dispatch — ✅** (`JournalEntryBatchEngine.ts`): `buildJournalEntryBatch(companyId, targetSystem, …)` nets one
   company's Pending JEs into ONE single-company batch (D7; netting keys on company × account × dims; the
-  ERP receives **account numbers**); `approveJournalEntryBatch` flips Pending→Approved with
-  audit stamps; `sendJournalEntryBatch` requires Approved (or Failed, for a retry) + the CFO gate
+  ERP receives **account numbers**); `approveJournalEntryBatch` flips Pending→Approved through
+  `JournalEntryBatchEntityServer.Approve()`, stamping the context user as approver; `sendJournalEntryBatch` requires Approved (or Failed, for a retry) + the CFO gate
   (`TasksAppApprovalGate` — one Task assigned to the Person linked to the batch company's CFO, `ApprovalCFOUserID`;
   a CFO with no active linked Person refuses the build, #387) → Sent →
   **Posted** + JEs→GLPosted. A send the ERP rejects, or whose poster throws, returns normally with the batch `Failed`,

@@ -1,0 +1,63 @@
+<!-- An unsettled lookup (#182): the ERP offers no lookup, or the lookup failed. The operator checks,
+     and confirms or cancels. A Mismatch gets its own, stronger dialog below. -->
+<mj-dialog [Visible]="State.IsOpen && !State.IsMismatch" Title="Check the ERP before retrying" Width="560px" (Close)="OnDismiss()">
+  @if (State.Batch; as batch) {
+    <p>
+      Batch <span class="rcd-mono">{{ batch.JournalEntryBatchNumber }}</span> was not retried: the
+      {{ batch.TargetSystem }} journal may have posted anyway, and retrying a journal that already posted posts it twice.
+    </p>
+    @if (State.Reason) {
+      <p>{{ State.Reason }}</p>
+    }
+    <p>
+      In {{ batch.TargetSystem }}, search for document number
+      <span class="rcd-mono">{{ batch.JournalEntryBatchNumber }}</span>. Retry only if this batch is not there.
+    </p>
+  }
+  <mj-dialog-actions>
+    <button mjButton variant="primary" size="sm" (click)="OnConfirm()">
+      <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> It has not posted — retry
+    </button>
+    <button mjButton variant="flat" size="sm" (click)="OnDismiss()">Cancel</button>
+  </mj-dialog-actions>
+</mj-dialog>
+
+<!-- MISMATCH — the ERP holds a posting under this number that differs from the batch. That is most
+     often this very batch, changed by the ERP (tax or VAT entries it added) or by an account mapping
+     change since it posted. Posting again then puts two journals under one number, and every later
+     lookup reads Mismatch, so the check can never protect this batch again. Cancel is the default;
+     the override needs the batch number retyped. -->
+<mj-dialog [Visible]="State.IsOpen && State.IsMismatch" Title="The ERP already holds this document number" Width="600px" (Close)="OnDismiss()">
+  @if (State.Batch; as batch) {
+    <p>
+      {{ batch.TargetSystem }} already holds a posting under document number
+      <span class="rcd-mono">{{ batch.JournalEntryBatchNumber }}</span>, and it does not match this batch line for line.
+    </p>
+    @if (State.Reason) {
+      <p>{{ State.Reason }}</p>
+    }
+    <p>
+      <strong>This is most likely this batch, already posted.</strong> The ERP may have added entries of its own, such as tax,
+      or an account mapping may have changed since. If so, do not retry: reconcile the posting in
+      {{ batch.TargetSystem }}, then archive this batch.
+    </p>
+    <p>
+      Post again only if you have confirmed that posting belongs to something else. Posting again when it is this batch
+      doubles it in the general ledger. To post again, type the batch number:
+    </p>
+    <input
+      type="text"
+      class="mj-input rcd-mono"
+      [(ngModel)]="State.MismatchText"
+      [attr.aria-label]="'Type ' + batch.JournalEntryBatchNumber + ' to post again'"
+      [placeholder]="batch.JournalEntryBatchNumber" />
+  }
+  <!-- The override sits on the left like every confirm action (#398); Cancel stays primary, so it is
+       still the default, and the override stays disabled until the batch number is retyped. -->
+  <mj-dialog-actions>
+    <button mjButton variant="flat" size="sm" [disabled]="!State.CanConfirm" (click)="OnConfirm()">
+      It is not this batch — post again
+    </button>
+    <button mjButton variant="primary" size="sm" (click)="OnDismiss()">Cancel</button>
+  </mj-dialog-actions>
+</mj-dialog>

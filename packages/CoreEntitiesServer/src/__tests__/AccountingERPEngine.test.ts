@@ -368,6 +368,37 @@ describe('AccountingERPEngine.PostJournalBatch', () => {
     expect(result.error).toMatch(/ERP 500|No ERP provider/);
   });
 
+  it('refuses a QuickBooks batch over a QuickBooks Desktop connection, never sending it through QuickBooks Online (#419)', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS' }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+    const p = providerWith({
+      'MJ: Company Integrations': [
+        { ID: CI, CompanyID: COMPANY, IntegrationID: 'int-1', Integration: 'QuickBooks Desktop', IsActive: true },
+      ],
+      'MJ: Company Integration Entity Maps': [],
+      'MJ_BizApps_Accounting: Accounting Engine Extensions': [],
+    });
+    const batch = { ID: 'batch-1', CompanyID: COMPANY, TargetSystem: 'QuickBooks', JournalEntryBatchNumber: 'BATCH-1', PostingDate: new Date('2026-08-01') } as never;
+
+    const result: ErpPostResult = await AccountingERPEngine.Instance.PostJournalBatch(batch, [], user, p);
+
+    expect(result).toEqual({ success: false, error: `Company ${COMPANY} has no active 'QuickBooks' connection, so the batch cannot be sent. Ask an administrator to set one up.` });
+    expect(runVerb).not.toHaveBeenCalled();
+  });
+
+  it('posts a Business Central batch over an Integration named BC (#418)', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }] }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+    const views = dimensionTaggedViews();
+    views['MJ: Company Integrations'] = [{ ID: CI, CompanyID: COMPANY, IntegrationID: 'int-1', Integration: 'BC', IsActive: true }];
+    const batch = { ID: 'batch-1', CompanyID: COMPANY, TargetSystem: 'BusinessCentral', JournalEntryBatchNumber: 'BATCH-1', PostingDate: new Date('2026-08-01') } as never;
+
+    const result: ErpPostResult = await AccountingERPEngine.Instance.PostJournalBatch(batch, [], user, providerWith(views));
+
+    expect(result).toMatchObject({ success: true });
+    expect(runVerb).toHaveBeenCalledOnce();
+  });
+
   it('does not fall back to another ERP when TargetSystem does not match', async () => {
     const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS' }));
     AccountingERPEngine.Instance.UseSeams({ runVerb });
@@ -1227,6 +1258,89 @@ describe('Business Central renumbering a posting', () => {
 
     expect(result).toEqual({ status: 'Unavailable', reason: expect.stringMatching(new RegExp(`the ${ERP_POSTING_NOT_READ_BACK} finance exception type is missing or inactive`)) });
   });
+
+  // #414: a raise that fails is held, so the signal does not depend on it landing.
+  describe('when the ERP_POSTING_NOT_READ_BACK raise fails', () => {
+    const failed = { Success: false, Results: [], Errors: [{ Code: 'WRITE_FAILED', Message: 'deadlock' }] };
+    const landed = { Success: true, Results: [{ Index: 0, FinanceExceptionID: 'fx-1', Created: true }] };
+
+    /** Post with a failing readback and a failing raise, then answer later lookups with nothing found. */
+    async function postUnraised(raise: ReturnType<typeof vi.fn>): Promise<void> {
+      let posting = true;
+      const verb = readbackFailingVerb();
+      const runVerb = vi.fn(async (call: { Verb: string; Params: Record<string, unknown> }) => posting
+        ? verb(call)
+        : { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'GLEntries', Value: [], Type: 'Output' }] });
+      AccountingERPEngine.Instance.UseSeams({ runVerb, raiseFinanceExceptions: raise as never });
+      await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+      posting = false;
+    }
+
+    it.each<[string, () => Promise<unknown>]>([
+      ['fails', async () => failed],
+      ['throws', async () => { throw new Error('connection lost'); }],
+    ])('answers Unavailable, not nothing posted, for the company while the raise %s', async (_case, raise) => {
+      await postUnraised(vi.fn(raise));
+      const other = { ...(taggedBatch() as object), ID: 'batch-later', JournalEntryBatchNumber: 'BATCH-2' } as never;
+
+      const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(other, taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+      expect(result).toEqual({ status: 'Unavailable', reason: expect.stringMatching(new RegExp(`\\(${TAGGED_BATCH_ID}\\), and raising ${ERP_POSTING_NOT_READ_BACK} for them failed`)) });
+    });
+
+    it('raises it again at the next lookup, and then answers from the Open exception it left', async () => {
+      const raise = vi.fn().mockResolvedValueOnce(failed).mockResolvedValue(landed);
+      await postUnraised(raise);
+      const p = providerWith(taggedViewsWithCodes({ 'MJ_BizApps_Accounting: Finance Exceptions': [{ SourceRecordID: TAGGED_BATCH_ID }] }));
+
+      const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, p);
+
+      expect(raise).toHaveBeenCalledTimes(2);
+      expect(raise.mock.calls[1][0]).toEqual(raise.mock.calls[0][0]);
+      expect(result).toEqual({ status: 'Unavailable', reason: expect.stringMatching(new RegExp(`could not then be read back \\(${TAGGED_BATCH_ID}\\), so`)) });
+    });
+
+    it('stops holding it once it lands', async () => {
+      const raise = vi.fn().mockResolvedValueOnce(failed).mockResolvedValue(landed);
+      await postUnraised(raise);
+      const p = providerWith(taggedViewsWithCodes());
+      await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, p);
+
+      const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, p);
+
+      expect(raise).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({ status: 'NotFound' });
+    });
+
+    // A cancel's recheck runs inside the cancel's transaction, which the raise would join.
+    it('does not raise inside an open transaction, keeps the hold, and raises at the next lookup outside one', async () => {
+      const raise = vi.fn().mockResolvedValueOnce(failed).mockResolvedValue(landed);
+      await postUnraised(raise);
+      const inTransaction = { ...(providerWith(taggedViewsWithCodes()) as object), TransactionDepth: 1 } as never;
+
+      const during = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, inTransaction);
+
+      expect(raise).toHaveBeenCalledTimes(1);
+      expect(during).toEqual({ status: 'Unavailable', reason: expect.stringMatching(new RegExp(`\\(${TAGGED_BATCH_ID}\\), and raising ${ERP_POSTING_NOT_READ_BACK} for them failed`)) });
+
+      const after = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+      expect(raise).toHaveBeenCalledTimes(2);
+      expect(after).toEqual({ status: 'NotFound' });
+    });
+
+    it('does not hold it against another company', async () => {
+      await postUnraised(vi.fn(async () => failed));
+      const elsewhere = { ...(taggedBatch() as object), CompanyID: 'co-other' } as never;
+      const views = taggedViewsWithCodes();
+      const ci = views['MJ: Company Integrations'] as Array<Record<string, unknown>>;
+      views['MJ: Company Integrations'] = ci.map((row) => ({ ...row, CompanyID: 'co-other' }));
+
+      const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(elsewhere, taggedLines(), user, providerWith(views));
+
+      expect(result).toEqual({ status: 'NotFound' });
+    });
+  });
 });
 
 /** A runVerb whose post succeeds and whose every G/L entry read fails. */
@@ -1598,6 +1712,20 @@ describe('namesMatch', () => {
     expect(namesMatch('Business Central', 'BC')).toBe(true);
     expect(namesMatch('quickbooks-online', 'QuickBooks Online')).toBe(true);
     expect(namesMatch('QuickBooks Online', 'QuickBooks Online')).toBe(true);
+  });
+
+  it('reads BC as Business Central on either side (#418)', () => {
+    expect(namesMatch('BC', 'BusinessCentral')).toBe(true);
+    expect(namesMatch('bc', 'Microsoft Dynamics 365 Business Central')).toBe(true);
+    expect(namesMatch('BC', 'BC')).toBe(true);
+  });
+
+  it('matches QuickBooks Online by its own name, and bare QuickBooks as it (#419)', () => {
+    expect(namesMatch('QuickBooks Online', 'QuickBooks')).toBe(true);
+    expect(namesMatch('QuickBooks', 'QuickBooks Online')).toBe(true);
+    expect(namesMatch('QuickBooks Desktop', 'QuickBooks Online')).toBe(false);
+    expect(namesMatch('QuickBooks Desktop', 'QuickBooks')).toBe(false);
+    expect(namesMatch('QuickBooks Enterprise', 'QuickBooks Desktop')).toBe(false);
   });
 
   it('keeps different systems apart', () => {

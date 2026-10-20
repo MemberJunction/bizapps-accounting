@@ -2,7 +2,7 @@
   {
     "fields": {
       "Name": "Build Journal Entry Batches",
-      "CategoryID": "@lookup:MJ: Action Categories.Name=Accounting",
+      "CategoryID": "@lookup:MJ: Action Categories.ID=074DF299-8D1F-438B-B855-8DFF17AE565E",
       "Description": "Builds single-company GL posting batches from pending candidate journal entries, netting lines per account/dimension combination. Supports filtering by target ERP system, cutoff date, and including/excluding specific JournalEntryType codes (such as excluding RevenueRecognition for daily batch runs).",
       "Type": "Custom",
       "DriverClass": "Accounting.BuildJournalEntryBatches",
@@ -199,14 +199,14 @@
       ]
     },
     "sync": {
-      "lastModified": "2026-09-02T04:41:41.643Z",
-      "checksum": "5e77f59745a2827f25693d2abecb009d0845df436b93d9489759fb2863f2db9e"
+      "lastModified": "2026-10-20T13:23:59.616Z",
+      "checksum": "ada7653e2c795d11cdb3f6aa0849ec1b78c6eced4a1cfcd50f8e5bbb7dc0feeb"
     }
   },
   {
     "fields": {
       "Name": "Run ERP Sync",
-      "CategoryID": "@lookup:MJ: Action Categories.Name=Accounting",
+      "CategoryID": "@lookup:MJ: Action Categories.ID=074DF299-8D1F-438B-B855-8DFF17AE565E",
       "Description": "Pulls chart of accounts, dimensions, and dimension values from every credentialed Company Integration via AccountingERPEngine.SyncMasterData. One job, all companies. Hosts disable the scheduled job rather than deleting this action.",
       "Type": "Custom",
       "DriverClass": "Accounting.RunERPSync",
@@ -277,8 +277,8 @@
       ]
     },
     "sync": {
-      "lastModified": "2026-09-02T04:41:41.661Z",
-      "checksum": "b4fac10fc9fb4f00737248aa2203c784c4739fd68ca9d455f87ab1a950378ba5"
+      "lastModified": "2026-10-20T13:23:59.635Z",
+      "checksum": "92c6439357ebf9df595975289c7c62d5fbf4f12bcec58cedbaf13aa877927837"
     }
   }
 ]

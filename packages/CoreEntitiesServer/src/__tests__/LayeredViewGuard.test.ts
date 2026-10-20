@@ -34,8 +34,9 @@
  *   - `DATEPART(weekday, g.EffectiveDate) IN (1, 7)` is DROPPED OUTRIGHT, and the comment that
  *     called it the safe form had it BACKWARDS. `DATEPART(weekday, …)` is the `DATEFIRST`-dependent
  *     expression: `1` means Sunday only when `@@DATEFIRST` is 7, which is the US English default
- *     and not a guarantee. The correct fix is a `@@DATEFIRST`-aware expression, and this predicate
- *     would have REJECTED it — a guard actively standing in the way of the repair.
+ *     and not a guarantee. The fix (#395) counts days from a fixed Monday with `DATEDIFF`, and this
+ *     predicate would have REJECTED it — a guard actively standing in the way of the repair. The
+ *     expression is now in FORBIDDEN instead.
  *   - `FROM \[\$\{flyway:defaultSchema\}\]\.\[vwJournalEntriesGenerated\]` pinned one spelling of a
  *     name CodeGen writes both ways.
  *
@@ -59,8 +60,8 @@
  *    every consumer that compares against `'Anomalous'` silently stops matching, with no error and
  *    no type change.
  *
- * 3. A FRAGMENT KNOWN TO FAIL SILENTLY NEVER COMES BACK — nothing is forbidden for this view today,
- *    and the assertion SKIPS out loud rather than passing on an empty list.
+ * 3. A FRAGMENT KNOWN TO FAIL SILENTLY NEVER COMES BACK. A view with nothing forbidden SKIPS out
+ *    loud rather than passing on an empty list.
  *
  * 4. A RE-CREATION MAY ADD COLUMNS BUT NEVER DROP ONE. Cheap and needs no curation. Both sides of
  *    the comparison are read through `producedColumns`, so the columns inherited through `g.*` from
@@ -115,12 +116,16 @@ const REQUIRED: Record<string, RegExp[]> = {
 };
 
 /**
- * Fragments that must NEVER appear, per view. Nothing qualifies for `vwJournalEntries` today: there
- * is no known-bad spelling this view has ever regressed to. The entry is ABSENT rather than empty,
- * and the assertion below skips rather than passing — an empty list would have been a green tick
- * over zero assertions.
+ * Fragments that must NEVER appear, per view, matched against the body with comments stripped.
  */
-const FORBIDDEN: Record<string, RegExp[]> = {};
+const FORBIDDEN: Record<string, RegExp[]> = {
+    vwJournalEntries: [
+        // `DATEPART(weekday, …)` numbers days from the session's `@@DATEFIRST`, so EffectiveDayOfWeek
+        // and IsWeekend changed with the login language (#395). The view counts days from a fixed
+        // Monday instead.
+        /DATEPART\s*\(\s*(?:weekday|dw)\b/i,
+    ],
+};
 
 describe('layered views: the newest definer is resolvable and loses nothing', () => {
     /**

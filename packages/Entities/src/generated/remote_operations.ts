@@ -149,7 +149,7 @@ export interface AccountingRaiseFinanceExceptionsOutput {
 // ============================================================
 /**
  * Clear Finance Exception
- * Clear an Open finance exception as Reviewed (the judgement stands) or Corrected (the data was fixed), with a required note. Requires the MJ.BizApps.Accounting.FinanceExceptions.Clear authorization. Refused to the source record's creator, and refused while the creator has no linked login. The only way an exception's status changes.
+ * Clear an Open finance exception as Reviewed (the judgement stands) or Corrected (the data was fixed), with a required note. Always refused to the source record's creator. Which authorization the reviewer needs is decided per exception: MJ.BizApps.Accounting.FinanceExceptions.ClearUnattributed when the creator is unresolved or the system user and that right is granted (otherwise an unresolved creator is refused); ClearEscalated when the creator holds the EscalatedCreator marker; the type's ClearType.<TYPE CODE> when granted; otherwise FinanceExceptions.Clear. A rule right is in force only while granted to some role. The only way an exception's status changes.
  * GenerationType=Manual — the server body is supplied by a hand-authored subclass registered
  * under 'Accounting.ClearFinanceException'. This generated base provides the typed contract only (client-safe).
  */

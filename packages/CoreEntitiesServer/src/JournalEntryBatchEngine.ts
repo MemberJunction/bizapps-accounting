@@ -53,7 +53,8 @@
  *
  * THE §7.2 BATCH-REWORK SLICE LANDED 2026-07-29 (S-D of the donor port): criteria-driven
  * candidate filtering (cutoff/startDate/companies/type-codes — pendingCandidateFilter, plus every
- * company's PostingStartDate floor on every build, preview and sweep),
+ * company's PostingStartDate floor on every build, preview and sweep, and the manual entries
+ * awaiting approval, which no build takes — golive #353, APPROVED_OR_NO_APPROVAL_NEEDED_CLAUSE),
  * explicit-ID builds (buildJournalEntryBatchFromExplicitIds — re-verifies Pending, one batch per company),
  * view-defined batches (buildJournalEntryBatchFromView — snapshot + classify + loud rejects), and the
  * read-only previewBatch that runs the SAME filter/order/netting as the build. The
@@ -74,11 +75,13 @@ import { DatabaseProviderBase, IMetadataProvider, IRunViewProvider, LogError, Lo
 import { UUIDsEqual } from '@memberjunction/global';
 import { UserCache } from '@memberjunction/generic-database-provider';
 import type {
+  AccountingFinanceExceptionToRaise,
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingJournalEntryEntity,
   mjBizAppsAccountingJournalEntryLineEntity,
 } from '@mj-biz-apps/accounting-entities';
 import {
+  ClosedBooksPostingDateProblem,
   NetLines,
   type DimRef,
   type NetGroup,
@@ -263,6 +266,39 @@ async function assertPostingDayCoversMembers(jeIds: string[], postingDay: Calend
   );
 }
 
+/**
+ * Refuse a posting date on or before the company's BooksClosedThroughDate (golive #316). The ERP
+ * would refuse the batch once it was sent, leaving a Failed batch to work out; this says so at the
+ * build. FAILS CLOSED: a read that fails throws, since guessing "open" builds a batch into a month
+ * finance has closed. A company with no profile row, or no date, has nothing closed.
+ * Regenerate keeps the batch's posting date, so its refusal says to cancel and build anew instead.
+ */
+async function assertPostingDayOpen(
+  companyId: string, postingDay: CalendarDay, contextUser: UserInfo, p: Providers,
+  operation: 'buildJournalEntryBatch' | 'regenerateJournalEntryBatch' = 'buildJournalEntryBatch',
+): Promise<void> {
+  const res = await p.rv.RunView<{ BooksClosedThroughDate: Date | string | null }>(
+    {
+      EntityName: ACP_ENTITY,
+      ExtraFilter: `ID=${sqlGuid(companyId)}`,
+      Fields: ['BooksClosedThroughDate'],
+      ResultType: 'simple',
+      BypassCache: true,
+    },
+    contextUser,
+  );
+  if (!res.Success) throw new Error(`${operation}: could not read company ${companyId}'s books-closed-through date: ${res.ErrorMessage ?? 'unknown'}`);
+  const closedThrough = ToCalendarDay(res.Results?.[0]?.BooksClosedThroughDate ?? null);
+  const problem = ClosedBooksPostingDateProblem(postingDay, closedThrough);
+  if (!problem) return;
+  if (operation === 'regenerateJournalEntryBatch') {
+    throw new JournalEntryBatchPostingDateError(
+      `${problem} Regenerate keeps the batch's posting date, so cancel this batch and build a new one with an open posting date.`,
+    );
+  }
+  throw new JournalEntryBatchPostingDateError(problem);
+}
+
 // ─── buildJournalEntryBatch ──────────────────────────────────────────────────────────────
 
 /**
@@ -314,6 +350,7 @@ async function buildJournalEntryBatchCore(
 ): Promise<BuildJournalEntryBatchResult> {
   const p = resolveProviders(provider);
   const postingDay = await loadPostingDay(postingDate, contextUser, p.md, companyId);
+  await assertPostingDayOpen(companyId, postingDay, contextUser, p);
   await assertPostingDayCoversMembers(jeIds, postingDay, contextUser, p);
   const groups = NetLines(await loadNettableLines(companyId, jeIds, contextUser, p));
   if (groups.length === 0) {
@@ -403,27 +440,40 @@ export interface BuildJournalEntryBatchOptions {
  * PostingStartDate keeps the entries dated before it out of every batch.
  */
 export async function pendingCandidateFilter(options: BuildJournalEntryBatchOptions, contextUser: UserInfo, p: Providers): Promise<string> {
-  const { criteria, postingStart } = await candidateFilterParts(options, contextUser, p);
-  return [...criteria, ...postingStart].join(' AND ');
+  const { criteria, postingStart, approval } = await candidateFilterParts(options, contextUser, p);
+  return [...criteria, ...postingStart, ...approval].join(' AND ');
 }
 
 /**
- * The candidate filter in its two halves: `criteria` (status, type, date window, scope) and
+ * A manual entry awaiting approval (golive #353) is never a candidate: it has an ApprovalLevel and
+ * no ApprovedAt. Entries that need no approval have no level. CK_JournalEntry_ApprovedBeforeBatch is
+ * the database floor under this clause.
+ */
+export const APPROVED_OR_NO_APPROVAL_NEEDED_CLAUSE = '(ApprovalLevel IS NULL OR ApprovedAt IS NOT NULL)';
+
+/** True when an entry is awaiting manual-entry approval, so no batch may take it (golive #353). */
+export function IsAwaitingManualApproval(row: { ApprovalLevel?: string | null; ApprovedAt?: Date | string | null }): boolean {
+  return !!row.ApprovalLevel && !row.ApprovedAt;
+}
+
+/**
+ * The candidate filter in three parts: `criteria` (status, type, date window, scope),
  * `postingStart` (one clause per company whose PostingStartDate is later than the per-call
- * startDate). The preview counts what the second half removes from the first.
+ * startDate) and `approval` (manual entries awaiting approval stay out, golive #353). The preview
+ * counts what the second and third parts remove.
  */
 async function candidateFilterParts(
   options: BuildJournalEntryBatchOptions,
   contextUser: UserInfo,
   p: Providers,
-): Promise<{ criteria: string[]; postingStart: string[] }> {
+): Promise<{ criteria: string[]; postingStart: string[]; approval: string[] }> {
   // The start day is resolved once and shared by both halves: a date-time StartDate names its
   // BUSINESS day, and the PostingStartDate comparison must use that same day, not the instant's UTC day.
   const startDay = options.startDate
     ? await loadBoundDay(options.startDate, 'Batch criteria StartDate', contextUser, p.md, scopeCompanyId(options))
     : null;
   const [criteria, floors] = await Promise.all([criteriaClauses(options, startDay, contextUser, p), loadPostingStartDates(contextUser, p)]);
-  return { criteria, postingStart: postingStartClauses(floors, startDay) };
+  return { criteria, postingStart: postingStartClauses(floors, startDay), approval: [APPROVED_OR_NO_APPROVAL_NEEDED_CLAUSE] };
 }
 
 /** With exactly one company in scope its zone applies once the engine carries per-company zones;
@@ -579,8 +629,14 @@ export async function buildJournalEntryBatchFromExplicitIds(
   if (jeIds.length === 0) throw new EmptyJournalEntryBatchError('Nothing to batch: no journal entries were selected.');
   const p = resolveProviders(provider);
   const inList = jeIds.map(sqlGuid).join(',');
-  const res = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string }>(
-    { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate'], ResultType: 'simple', BypassCache: true },
+  const res = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string; EntryNumber: string; ApprovalLevel: string | null; ApprovedAt: string | null }>(
+    {
+      EntityName: JE_ENTITY,
+      ExtraFilter: `ID IN (${inList})`,
+      Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate', 'EntryNumber', 'ApprovalLevel', 'ApprovedAt'],
+      ResultType: 'simple',
+      BypassCache: true,
+    },
     contextUser,
   );
   if (!res.Success) throw new Error(`The batch was not built: could not check the selected entries: ${res.ErrorMessage ?? 'unknown error'}`);
@@ -594,6 +650,13 @@ export async function buildJournalEntryBatchFromExplicitIds(
     );
   }
   await assertOnOrAfterPostingStart(rows, contextUser, p);
+  const awaiting = rows.filter(IsAwaitingManualApproval);
+  if (awaiting.length > 0) {
+    throw new JournalEntryBatchFromViewError(
+      `The batch was not built: ${awaiting.length} selected entr${awaiting.length === 1 ? 'y is a manual entry' : 'ies are manual entries'} ` +
+      `awaiting approval and cannot be batched until approved: ${awaiting.map(r => r.EntryNumber || r.ID).join(', ')}.`,
+    );
+  }
   const byCompany = new Map<string, string[]>();
   for (const id of jeIds) {
     const companyId = byId.get(id.toLowerCase())!.CompanyID;
@@ -648,8 +711,8 @@ export async function buildJournalEntryBatchFromView(
   options: BuildJournalEntryBatchFromViewOptions = {},
 ): Promise<BuildJournalEntryBatchResult[]> {
   const p = resolveProviders(provider);
-  const viewRes = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string }>(
-    { ViewID: viewId, Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate'], ResultType: 'simple', BypassCache: true },
+  const viewRes = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string; ApprovalLevel: string | null; ApprovedAt: string | null }>(
+    { ViewID: viewId, Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate', 'ApprovalLevel', 'ApprovedAt'], ResultType: 'simple', BypassCache: true },
     contextUser,
   );
   if (!viewRes.Success) throw new JournalEntryBatchFromViewError(`The batch was not built: could not run view ${viewId}: ${viewRes.ErrorMessage ?? 'unknown error'}`);
@@ -663,7 +726,7 @@ export async function buildJournalEntryBatchFromView(
   if (excluded.length > 0) {
     console.warn(`buildJournalEntryBatchFromView: excluded ${excluded.length} non-Pending entr${excluded.length === 1 ? 'y' : 'ies'} (overlap-safe): ${excluded.join(', ')}`);
   }
-  const batchable = await dropBeforePostingStart(pending, viewRes.Results ?? [], contextUser, p);
+  const batchable = dropAwaitingApproval(await dropBeforePostingStart(pending, viewRes.Results ?? [], contextUser, p), viewRes.Results ?? []);
   if (batchable.length === 0) throw new EmptyJournalEntryBatchError('Nothing to batch: the view holds no Pending entries that can be batched.');
   let inWindow = batchable;
   if (options.cutoff || options.startDate) {
@@ -694,6 +757,21 @@ async function dropBeforePostingStart(
     console.warn(`buildJournalEntryBatchFromView: excluded ${before.length} entr${before.length === 1 ? 'y' : 'ies'} dated before the company's posting start date: ${before.map(r => r.ID).join(', ')}`);
   }
   return onOrAfter.map(r => r.ID);
+}
+
+/**
+ * A view's batchable ids less the manual entries awaiting approval (golive #353). Dropped with a
+ * warning, like the entries before a posting start date: a view is a snapshot of whatever it
+ * matches, and an unapproved entry in it is ordinary, not an operator error.
+ */
+function dropAwaitingApproval(ids: string[], viewRows: Array<{ ID: string; ApprovalLevel?: string | null; ApprovedAt?: Date | string | null }>): string[] {
+  const awaiting = new Set(viewRows.filter(IsAwaitingManualApproval).map(r => r.ID));
+  if (awaiting.size === 0) return ids;
+  const dropped = ids.filter(id => awaiting.has(id));
+  if (dropped.length > 0) {
+    console.warn(`buildJournalEntryBatchFromView: excluded ${dropped.length} manual entr${dropped.length === 1 ? 'y' : 'ies'} awaiting approval: ${dropped.join(', ')}`);
+  }
+  return ids.filter(id => !awaiting.has(id));
 }
 
 /**
@@ -979,7 +1057,21 @@ export interface JournalEntryBatchCancelGate {
   /** Throw unless the user may cancel a Pending batch nobody rejected: the company's CFO or the batch's builder (golive #302). */
   assertMayCancelPending(batchId: string, contextUser: UserInfo): Promise<void>;
   assertMayCancelApproved(batchId: string, contextUser: UserInfo): Promise<void>;
+  /**
+   * Throw unless the user may archive the batch (#448): before approval only the company's CFO; past
+   * approval the CFO or the batch's approver, as for a cancel.
+   */
+  assertMayArchive(batchId: string, contextUser: UserInfo): Promise<void>;
   recordCancellation(batchId: string, cancellation: RecordedCancellation, contextUser: UserInfo): Promise<void>;
+  /** Record an archive on the approval Task, closing it when the batch was never approved (golive #325). */
+  recordArchive(batchId: string, archive: RecordedArchive, contextUser: UserInfo): Promise<void>;
+}
+
+/** What an archive records on the approval Task (golive #325). */
+export interface RecordedArchive {
+  reason: string;
+  /** The status the batch was archived FROM, passed in for the same reason as {@link RecordedCancellation.fromStatus}. */
+  fromStatus: string;
 }
 
 /** What a cancel records on the approval Task. */
@@ -1188,6 +1280,9 @@ export async function regenerateJournalEntryBatch(
   if (batch.Status !== 'Pending') {
     throw new Error(`The batch was not rebuilt: it is ${batch.Status}, and only a Pending batch can be rebuilt.`);
   }
+  // The month may have closed since the build; the ERP would refuse the batch under its kept PostingDate.
+  const postingDay = ToCalendarDay(batch.PostingDate);
+  if (postingDay) await assertPostingDayOpen(batch.CompanyID, postingDay, contextUser, p, 'regenerateJournalEntryBatch');
 
   // ONE transaction (D10 rev. 2026-07-29): teardown + re-gather + rebuild commit all-or-none.
   // Candidates are gathered AFTER teardown (inside the transaction) so the batch's own returning
@@ -1231,14 +1326,16 @@ export async function regenerateJournalEntryBatch(
 export async function approveJournalEntryBatch(
   batchId: string, approvedByUserId: string, contextUser: UserInfo, provider: IMetadataProvider,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
+  // The batch records its approver from the context user (#447); a different ID here would be a
+  // caller choosing whose approval is recorded.
+  if (!UUIDsEqual(approvedByUserId, contextUser.ID)) {
+    throw new Error(`approveJournalEntryBatch: the approver is recorded as the context user; approvedByUserId ${approvedByUserId} is not the context user ${contextUser.ID}.`);
+  }
   const p = resolveProviders(provider);
-  const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  const batch = await p.md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, contextUser);
   if (!(await batch.Load(batchId))) throw new Error(`The batch was not approved: batch ${batchId} was not found.`);
   if (batch.Status !== 'Pending') throw new Error(`The batch was not approved: it is ${batch.Status}, and only a Pending batch can be approved.`);
-  batch.Status = 'Approved';
-  batch.ApprovedAt = new Date();
-  batch.ApprovedByUserID = approvedByUserId;
-  if (!(await batch.Save())) throw new Error(`The batch was not approved: saving the approval failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown error'}`);
+  if (!(await batch.Approve(contextUser))) throw new Error(`The batch was not approved: saving the approval failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown error'}`);
   return batch;
 }
 
@@ -1406,9 +1503,11 @@ async function sendBatch(
   if (preflight.status === 'Found') return await adoptErpPosting(batch, preflight.externalJournalEntryBatchRef, sealBroken, contextUser, p);
 
   const postResult = await postOrFail(services.CreatePoster(p.md), batch, summaryLines, contextUser);
-  return postResult.success
-    ? await markBatchPosted(batch, postResult.externalJournalEntryBatchRef ?? null, contextUser, p)
-    : await failBatch(batch, postResult.error ?? 'The ERP did not accept the batch and gave no reason.');
+  if (postResult.success) return await markBatchPosted(batch, postResult.externalJournalEntryBatchRef ?? null, contextUser, p);
+  const error = postResult.error ?? 'The ERP did not accept the batch and gave no reason.';
+  const failed = await failBatch(batch, error);
+  await raiseRejectedPosting(failed, error, services, p);
+  return failed;
 }
 
 /**
@@ -1895,6 +1994,53 @@ async function failBatch(batch: mjBizAppsAccountingJournalEntryBatchEntity, erro
   throw new JournalEntryBatchFailureNotRecordedError(batch.ID, status, acceptedRef, error, saveError);
 }
 
+/** A batch the ERP rejected (golive #316). Finance clears it once the batch is retried or cancelled. */
+export const ERP_POSTING_REJECTED = 'ERP_POSTING_REJECTED';
+/** FinanceException.Summary's length. */
+const FINANCE_EXCEPTION_SUMMARY_MAX = 1000;
+
+/**
+ * Tells finance that the ERP rejected `batch` (golive #316): a Failed status on the batch alone is
+ * seen only by whoever opens the batch list, and a rejection is often a posting date the ERP has
+ * closed, which finance has to act on. One exception per send attempt, so a retry that fails again
+ * is raised again after the first was cleared. Never throws: the batch is already recorded Failed
+ * with the ERP's message, so a raise that fails is logged.
+ */
+async function raiseRejectedPosting(
+  batch: mjBizAppsAccountingJournalEntryBatchEntity, error: string, services: JournalEntryBatchDispatchServices, p: Providers,
+): Promise<void> {
+  const doc = batch.JournalEntryBatchNumber ?? batch.ID;
+  try {
+    const result = await services.RaiseFinanceExceptions({ Exceptions: [rejectedPostingException(batch, error)] }, p.md);
+    const skipped = result.Results?.[0]?.Skipped === true;
+    if (!result.Success || skipped) {
+      const why = skipped ? `the ${ERP_POSTING_REJECTED} type is inactive` : (result.Errors ?? []).map((e) => e.Message).join(' ');
+      LogError(`sendJournalEntryBatch: batch ${doc} was rejected by the ERP, and raising ${ERP_POSTING_REJECTED} failed: ${why}`);
+    }
+  } catch (e) {
+    LogError(`sendJournalEntryBatch: batch ${doc} was rejected by the ERP, and raising ${ERP_POSTING_REJECTED} threw.`, null, e);
+  }
+}
+
+/** The finance exception for a batch the ERP rejected, keyed to the batch and its send attempt. */
+export function rejectedPostingException(batch: mjBizAppsAccountingJournalEntryBatchEntity, error: string): AccountingFinanceExceptionToRaise {
+  const doc = batch.JournalEntryBatchNumber ?? batch.ID;
+  const postingDay = batch.PostingDate ? ToCalendarDay(batch.PostingDate) : null;
+  const summary = `Batch ${doc}${postingDay ? `, posting date ${postingDay},` : ''} was rejected by ${batch.TargetSystem}: ${error} ` +
+    'Fix the cause and send the batch again, or cancel it. If the posting date is in a period the ERP has closed, reopen the period or cancel and rebuild the batch with an open date.';
+  return {
+    TypeCode: ERP_POSTING_REJECTED,
+    SourceEntityName: BATCH_ENTITY,
+    SourceRecordID: batch.ID,
+    CompanyID: batch.CompanyID,
+    Amount: batch.TotalDebits ?? null,
+    // Its month is the close it affects. An unreadable posting date falls back to today's.
+    ExceptionDate: postingDay ?? new Date().toISOString().slice(0, 10),
+    Summary: summary.length > FINANCE_EXCEPTION_SUMMARY_MAX ? `${summary.slice(0, FINANCE_EXCEPTION_SUMMARY_MAX - 1)}…` : summary,
+    DedupeKey: `${batch.ID.toLowerCase()}:${batch.SendAttemptCount ?? 0}`,
+  };
+}
+
 /** The status the database holds for `batch`, reloading it; `Unknown` when the reload fails. */
 async function reloadedStatus(batch: mjBizAppsAccountingJournalEntryBatchEntity): Promise<string> {
   try {
@@ -1956,6 +2102,11 @@ export interface JournalEntryBatchPreviewResult {
    * their company's PostingStartDate. They are not in `Candidates` and no build takes them.
    */
   BeforePostingStartCount: number;
+  /**
+   * How many entries matching the other criteria were left out because they are manual entries
+   * awaiting approval (golive #353). They are not in `Candidates` and no build takes them.
+   */
+  AwaitingApprovalCount: number;
 }
 
 /**
@@ -2026,19 +2177,22 @@ export async function previewBatch(
 ): Promise<JournalEntryBatchPreviewResult> {
   const p = resolveProviders(provider);
   const filter = await candidateFilterParts(options, contextUser, p);
-  const res = await p.rv.RunView<{ ID: string; EntryNumber: string; EffectiveDate: string; EntryTypeID: string; CompanyID: string; Description: string | null }>(
+  // Read WITHOUT the approval part and split here: the entries awaiting approval are counted from
+  // the same read instead of a second query (golive #353). The build applies the full filter.
+  const res = await p.rv.RunView<{ ID: string; EntryNumber: string; EffectiveDate: string; EntryTypeID: string; CompanyID: string; Description: string | null; ApprovalLevel: string | null; ApprovedAt: string | null }>(
     {
       EntityName: JE_ENTITY,
       ExtraFilter: [...filter.criteria, ...filter.postingStart].join(' AND '),
       OrderBy: 'EffectiveDate ASC, EntryNumber ASC', // the same oldest-first order the build uses
-      Fields: ['ID', 'EntryNumber', 'EffectiveDate', 'EntryTypeID', 'CompanyID', 'Description'],
+      Fields: ['ID', 'EntryNumber', 'EffectiveDate', 'EntryTypeID', 'CompanyID', 'Description', 'ApprovalLevel', 'ApprovedAt'],
       ResultType: 'simple',
       BypassCache: true,
     },
     contextUser,
   );
   if (!res.Success) throw new Error(`Could not load the entries for the batch preview: ${res.ErrorMessage ?? 'unknown error'}`);
-  const rows = res.Results ?? [];
+  const matching = res.Results ?? [];
+  const rows = matching.filter(r => !IsAwaitingManualApproval(r));
   const included = includedIds ?? new Set(rows.map(r => r.ID));
   const includedRows = rows.filter(r => included.has(r.ID));
 
@@ -2084,6 +2238,7 @@ export async function previewBatch(
     PerCompany: perCompanySubtotals(groups),
     OutOfOrderSkipCount: outOfOrderSkipCount(rows, included),
     BeforePostingStartCount: await countBeforePostingStart(filter, contextUser, p),
+    AwaitingApprovalCount: matching.length - rows.length,
   };
 }
 

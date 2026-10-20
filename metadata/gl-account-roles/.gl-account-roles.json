@@ -34,7 +34,7 @@
   {
     "fields": {
       "Name": "Inventory",
-      "Description": "Inventory asset account (deferred domain - seeded per AM-2 for completeness).",
+      "Description": "Inventory asset account. Nothing in Accounting posts to this role yet.",
       "Status": "Active",
       "Cardinality": "One",
       "Sequence": 30
@@ -43,14 +43,14 @@
       "ID": "EC0DFA1E-4B57-4734-83B0-D20B72AC8968"
     },
     "sync": {
-      "lastModified": "2026-09-02T03:25:10.183Z",
-      "checksum": "2b5b875f363ad6825cc96a9b7096d8b39e8fb0f0724d3d228bda55c6631ba3aa"
+      "lastModified": "2026-10-20T13:23:59.132Z",
+      "checksum": "fb5c94a89bfe1bf401884d8981458899eaab1afbc2bc49aa31486e9fdf4025bb"
     }
   },
   {
     "fields": {
       "Name": "Cost of Goods Sold",
-      "Description": "COGS expense account (deferred domain - seeded per AM-2 for completeness).",
+      "Description": "Cost of goods sold expense account. Nothing in Accounting posts to this role yet.",
       "Status": "Active",
       "Cardinality": "One",
       "Sequence": 40
@@ -59,8 +59,8 @@
       "ID": "2466C088-3DFA-4DC7-92A6-34D40EAF1A91"
     },
     "sync": {
-      "lastModified": "2026-09-02T03:25:10.183Z",
-      "checksum": "75c701fe04a79cec8f65fc4875facefe5f949c303117ab449368e92ee1a81b6b"
+      "lastModified": "2026-10-20T13:23:59.142Z",
+      "checksum": "9b368f5cd31101ca9bc8b67e7524f3df3eec66d2fcc6c5e51d223bae12f444b9"
     }
   },
   {
@@ -114,7 +114,7 @@
   {
     "fields": {
       "Name": "Deferred Revenue",
-      "Description": "Liability account credited for revenue not yet earned (subscriptions). ASSUMED addition (OQ-H): absent from the 07-03 seed list but required by the meeting's own subscription example - confirm with Amith.",
+      "Description": "Liability account credited for revenue not yet earned (subscriptions).",
       "Status": "Active",
       "Cardinality": "One",
       "Sequence": 80
@@ -123,8 +123,8 @@
       "ID": "6D2EB237-F568-4372-8AA4-924995CD6834"
     },
     "sync": {
-      "lastModified": "2026-09-02T03:25:10.183Z",
-      "checksum": "ed99526fa00a386ace3fcef33c305a8cef2a81cfd6144b381f54f4fb26badce4"
+      "lastModified": "2026-10-20T13:23:59.152Z",
+      "checksum": "225c8c095a05d069462f15aeaccdc339fb1f01396ac951cf1080db6a0ee52921"
     }
   },
   {
@@ -185,6 +185,22 @@
     "sync": {
       "lastModified": "2026-09-29T00:01:41.013Z",
       "checksum": "6dc3eb935ef79d294795a6063baf4871490fcaa96cb5334077855902dfc52567"
+    }
+  },
+  {
+    "fields": {
+      "Name": "Gift Card Liability",
+      "Description": "Liability account for what the company owes on gift cards sold and not yet spent. Orders credits it when a gift card is sold, since the sale earns no revenue, and debits it when the card is spent as a tender. Resolved like every other role: product, product category, product type, then company. With no link, orders books the gift card to the Deferred Revenue account instead and logs a warning; the entry balances, but the two obligations cannot be told apart on the balance sheet.",
+      "Status": "Active",
+      "Cardinality": "One",
+      "Sequence": 120
+    },
+    "primaryKey": {
+      "ID": "00513874-D40A-49CD-97FF-AD55B85937FF"
+    },
+    "sync": {
+      "lastModified": "2026-10-20T13:23:59.165Z",
+      "checksum": "1d45f1d8f27339ace3fe1d79272919e4b2a7adca4b02031b8ffdf08b2e626cc0"
     }
   }
 ]

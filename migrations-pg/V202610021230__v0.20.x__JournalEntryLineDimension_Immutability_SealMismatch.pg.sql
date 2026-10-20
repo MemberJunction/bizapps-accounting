@@ -9,20 +9,12 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Schema
 --
--- The schema name is emitted UNQUOTED, so PostgreSQL folds it to lowercase. That is deliberate and
--- self-consistent: everything downstream in a converted migration refers to it unquoted too, so
--- both definition and lookup land on the same folded name.
---
--- DOWNSTREAM NOTE for the build engineer: a PostgreSQL database that was populated by an EARLIER
--- converter — one that emitted a quoted, case-preserved name — already holds that mixed-case
--- schema: for a target named MySchema_Name, the quoted "MySchema_Name". Re-converting against
--- that database creates a SECOND, empty schema myschema_name rather than reusing the existing
--- one, because IF NOT EXISTS compares the folded name and finds no match. The repo's own committed
--- migrations-pg files are unaffected (the only quoted CREATE SCHEMAs there are the four pg_dump
--- baselines, which this path does not produce), so this is an open-app / downstream concern, not
--- one for this repo's Flyway history.
-CREATE SCHEMA IF NOT EXISTS __mj_BizAppsAccounting;
-SET search_path TO __mj_BizAppsAccounting, public;
+-- The schema name is quoted so it keeps its case. `mj migrate --schema` (Skyway) and the Open App
+-- installer create the schema quoted, and MJ quotes it in runtime SQL. Unquoted, PostgreSQL folds it
+-- to __mj_bizappsaccounting, a different and empty schema. The converter emits it unquoted, so the
+-- quotes are added after conversion (see migrations-pg/README.md).
+CREATE SCHEMA IF NOT EXISTS "__mj_BizAppsAccounting";
+SET search_path TO "__mj_BizAppsAccounting", public;
 
 -- Ensure backslashes in string literals are treated literally (not as escape sequences)
 SET standard_conforming_strings = on;
@@ -41,26 +33,26 @@ SET standard_conforming_strings = on;
 -- -----------------------------------------------------------------------------
 -- 2. When a retry adopted the ERP's posting over a broken seal
 -- -----------------------------------------------------------------------------
-ALTER TABLE __mj_BizAppsAccounting."JournalEntryBatch"
+ALTER TABLE "__mj_BizAppsAccounting"."JournalEntryBatch"
  ADD COLUMN IF NOT EXISTS "SealMismatchDetectedAt" TIMESTAMPTZ NULL;
 
-CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_CompanyID" ON __mj_BizAppsAccounting."JournalEntryBatch" ("CompanyID");
+CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_CompanyID" ON "__mj_BizAppsAccounting"."JournalEntryBatch" ("CompanyID");
 
-CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_SummaryJournalEntryID" ON __mj_BizAppsAccounting."JournalEntryBatch" ("SummaryJournalEntryID");
+CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_SummaryJournalEntryID" ON "__mj_BizAppsAccounting"."JournalEntryBatch" ("SummaryJournalEntryID");
 
-CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_BatchedByUserID" ON __mj_BizAppsAccounting."JournalEntryBatch" ("BatchedByUserID");
+CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_BatchedByUserID" ON "__mj_BizAppsAccounting"."JournalEntryBatch" ("BatchedByUserID");
 
-CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_ApprovedByUserID" ON __mj_BizAppsAccounting."JournalEntryBatch" ("ApprovedByUserID");
+CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_ApprovedByUserID" ON "__mj_BizAppsAccounting"."JournalEntryBatch" ("ApprovedByUserID");
 
-CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_ApprovalTaskID" ON __mj_BizAppsAccounting."JournalEntryBatch" ("ApprovalTaskID");
+CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_ApprovalTaskID" ON "__mj_BizAppsAccounting"."JournalEntryBatch" ("ApprovalTaskID");
 
-CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_ArchivedByUserID" ON __mj_BizAppsAccounting."JournalEntryBatch" ("ArchivedByUserID");
+CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_ArchivedByUserID" ON "__mj_BizAppsAccounting"."JournalEntryBatch" ("ArchivedByUserID");
 
-CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_CancelledByUserID" ON __mj_BizAppsAccounting."JournalEntryBatch" ("CancelledByUserID");
+CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_CancelledByUserID" ON "__mj_BizAppsAccounting"."JournalEntryBatch" ("CancelledByUserID");
 
-CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_ERPNotPostedConfirm_c6068293" ON __mj_BizAppsAccounting."JournalEntryBatch" ("ERPNotPostedConfirmedByUserID");
+CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_ERPNotPostedConfirm_c6068293" ON "__mj_BizAppsAccounting"."JournalEntryBatch" ("ERPNotPostedConfirmedByUserID");
 
-CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_SentByUserID" ON __mj_BizAppsAccounting."JournalEntryBatch" ("SentByUserID");
+CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_JournalEntryBatch_SentByUserID" ON "__mj_BizAppsAccounting"."JournalEntryBatch" ("SentByUserID");
 
 
 -- ===================== Views =====================
@@ -69,7 +61,7 @@ DO $do$
 DECLARE
   v_target_schema CONSTANT TEXT := '__mj_BizAppsAccounting';
   v_target_name CONSTANT TEXT := 'vwJournalEntryBatches';
-  vsql CONSTANT TEXT := $vsql$CREATE OR REPLACE VIEW __mj_BizAppsAccounting."vwJournalEntryBatches"
+  vsql CONSTANT TEXT := $vsql$CREATE OR REPLACE VIEW "__mj_BizAppsAccounting"."vwJournalEntryBatches"
 AS SELECT
     j.*,
     "MJCompany_CompanyID"."Name" AS "Company",
@@ -82,13 +74,13 @@ AS SELECT
     "MJUser_ERPNotPostedConfirmedByUserID"."Name" AS "ERPNotPostedConfirmedByUser",
     "MJUser_SentByUserID"."Name" AS "SentByUser"
 FROM
-    __mj_BizAppsAccounting."JournalEntryBatch" AS j
+    "__mj_BizAppsAccounting"."JournalEntryBatch" AS j
 INNER JOIN
     ${mjSchema}."Company" AS "MJCompany_CompanyID"
   ON
     j."CompanyID" = "MJCompany_CompanyID"."ID"
 LEFT OUTER JOIN
-    __mj_BizAppsAccounting."JournalEntry" AS "mjBizAppsAccountingJournalEntry_SummaryJournalEntryID"
+    "__mj_BizAppsAccounting"."JournalEntry" AS "mjBizAppsAccountingJournalEntry_SummaryJournalEntryID"
   ON
     j."SummaryJournalEntryID" = "mjBizAppsAccountingJournalEntry_SummaryJournalEntryID"."ID"
 INNER JOIN
@@ -100,7 +92,7 @@ LEFT OUTER JOIN
   ON
     j."ApprovedByUserID" = "MJUser_ApprovedByUserID"."ID"
 LEFT OUTER JOIN
-    ${mjSchema}_BizAppsTasks."Task" AS "mjBizAppsTasksTask_ApprovalTaskID"
+    "${mjSchema}_BizAppsTasks"."Task" AS "mjBizAppsTasksTask_ApprovalTaskID"
   ON
     j."ApprovalTaskID" = "mjBizAppsTasksTask_ApprovalTaskID"."ID"
 LEFT OUTER JOIN
@@ -294,10 +286,10 @@ END $$;
 
 -- ===================== Grants =====================
 
-DO $$ BEGIN REVOKE SELECT ON __mj_BizAppsAccounting."vwJournalEntryBatches" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE SELECT ON __mj_BizAppsAccounting."vwJournalEntryBatches" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE SELECT ON __mj_BizAppsAccounting."vwJournalEntryBatches" FROM "cdp_UI"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN GRANT SELECT ON __mj_BizAppsAccounting."vwJournalEntryBatches" TO "cdp_UI", "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwJournalEntryBatches" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwJournalEntryBatches" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwJournalEntryBatches" FROM "cdp_UI"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT SELECT ON "__mj_BizAppsAccounting"."vwJournalEntryBatches" TO "cdp_UI", "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
 /* Base View Permissions SQL for MJ_BizApps_Accounting: Journal Entry Batches */
 -----------------------------------------------------------------
 -- SQL Code Generation
@@ -308,10 +300,10 @@ DO $$ BEGIN GRANT SELECT ON __mj_BizAppsAccounting."vwJournalEntryBatches" TO "c
 -- This file should NOT be edited by hand.
 -----------------------------------------------------------------;
 
-DO $$ BEGIN REVOKE SELECT ON __mj_BizAppsAccounting."vwJournalEntryBatches" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE SELECT ON __mj_BizAppsAccounting."vwJournalEntryBatches" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE SELECT ON __mj_BizAppsAccounting."vwJournalEntryBatches" FROM "cdp_UI"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN GRANT SELECT ON __mj_BizAppsAccounting."vwJournalEntryBatches" TO "cdp_UI", "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwJournalEntryBatches" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwJournalEntryBatches" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwJournalEntryBatches" FROM "cdp_UI"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT SELECT ON "__mj_BizAppsAccounting"."vwJournalEntryBatches" TO "cdp_UI", "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
 /* spCreate SQL for MJ_BizApps_Accounting: Journal Entry Batches */
 -----------------------------------------------------------------
 -- SQL Code Generation
@@ -326,14 +318,14 @@ DO $$ BEGIN GRANT SELECT ON __mj_BizAppsAccounting."vwJournalEntryBatches" TO "c
 ----- CREATE PROCEDURE FOR JournalEntryBatch
 ------------------------------------------------------------;
 
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spCreateJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spCreateJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spCreateJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
 /* spCreate Permissions for MJ_BizApps_Accounting: Journal Entry Batches */
 
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spCreateJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spCreateJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spCreateJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
 /* spUpdate SQL for MJ_BizApps_Accounting: Journal Entry Batches */
 -----------------------------------------------------------------
 -- SQL Code Generation
@@ -348,12 +340,12 @@ DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spCreateJournalEnt
 ----- UPDATE PROCEDURE FOR JournalEntryBatch
 ------------------------------------------------------------;
 
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spUpdateJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spUpdateJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spUpdateJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spUpdateJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spUpdateJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spUpdateJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
 /* spDelete SQL for MJ_BizApps_Accounting: Journal Entry Batches */
 -----------------------------------------------------------------
 -- SQL Code Generation
@@ -368,20 +360,20 @@ DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spUpdateJournalEnt
 ----- DELETE PROCEDURE FOR JournalEntryBatch
 ------------------------------------------------------------;
 
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spDeleteJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spDeleteJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spDeleteJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
 /* spDelete Permissions for MJ_BizApps_Accounting: Journal Entry Batches */
 
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spDeleteJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spDeleteJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spDeleteJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
 /* SQL text to delete unneeded entity fields (1 scoped entities) */
 
 
 -- ===================== Comments =====================
 
-COMMENT ON COLUMN __mj_BizAppsAccounting."JournalEntryBatch"."SealMismatchDetectedAt" IS 'When a retry of this Failed batch found its journal already in the ERP and recorded it Posted, with no second post, although the batch no longer matched its approved-content seal (a summary line''s dimension tags changed after approval). The local tags then differ from what the ERP holds; review them. NULL when the seal matched or the batch was never adopted this way.';
+COMMENT ON COLUMN "__mj_BizAppsAccounting"."JournalEntryBatch"."SealMismatchDetectedAt" IS 'When a retry of this Failed batch found its journal already in the ERP and recorded it Posted, with no second post, although the batch no longer matched its approved-content seal (a summary line''s dimension tags changed after approval). The local tags then differ from what the ERP holds; review them. NULL when the seal matched or the batch was never adopted this way.';
 
 
 -- ===================== Other =====================

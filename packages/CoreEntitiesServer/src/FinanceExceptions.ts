@@ -3,7 +3,8 @@
  *
  *   GetFinanceExceptionTypes   the detectors' thresholds (read-only)
  *   RaiseFinanceExceptions     idempotent raise from a consuming app, joining its transaction
- *   ClearFinanceException      a reviewer who did not create the source record clears one
+ *   ClearFinanceException      a reviewer who did not create the source record clears one, holding
+ *                              the right the exception's rule names (FinanceExceptionClearPolicy.ts)
  *
  * WHO READS AND WRITES. The callers are detectors running as whoever triggered them — the user
  * booking an order, the user attesting progress, a nightly job — and none of them holds rights on
@@ -20,13 +21,27 @@
  * CONCURRENCY. Both writes read under an update lock inside their transaction, so two callers on
  * the same row run one after the other: a second raise of an item finds the first one's row instead
  * of failing on UQ_FinanceException_Type_DedupeKey, and a second clear of a row finds it no longer
- * Open instead of overwriting the first reviewer.
+ * Open instead of overwriting the first reviewer. The lock SQL differs per platform: SQL Server
+ * takes UPDLOCK hints (HOLDLOCK adds key-range locks, so an absent key is locked too); PostgreSQL's
+ * FOR UPDATE locks only rows that exist, so a raise there first takes a transaction-scoped advisory
+ * lock per (type, DedupeKey).
  *
  * FAILURE MODEL. Logical failures come back inside the output as `Success: false` with coded
  * `Errors`; the operations never throw for them.
+ *
+ * NO SELF-CLOSING (YET). An exception stays Open until a person clears it, even when the condition
+ * behind it has since been fixed (the order confirmed, the progress attested, the read-back
+ * succeeded). Whether exceptions should close themselves is an open product question (golive #320
+ * §4 rule 2 / question 4). If it is adopted, the place for it is a separate operation the owning
+ * detector calls when its condition clears — not this one — that saves through
+ * SaveFinanceExceptionClearance as `Corrected`, with the system user as reviewer and a note naming
+ * the condition, so automatic closes stay distinguishable from human decisions on the monthly
+ * cleared list (saved query "Finance Exceptions Cleared"). It would need no new clearing right: the
+ * rights here govern decisions to accept or waive.
  */
 import {
-  AuthorizationEvaluator,
+  DatabasePlatform,
+  DatabaseProviderBase,
   EntityInfo,
   IMetadataProvider,
   IRunViewProvider,
@@ -35,7 +50,6 @@ import {
 } from '@memberjunction/core';
 import { UUIDsEqual } from '@memberjunction/global';
 import { UserCache } from '@memberjunction/generic-database-provider';
-import type { SQLServerDataProvider } from '@memberjunction/sqlserver-dataprovider';
 import { FromCalendarDay, IsCalendarDay } from '@mj-biz-apps/common-entities';
 import type {
   AccountingClearFinanceExceptionInput,
@@ -55,12 +69,25 @@ import {
   FinanceExceptionEntityServer,
   SaveFinanceExceptionClearance,
 } from './FinanceExceptionEntityServer.js';
+import {
+  FINANCE_EXCEPTIONS_CLEAR_AUTH,
+  FinanceExceptionClearRuleRefusal,
+  HoldsAnyFinanceExceptionClearRight,
+  HoldsFinanceExceptionClearRule,
+  ResolveFinanceExceptionClearRule,
+  type FinanceExceptionClearContext,
+} from './FinanceExceptionClearPolicy.js';
 import { isSqlGuid } from './SqlGuards.js';
 
-const FINANCE_EXCEPTION_TABLE = '__mj_BizAppsAccounting.FinanceException';
+/**
+ * The Finance Exceptions table per platform. PostgreSQL folds unquoted names to lowercase, and the
+ * schema, table and columns are created quoted and mixed-case, so every PostgreSQL name is quoted.
+ */
+const FINANCE_EXCEPTION_TABLE: Record<DatabasePlatform, string> = {
+  sqlserver: '__mj_BizAppsAccounting.FinanceException',
+  postgresql: '"__mj_BizAppsAccounting"."FinanceException"',
+};
 export const FINANCE_EXCEPTION_TYPE_ENTITY = 'MJ_BizApps_Accounting: Finance Exception Types';
-/** Held by the Finance role. Fails closed: an authorization missing from the catalog is held by nobody. */
-export const FINANCE_EXCEPTIONS_CLEAR_AUTH = 'MJ.BizApps.Accounting.FinanceExceptions.Clear';
 
 /** Keys per existence lookup, so one filter stays a reasonable size however many are raised. */
 const EXISTING_LOOKUP_CHUNK = 100;
@@ -104,9 +131,22 @@ function runViewProvider(provider: IMetadataProvider): IRunViewProvider {
   return provider as unknown as IRunViewProvider;
 }
 
-/** The server provider: transactions, and ExecuteSQL with named parameters (see SequenceService). */
-function database(provider: IMetadataProvider): SQLServerDataProvider {
-  return provider as unknown as SQLServerDataProvider;
+/** A parameter placeholder per platform, by 1-based position: `?` binds as @p0.. on SQL Server. */
+const PLACEHOLDER: Record<DatabasePlatform, (position: number) => string> = {
+  sqlserver: () => '?',
+  postgresql: position => `$${position}`,
+};
+
+/**
+ * The server provider: transactions, PlatformKey and ExecuteSQL with positional parameters. An
+ * unknown platform fails here, before any SQL runs, rather than sending another dialect's SQL.
+ */
+function database(provider: IMetadataProvider): DatabaseProviderBase {
+  const db = provider as unknown as DatabaseProviderBase;
+  if (!(db.PlatformKey in PLACEHOLDER)) {
+    throw new Error(`Finance exceptions have no locking SQL for database platform '${db.PlatformKey}'.`);
+  }
+  return db;
 }
 
 /**
@@ -239,41 +279,94 @@ function dedupeIdentity(typeID: string, dedupeKey: string): string {
   return `${typeID.toLowerCase()}|${dedupeKey.toLowerCase()}`;
 }
 
-function sqlNString(value: string): string {
-  return `N'${value.replace(/'/g, "''")}'`;
+/** SQL text and its positional parameters. */
+interface BoundSQL {
+  SQL: string;
+  Parameters: string[];
 }
 
 /**
- * The locking existence read for one chunk. UPDLOCK + HOLDLOCK take key-range locks on
- * UQ_FinanceException_Type_DedupeKey, found or not, until the transaction ends, so a concurrent
- * raise of the same item waits and then reads this one's row.
+ * The (type, DedupeKeys) predicate for one chunk, with its parameters in placeholder order.
+ * DedupeKey matches case-insensitively on both platforms, as dedupeIdentity does: SQL Server's
+ * default collation already ignores case, and PostgreSQL compares lower() of both sides, the form
+ * a unique index on lower("DedupeKey") in the PostgreSQL Finance Exceptions migration can serve.
  */
-function existingLookupSql(chunk: ResolvedRaise[]): string {
+function existingPredicate(chunk: ResolvedRaise[], platform: DatabasePlatform): BoundSQL {
   const byType = new Map<string, string[]>();
   for (const r of chunk) {
     byType.set(r.Type.ID, [...(byType.get(r.Type.ID) ?? []), r.Input.DedupeKey]);
   }
-  // Type IDs come from the database and DedupeKeys are quoted string literals, so neither can
-  // change the shape of the predicate.
-  const clauses = [...byType.entries()].map(
-    ([typeID, keys]) => `(FinanceExceptionTypeID = '${typeID}' AND DedupeKey IN (${keys.map(sqlNString).join(', ')}))`,
+  const placeholder = PLACEHOLDER[platform];
+  const Parameters: string[] = [];
+  const bind = (value: string): string => {
+    Parameters.push(value);
+    return placeholder(Parameters.length);
+  };
+  const clauses =
+    platform === 'postgresql'
+      ? [...byType.entries()].map(
+          ([typeID, keys]) =>
+            `("FinanceExceptionTypeID" = ${bind(typeID)} AND lower("DedupeKey") IN (${keys.map(k => `lower(${bind(k)}::text)`).join(', ')}))`,
+        )
+      : [...byType.entries()].map(
+          ([typeID, keys]) => `(FinanceExceptionTypeID = ${bind(typeID)} AND DedupeKey IN (${keys.map(bind).join(', ')}))`,
+        );
+  return { SQL: clauses.join(' OR '), Parameters };
+}
+
+/**
+ * The locking existence read for one chunk. On SQL Server, UPDLOCK + HOLDLOCK take key-range locks
+ * on UQ_FinanceException_Type_DedupeKey, found or not, until the transaction ends, so a concurrent
+ * raise of the same item waits and then reads this one's row. On PostgreSQL, FOR UPDATE locks the
+ * rows found; the absent keys are covered by keyLockSql, which runs first.
+ */
+function existingLookupSql(chunk: ResolvedRaise[], platform: DatabasePlatform): BoundSQL {
+  const predicate = existingPredicate(chunk, platform);
+  const names = ['ID', 'FinanceExceptionTypeID', 'DedupeKey', 'Status', 'SourceCreatedByUserID', 'CreatorUnresolved'];
+  const SQL =
+    platform === 'postgresql'
+      ? `SELECT ${names.map(n => `"${n}"`).join(', ')} FROM ${FINANCE_EXCEPTION_TABLE.postgresql} WHERE ${predicate.SQL} FOR UPDATE`
+      : `SELECT ${names.join(', ')} FROM ${FINANCE_EXCEPTION_TABLE.sqlserver} WITH (UPDLOCK, HOLDLOCK) WHERE ${predicate.SQL}`;
+  return { SQL, Parameters: predicate.Parameters };
+}
+
+/**
+ * PostgreSQL only: a transaction-scoped advisory lock per (type, DedupeKey) in the chunk, the
+ * stand-in for HOLDLOCK's lock on an absent key. A concurrent raise of the same item waits here
+ * until this transaction ends, then finds this one's row. The key is case-folded like
+ * dedupeIdentity, and the locks are taken in key order so two overlapping raises cannot deadlock.
+ * Two different keys that hash alike only wait for each other.
+ */
+function keyLockSql(chunk: ResolvedRaise[]): BoundSQL {
+  const Parameters = [...new Set(chunk.map(r => `FinanceException|${dedupeIdentity(r.Type.ID, r.Input.DedupeKey)}`))];
+  const values = Parameters.map((_, i) => `($${i + 1}::text)`).join(', ');
+  const SQL = `SELECT pg_advisory_xact_lock(k) FROM (SELECT DISTINCT hashtextextended(v.lock_key, 0) AS k FROM (VALUES ${values}) AS v(lock_key)) AS keys ORDER BY k`;
+  return { SQL, Parameters };
+}
+
+/** Existing rows for one chunk, locked. Call inside the raise's transaction. */
+async function loadExistingChunk(chunk: ResolvedRaise[], db: DatabaseProviderBase, ledger: UserInfo): Promise<ExistingExceptionRow[]> {
+  if (db.PlatformKey === 'postgresql') {
+    const lock = keyLockSql(chunk);
+    await db.ExecuteSQL(lock.SQL, lock.Parameters, { description: 'Accounting.RaiseFinanceExceptions: lock the dedupe keys' }, ledger);
+  }
+  const lookup = existingLookupSql(chunk, db.PlatformKey);
+  const rows = await db.ExecuteSQL<ExistingExceptionRow>(
+    lookup.SQL,
+    lookup.Parameters,
+    { description: 'Accounting.RaiseFinanceExceptions: existing rows (locking read)' },
+    ledger,
   );
-  return `SELECT ID, FinanceExceptionTypeID, DedupeKey, Status, SourceCreatedByUserID, CreatorUnresolved
-    FROM ${FINANCE_EXCEPTION_TABLE} WITH (UPDLOCK, HOLDLOCK)
-    WHERE ${clauses.join(' OR ')}`;
+  return rows ?? [];
 }
 
 /** Existing rows for the raises, keyed by dedupeIdentity. Call inside the raise's transaction. */
 async function loadExisting(raises: ResolvedRaise[], provider: IMetadataProvider, ledger: UserInfo): Promise<Map<string, ExistingExceptionRow>> {
+  const db = database(provider);
   const existing = new Map<string, ExistingExceptionRow>();
   for (let i = 0; i < raises.length; i += EXISTING_LOOKUP_CHUNK) {
-    const rows: ExistingExceptionRow[] = await database(provider).ExecuteSQL(
-      existingLookupSql(raises.slice(i, i + EXISTING_LOOKUP_CHUNK)),
-      null,
-      { description: 'Accounting.RaiseFinanceExceptions: existing rows (locking read)' },
-      ledger,
-    );
-    for (const row of rows ?? []) existing.set(dedupeIdentity(row.FinanceExceptionTypeID, row.DedupeKey), row);
+    const rows = await loadExistingChunk(raises.slice(i, i + EXISTING_LOOKUP_CHUNK), db, ledger);
+    for (const row of rows) existing.set(dedupeIdentity(row.FinanceExceptionTypeID, row.DedupeKey), row);
   }
   return existing;
 }
@@ -397,11 +490,26 @@ export async function RaiseFinanceExceptions(
 
 type ClearRefusal = { Code: string; Message: string };
 
+/** What the clearing rule reads, from the provider's metadata and the server's user cache. */
+export function FinanceExceptionClearContextFor(provider: IMetadataProvider): FinanceExceptionClearContext {
+  const users = UserCache.Instance;
+  return {
+    Authorizations: provider.Authorizations ?? [],
+    AuthorizationRoles: provider.AuthorizationRoles ?? [],
+    Roles: provider.Roles ?? [],
+    SystemUserID: users.GetSystemUser()?.ID ?? null,
+    FindUser: (userID: string) => (users.Users ?? []).find(u => UUIDsEqual(u.ID, userID)),
+  };
+}
+
+/**
+ * Whether the user holds any finance exception clearing right: the default
+ * MJ.BizApps.Accounting.FinanceExceptions.Clear, or a per-type / unattributed / escalated right a host
+ * has granted. Which exceptions they may clear is decided per record (FinanceExceptionClearPolicy).
+ */
 export function UserCanClearFinanceExceptions(user: UserInfo | null | undefined, provider: IMetadataProvider): boolean {
   if (!user) return false;
-  const catalog = provider.Authorizations ?? [];
-  const auth = catalog.find(a => a.Name === FINANCE_EXCEPTIONS_CLEAR_AUTH);
-  return !!auth && new AuthorizationEvaluator().UserCanExecuteWithAncestors(auth, user, catalog);
+  return HoldsAnyFinanceExceptionClearRight(FinanceExceptionClearContextFor(provider), user);
 }
 
 function inputRefusal(input: AccountingClearFinanceExceptionInput | null | undefined): ClearRefusal | null {
@@ -417,22 +525,7 @@ function inputRefusal(input: AccountingClearFinanceExceptionInput | null | undef
   return null;
 }
 
-/**
- * The creator has no linked login, so whether the reviewer is the creator cannot be checked, and
- * clearing is refused (golive #279). The row's summary is appended because the raising app names
- * the creator there, so the message says whose login to link. Once it is linked, the next raise
- * refreshes the row (refreshCreator) and it can be cleared.
- */
-function creatorUnresolvedRefusal(record: FinanceExceptionEntityServer): ClearRefusal | null {
-  if (!record.CreatorUnresolved) return null;
-  return {
-    Code: 'CREATOR_UNRESOLVED',
-    Message:
-      "The record's creator has no linked login, so separation of duties cannot be checked. Link the creator " +
-      `to a login; the exception can be cleared after the next check refreshes it. ${record.Summary}`,
-  };
-}
-
+/** The checks that hold whatever the rule: still Open, and the reviewer is not the source record's creator. */
 function recordRefusal(record: FinanceExceptionEntityServer, reviewer: UserInfo): ClearRefusal | null {
   if (record.Status !== 'Open') {
     return { Code: 'NOT_OPEN', Message: `Finance exception ${record.ID} is already ${record.Status}.` };
@@ -440,7 +533,32 @@ function recordRefusal(record: FinanceExceptionEntityServer, reviewer: UserInfo)
   if (record.SourceCreatedByUserID && UUIDsEqual(record.SourceCreatedByUserID, reviewer.ID)) {
     return { Code: 'CREATOR_CANNOT_CLEAR', Message: 'You created the record this exception is about, so someone else must review it.' };
   }
-  return creatorUnresolvedRefusal(record);
+  return null;
+}
+
+/**
+ * Whether this reviewer may clear this exception under its rule (FinanceExceptionClearPolicy).
+ * A CreatorUnresolved row with no ClearUnattributed grant is refused as CREATOR_UNRESOLVED: the
+ * creator cannot be compared with the reviewer. Once the creator's login is linked, the next raise
+ * refreshes the row (refreshCreator) and it can be cleared.
+ */
+async function ruleRefusal(
+  record: FinanceExceptionEntityServer,
+  reviewer: UserInfo,
+  provider: IMetadataProvider,
+  ledger: UserInfo,
+): Promise<ClearRefusal | null> {
+  const type = (await loadFinanceExceptionTypes(provider, ledger)).find(t => UUIDsEqual(t.ID, record.FinanceExceptionTypeID));
+  if (!type) {
+    return { Code: 'TYPE_UNKNOWN', Message: `Finance exception ${record.ID} names a finance exception type that could not be read.` };
+  }
+  const context = FinanceExceptionClearContextFor(provider);
+  const resolution = ResolveFinanceExceptionClearRule(
+    { TypeCode: type.Code, SourceCreatedByUserID: record.SourceCreatedByUserID, CreatorUnresolved: !!record.CreatorUnresolved, Summary: record.Summary },
+    context,
+  );
+  if ('Refusal' in resolution) return resolution.Refusal;
+  return HoldsFinanceExceptionClearRule(context, resolution.Rule, reviewer) ? null : FinanceExceptionClearRuleRefusal(context, resolution.Rule, type.Code);
 }
 
 export async function ClearFinanceException(
@@ -448,9 +566,12 @@ export async function ClearFinanceException(
   provider: IMetadataProvider,
   reviewer: UserInfo,
 ): Promise<AccountingClearFinanceExceptionOutput> {
-  // FIRST, BEFORE ANY READ: who may clear is the control.
+  // FIRST, BEFORE ANY READ: a caller with no clearing right at all learns nothing about the row.
   if (!UserCanClearFinanceExceptions(reviewer, provider)) {
-    return { Success: false, Errors: [{ Code: 'NOT_AUTHORIZED', Message: `You need the Finance role to clear a finance exception (authorization ${FINANCE_EXCEPTIONS_CLEAR_AUTH}).` }] };
+    return {
+      Success: false,
+      Errors: [{ Code: 'NOT_AUTHORIZED', Message: `You hold no right to clear finance exceptions (authorization ${FINANCE_EXCEPTIONS_CLEAR_AUTH}, or a per-type clearing right).` }],
+    };
   }
   const invalid = inputRefusal(input);
   if (invalid || !input) return { Success: false, Errors: [invalid ?? { Code: 'MALFORMED_INPUT', Message: 'Input is required.' }] };
@@ -464,6 +585,12 @@ export async function ClearFinanceException(
   }
 }
 
+/** The row lock a clear takes before reading the row, per platform. */
+const CLEAR_LOCK_SQL: Record<DatabasePlatform, string> = {
+  sqlserver: `SELECT ID FROM ${FINANCE_EXCEPTION_TABLE.sqlserver} WITH (UPDLOCK, ROWLOCK) WHERE ID = ?`,
+  postgresql: `SELECT "ID" FROM ${FINANCE_EXCEPTION_TABLE.postgresql} WHERE "ID" = $1 FOR UPDATE`,
+};
+
 /**
  * Locks the row, then reads, checks and saves it. The lock makes a concurrent clear of the same
  * row wait and then see it no longer Open (NOT_OPEN), rather than both saves succeeding and the
@@ -475,17 +602,13 @@ async function clearLocked(
   reviewer: UserInfo,
 ): Promise<AccountingClearFinanceExceptionOutput> {
   const ledger = FinanceLedgerUser();
-  await database(provider).ExecuteSQL(
-    `SELECT ID FROM ${FINANCE_EXCEPTION_TABLE} WITH (UPDLOCK, ROWLOCK) WHERE ID = @ID`,
-    { ID: input.FinanceExceptionID },
-    { description: 'Accounting.ClearFinanceException: lock the row' },
-    ledger,
-  );
+  const db = database(provider);
+  await db.ExecuteSQL(CLEAR_LOCK_SQL[db.PlatformKey], [input.FinanceExceptionID], { description: 'Accounting.ClearFinanceException: lock the row' }, ledger);
   const record = await provider.GetEntityObject<FinanceExceptionEntityServer>(FINANCE_EXCEPTION_ENTITY, ledger);
   if (!(await record.Load(input.FinanceExceptionID))) {
     return { Success: false, Errors: [{ Code: 'NOT_FOUND', Message: `No finance exception has the ID ${input.FinanceExceptionID}.` }] };
   }
-  const refusal = recordRefusal(record, reviewer);
+  const refusal = recordRefusal(record, reviewer) ?? (await ruleRefusal(record, reviewer, provider, ledger));
   if (refusal) return { Success: false, Status: record.Status, Errors: [refusal] };
 
   record.Status = input.Outcome;

@@ -33,13 +33,15 @@
       @if (BuildMessage) {
         <span role="status">{{ BuildMessage }}</span>
       }
-      <button type="button" class="mj-btn mj-btn--primary" [disabled]="Building" (click)="BuildJournalEntryBatch()">
-        @if (Building) {
-          <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Building…
-        } @else {
-          <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i> Build JE batch
-        }
-      </button>
+      @if (MayBuild) {
+        <button type="button" class="mj-btn mj-btn--primary" [disabled]="Building" (click)="BuildJournalEntryBatch()">
+          @if (Building) {
+            <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Building…
+          } @else {
+            <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i> Build JE batch
+          }
+        </button>
+      }
     </div>
   </mj-page-header>
 

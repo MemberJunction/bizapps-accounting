@@ -4,6 +4,7 @@ import {
     IsPeopleEntity,
     LinkedPersonRecordID,
     PEOPLE_ENTITY,
+    ResolveAllPersonIDsForUser,
     ResolvePersonIDForUser,
     ResolvePersonIDsForUsers,
     ResolveUserIDForPerson,
@@ -157,5 +158,49 @@ describe('ResolvePersonIDsForUsers', () => {
     it('throws when a read fails', async () => {
         const { provider } = providerOver(() => null);
         await expect(ResolvePersonIDsForUsers([USER_ID], provider)).rejects.toThrow('User lookup failed');
+    });
+});
+
+describe('ResolveAllPersonIDsForUser', () => {
+    it('returns the own-link Person AND every LinkedUserID Person, own link first', async () => {
+        // The view answers oldest first, which puts the LinkedUserID Person ahead of the own link.
+        const { provider, calls } = providerOver((p) =>
+            p.EntityName === 'MJ: Users'
+                ? [{ LinkedEntityID: PLATFORM_PEOPLE_ID, LinkedEntityRecordID: PERSON_A }]
+                : [{ ID: PERSON_B }, { ID: PERSON_A }],
+        );
+        expect(await ResolveAllPersonIDsForUser(USER_ID, provider)).toEqual([PERSON_A, PERSON_B]);
+        expect(calls[1].ExtraFilter).toBe(`LinkedUserID = '${USER_ID}' OR ID = '${PERSON_A}'`);
+        expect(calls[1].ExtraFilter).not.toContain('Status');
+    });
+    it('differs from ResolvePersonIDsForUsers: a user with an own link still gets its LinkedUserID Persons', async () => {
+        const { provider } = providerOver((p) =>
+            p.EntityName === 'MJ: Users'
+                ? [{ ID: USER_ID, LinkedEntityID: PEOPLE_ID, LinkedEntityRecordID: PERSON_A }]
+                // ResolvePersonIDsForUsers reads only the own link; ResolveAllPersonIDsForUser also reads LinkedUserID.
+                : String(p.ExtraFilter).includes('LinkedUserID')
+                    ? [{ ID: PERSON_A, LinkedUserID: null }, { ID: PERSON_B, LinkedUserID: USER_ID }]
+                    : [{ ID: PERSON_A, LinkedUserID: null }],
+        );
+        expect((await ResolvePersonIDsForUsers([USER_ID], provider)).get(USER_ID)).toBe(PERSON_A);
+        expect(await ResolveAllPersonIDsForUser(USER_ID, provider)).toEqual([PERSON_A, PERSON_B]);
+    });
+    it('reads only LinkedUserID when the user links to no People record, or to a record ID that is not a UUID', async () => {
+        for (const link of [{ LinkedEntityID: OTHER_ENTITY_ID, LinkedEntityRecordID: PERSON_A }, { LinkedEntityID: PEOPLE_ID, LinkedEntityRecordID: "x' OR 1=1 --" }]) {
+            const { provider, calls } = providerOver((p) => (p.EntityName === 'MJ: Users' ? [link] : [{ ID: PERSON_B }]));
+            expect(await ResolveAllPersonIDsForUser(USER_ID, provider)).toEqual([PERSON_B]);
+            expect(calls[1].ExtraFilter).toBe(`LinkedUserID = '${USER_ID}'`);
+        }
+    });
+    it('throws on a user ID that is not a UUID, before any read', async () => {
+        const { provider, calls } = providerOver(() => []);
+        await expect(ResolveAllPersonIDsForUser("x' OR 1=1 --", provider)).rejects.toThrow(/not a valid user ID/);
+        expect(calls).toHaveLength(0);
+    });
+    it('throws when either read fails', async () => {
+        const users = providerOver(() => null);
+        await expect(ResolveAllPersonIDsForUser(USER_ID, users.provider)).rejects.toThrow('User lookup failed');
+        const people = providerOver((p) => (p.EntityName === 'MJ: Users' ? [] : null));
+        await expect(ResolveAllPersonIDsForUser(USER_ID, people.provider)).rejects.toThrow('Person lookup failed');
     });
 });

@@ -26,7 +26,18 @@
  *   DOC:      docs/ARCHITECTURE.md#company-profile-init
  */
 
-import { BaseEntity, IRunViewProvider, LogError, Metadata, RunView, ValidationErrorInfo, ValidationResult } from '@memberjunction/core';
+import {
+  AuthorizationEvaluator,
+  BaseEntity,
+  IMetadataProvider,
+  IRunViewProvider,
+  LogError,
+  Metadata,
+  RunView,
+  UserInfo,
+  ValidationErrorInfo,
+  ValidationResult,
+} from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
@@ -40,6 +51,20 @@ import {
   DEFAULT_CHART_OF_ACCOUNTS,
   SeededGLAccount,
 } from './SeedData.js';
+
+/**
+ * Held by the Finance role (bc-aidp-next-golive#316). Fails closed: an authorization missing from
+ * the catalog is held by nobody, so nobody can change the date.
+ */
+export const BOOKS_CLOSED_THROUGH_SET_AUTH = 'MJ.BizApps.Accounting.BooksClosedThroughDate.Set';
+
+/** True when `user` may set or move a company's BooksClosedThroughDate. */
+export function UserCanSetBooksClosedThroughDate(user: UserInfo | null | undefined, provider: IMetadataProvider): boolean {
+  if (!user) return false;
+  const catalog = provider.Authorizations ?? [];
+  const auth = catalog.find(a => a.Name === BOOKS_CLOSED_THROUGH_SET_AUTH);
+  return !!auth && new AuthorizationEvaluator().UserCanExecuteWithAncestors(auth, user, catalog);
+}
 
 @RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Accounting Company Profiles')
 export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAccountingCompanyProfileEntity {
@@ -63,12 +88,14 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
    * (bc-aidp-next-golive#313). Those types keep no books, so their entries resolve their legal
    * entity's accounts and an account the company owned would never be used, or would book entries
    * under a company with no ERP connection. `GLAccountEntityServer` refuses the same state on the
-   * account side. Checked only when EntityType changes, so other edits to such a profile still save.
+   * account side. Checked on create, because GL accounts reference __mj.Company and a company can
+   * own accounts before its profile exists, and on update only when EntityType changes, so other
+   * edits to such a profile still save.
    */
   public override async ValidateAsync(): Promise<ValidationResult> {
     const result = await super.ValidateAsync();
-    const entityTypeChanged = this.GetFieldByName('EntityType')?.Dirty ?? false;
-    if (this.IsSaved && entityTypeChanged && UsesParentBooks(this.EntityType)) {
+    this.validateBooksClosedThroughChange(result);
+    if (UsesParentBooks(this.EntityType) && this.entityTypeNeedsOwnerCheck()) {
       const ownedCode = await this.firstActiveGLAccountCode();
       const error = ownedCode === null ? null : ParentBooksAccountOwnerError(ownedCode, this.ID, this.EntityType);
       if (error) {
@@ -77,6 +104,32 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
       }
     }
     return result;
+  }
+
+  /** True for a new profile, or a saved one whose EntityType was edited. */
+  private entityTypeNeedsOwnerCheck(): boolean {
+    if (!this.IsSaved) return true;
+    return this.GetFieldByName('EntityType')?.Dirty ?? false;
+  }
+
+  /**
+   * Only finance moves BooksClosedThroughDate (bc-aidp-next-golive#316). Closing a month and
+   * reopening one both change it, and every change is kept in the record-change history, which this
+   * entity tracks. A save that leaves the date as it was is not checked, so other edits to the
+   * profile still save for anyone allowed to edit it.
+   */
+  private validateBooksClosedThroughChange(result: ValidationResult): void {
+    const field = this.GetFieldByName('BooksClosedThroughDate');
+    const changing = this.IsSaved ? (field?.Dirty ?? false) : this.BooksClosedThroughDate != null;
+    if (!changing) return;
+    const provider = this.ProviderToUse as unknown as IMetadataProvider;
+    if (UserCanSetBooksClosedThroughDate(this.ContextCurrentUser, provider)) return;
+    result.Success = false;
+    result.Errors.push(new ValidationErrorInfo(
+      'BooksClosedThroughDate',
+      'Only finance can change the date the books are closed through.',
+      this.BooksClosedThroughDate,
+    ));
   }
 
   /**
@@ -132,7 +185,7 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
     const result = await rv.RunView<mjBizAppsAccountingGLAccountEntity>(
       {
         EntityName: 'MJ_BizApps_Accounting: GL Accounts',
-        ExtraFilter: `CompanyID = '${companyId}'`,
+        ExtraFilter: `CompanyID=${sqlGuidLiteral(companyId, 'AccountingCompanyProfileEntityServer.loadExistingGLAccountCodes')}`,
         ResultType: 'simple',
         Fields: ['Code'],
       },

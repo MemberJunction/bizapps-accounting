@@ -15,7 +15,7 @@
     "build:packages": "turbo --log-order=stream build --filter=\"@mj-biz-apps/accounting-*\"",
     "test": "turbo --log-order=stream --continue test test:dom test:types --filter=\"@mj-biz-apps/accounting-*\" --filter=!@mj-biz-apps/accounting-integration-tests",
     "mj": "mj",
-    "mj:migrate": "mj migrate --schema __mj_BizAppsAccounting --dir ./migrations",
+    "mj:migrate": "mj migrate --schema __mj_BizAppsAccounting",
     "mj:codegen": "mj codegen",
     "install:deps": "pnpm install",
     "setup": "echo 'Please run: pnpm run mj:migrate && pnpm run mj:codegen && pnpm run build'",
@@ -23,8 +23,8 @@
     "version": "changeset version",
     "version:prepare": "changeset version && node ci/sync-mj-app-version.mjs && pnpm install --lockfile-only",
     "db:rebuild": "scripts/rebuild-db.sh",
-    "test:integration": "node test-harnesses/integration.mjs",
-    "db:append-codegen": "scripts/append-codegen.sh"
+    "demo:load": "mj sync push --dir demo-data",
+    "test:integration": "node test-harnesses/integration.mjs"
   },
   "repository": {
     "type": "git",
@@ -42,25 +42,6 @@
     "tsc-alias": "^1.8.16",
     "turbo": "^2.7.3",
     "typescript": "^5.9.3"
-  },
-  "pnpm": {
-    "overrides": {
-      "@angular/animations": "21.1.3",
-      "@angular/build": "21.1.3",
-      "@angular/cli": "21.1.3",
-      "@angular/common": "21.1.3",
-      "@angular/compiler": "21.1.3",
-      "@angular/compiler-cli": "21.1.3",
-      "@angular/core": "21.1.3",
-      "@angular/forms": "21.1.3",
-      "@angular/localize": "21.1.3",
-      "@angular/platform-browser": "21.1.3",
-      "@angular/platform-browser-dynamic": "21.1.3",
-      "@angular/router": "21.1.3",
-      "@angular-devkit/build-angular": "21.1.3",
-      "@memberjunction/core": "^6.1.6",
-      "@memberjunction/global": "^6.1.6"
-    }
   },
   "engines": {
     "node": ">=18.0.0",

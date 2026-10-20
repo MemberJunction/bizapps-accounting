@@ -16,13 +16,14 @@ import {
 import { SharedGenericModule } from '@memberjunction/ng-shared-generic';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { JournalEntryBatchWorkspacePageComponent } from './journal-entry-batch-workspace.page';
-import { JournalEntryBatchWorkspaceClient, type BatchPreview } from './journal-entry-batch-workspace.client';
+import { JournalEntryBatchWorkspaceClient, type BatchPreview, type EntryTypeScope } from './journal-entry-batch-workspace.client';
 import { WorkspaceCardComponent } from '../../../transfer-pending/workspace-tabs/workspace-card.component';
 import { WorkspaceTabStripComponent } from '../../../transfer-pending/workspace-tabs/workspace-tab-strip.component';
 import { WorkspaceTipDirective } from '../../../transfer-pending/workspace-tabs/workspace-tip.directive';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { AccountingShellModule } from '../shell.module';
 import { AUGUST_CLOSE_IN_CHICAGO, stubbedReadsProvider, useBusinessClock } from '../../../../__tests__/support/business-clock';
+import { BatchOperatorCatalog } from '../../../../__tests__/support/batch-operator';
 
 /**
  * The batch workspace's default cutoff is the BUSINESS day, sent as a day (golive #168).
@@ -44,10 +45,14 @@ interface RecordedCall {
   Payload: Record<string, unknown>;
 }
 
-/** A provider that carries a user and records every remote operation the page routes. */
-function recordingProvider(calls: RecordedCall[]): IMetadataProvider {
-  const provider: Pick<IMetadataProvider, 'CurrentUser'> & Pick<IRemoteOperationProvider, 'RouteOperation'> = {
+/**
+ * A provider that carries a user and records every remote operation the page routes. The batch-operator
+ * grant (#448) goes to every user unless `operators` names who holds it.
+ */
+function recordingProvider(calls: RecordedCall[], operators?: readonly string[]): IMetadataProvider {
+  const provider: Pick<IMetadataProvider, 'CurrentUser' | 'Authorizations'> & Pick<IRemoteOperationProvider, 'RouteOperation'> = {
     CurrentUser: new UserInfo(),
+    Authorizations: BatchOperatorCatalog(operators),
     RouteOperation: async <TInput, TOutput>(name: string, payload: TInput): Promise<RemoteOpResult<TOutput>> => {
       calls.push({ Name: name, Payload: payload as Record<string, unknown> });
       const emptyPreview = { Candidates: [] } as unknown as TOutput;
@@ -124,9 +129,9 @@ describe('JournalEntryBatchWorkspacePageComponent — posting date (golive #315)
       .compileComponents();
   });
 
-  async function render(): Promise<JournalEntryBatchWorkspacePageComponent> {
+  async function render(operators?: readonly string[]): Promise<JournalEntryBatchWorkspacePageComponent> {
     const fixture = TestBed.createComponent(JournalEntryBatchWorkspacePageComponent);
-    fixture.componentRef.setInput('Provider', recordingProvider(calls));
+    fixture.componentRef.setInput('Provider', recordingProvider(calls, operators));
     fixture.detectChanges();
     await fixture.whenStable();
     return fixture.componentInstance;
@@ -148,6 +153,17 @@ describe('JournalEntryBatchWorkspacePageComponent — posting date (golive #315)
     page.Apply();
     await vi.waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0].Payload['PostingDate']).toBe(BUSINESS_DAY);
+  });
+
+  it('ends the "through" chip at a posting date earlier than the cutoff (#401)', async () => {
+    // The pool ends at the earlier of the two, so the chip must not describe a wider window.
+    const page = await render();
+    page.Draft!.Criteria.PostingDate = '2026-08-29';
+    expect(page.CriteriaChips).toContain('through 2026-08-29 (posting date)');
+    expect(page.CriteriaChips).not.toContain(`through ${BUSINESS_DAY}`);
+
+    page.Draft!.Criteria.PostingDate = '2026-09-02';
+    expect(page.CriteriaChips).toContain(`through ${BUSINESS_DAY}`);
   });
 
   it('sends the chosen posting date with the build', async () => {
@@ -201,6 +217,16 @@ describe('JournalEntryBatchWorkspacePageComponent — posting date (golive #315)
 
     const build = calls.find(c => c.Name === 'Accounting.BuildJournalEntryBatch');
     expect(build?.Payload['PostingDate']).toBe('2026-09-01');
+  });
+
+  it('blocks the build, and sends nothing, for a user without the batch-operator grant (#448)', async () => {
+    const page = await render([]);
+    withPreview(page, '2026-08-30');
+    page.Draft!.Criteria.PostingDate = '2026-08-30';
+    expect(page.CanBuild).toBe(false);
+    expect(page.BuildBlockedReason).toBe('Building a journal entry batch requires the Finance role.');
+    await page.Build();
+    expect(calls.find(c => c.Name === 'Accounting.BuildJournalEntryBatch')).toBeUndefined();
   });
 
   it('allows a posting date on the latest included entry\'s day', async () => {
@@ -453,5 +479,105 @@ describe('JournalEntryBatchWorkspacePageComponent — selection across a criteri
     expect(ticked(fixture)).toEqual(['Include JE-S2']);
     expect(page.IncludedCount).toBe(1);
     expect(page.Preview?.GrossDebits).toBe(70);
+  });
+});
+
+/**
+ * #327: the workspace's header checkbox selects every entry or clears them all, like the Build
+ * Batch dialog's. Clearing sends an empty selection, so entries a wider criteria brings in later
+ * stay unticked; ticking it again sends no selection, so they come in ticked.
+ */
+describe('JournalEntryBatchWorkspacePageComponent — select all / Clear All (DOM, #327)', () => {
+  const MANUAL = { ...ENTRY_A, EntryTypeCode: 'Manual', Amount: 100 };
+  const MANUAL_2 = { ...ENTRY_B, EntryTypeCode: 'Manual', Amount: 200 };
+  const SYSTEM = { ...ENTRY_B, ID: 'je-s1', EntryNumber: 'JE-S1', EffectiveDate: '2026-08-03', EntryTypeCode: 'Invoice', Amount: 50 };
+  const POOL = [MANUAL, MANUAL_2, SYSTEM];
+  let requested: Array<string[] | null>;
+
+  beforeEach(async () => {
+    vi.spyOn(AccountingEngineBase.Instance, 'Config').mockResolvedValue(undefined);
+    requested = [];
+    vi.spyOn(JournalEntryBatchWorkspaceClient.prototype, 'Preview').mockImplementation(async (_p, _c, includedIds, entryTypes) => {
+      requested.push(includedIds);
+      const rows = POOL.filter((e) => !entryTypes || entryTypes.includes(e.EntryTypeCode));
+      const included = new Set(includedIds ?? rows.map((r) => r.ID));
+      const total = rows.filter((r) => included.has(r.ID)).reduce((s, r) => s + r.Amount, 0);
+      return { ...preview(total), Candidates: rows };
+    });
+    await TestBed.configureTestingModule({ imports: [AccountingShellModule], providers: [PageRefreshService] }).compileComponents();
+  });
+
+  async function loaded(scope: EntryTypeScope): Promise<ComponentFixture<JournalEntryBatchWorkspacePageComponent>> {
+    const fixture = TestBed.createComponent(JournalEntryBatchWorkspacePageComponent);
+    fixture.componentRef.setInput('Provider', stubbedReadsProvider());
+    fixture.detectChanges();
+    const page = fixture.componentInstance;
+    page.Draft!.Criteria.EntryTypeScope = scope;
+    page.Apply();
+    await vi.waitFor(() => expect(page.IsPreviewing).toBe(false));
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  const header = (fixture: ComponentFixture<JournalEntryBatchWorkspacePageComponent>) =>
+    fixture.nativeElement.querySelector('.bw-grid thead input[type="checkbox"]') as HTMLInputElement | null;
+
+  const ticked = (fixture: ComponentFixture<JournalEntryBatchWorkspacePageComponent>) =>
+    Array.from(fixture.nativeElement.querySelectorAll('.bw-grid tbody input[type="checkbox"]') as NodeListOf<HTMLInputElement>)
+      .filter((b) => b.checked)
+      .map((b) => b.getAttribute('aria-label'));
+
+  async function clickHeader(fixture: ComponentFixture<JournalEntryBatchWorkspacePageComponent>): Promise<void> {
+    header(fixture)!.click();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsPreviewing).toBe(false));
+    fixture.detectChanges();
+  }
+
+  it('starts ticked with every entry, and Clear All unticks them all and zeroes the totals', async () => {
+    const fixture = await loaded('Manual');
+    expect(header(fixture), 'the header checkbox renders').not.toBeNull();
+    expect(header(fixture)!.checked).toBe(true);
+
+    await clickHeader(fixture);
+
+    const page = fixture.componentInstance;
+    expect(requested.at(-1)).toEqual([]);
+    expect(ticked(fixture)).toEqual([]);
+    expect(header(fixture)!.checked).toBe(false);
+    expect(page.IncludedCount).toBe(0);
+    expect(page.Preview?.GrossDebits).toBe(0);
+    expect(page.CanBuild).toBe(false);
+  });
+
+  it('ticks every entry again after some were unticked, and sends no selection', async () => {
+    const fixture = await loaded('Manual');
+    const page = fixture.componentInstance;
+    page.ToggleEntry(MANUAL.ID);
+    await vi.waitFor(() => expect(page.IsPreviewing).toBe(false));
+    fixture.detectChanges();
+    expect(header(fixture)!.checked, 'not every entry is ticked').toBe(false);
+
+    await clickHeader(fixture);
+
+    expect(requested.at(-1)).toBeNull();
+    expect(ticked(fixture)).toEqual(['Include JE-A', 'Include JE-B']);
+    expect(header(fixture)!.checked).toBe(true);
+    expect(page.Preview?.GrossDebits).toBe(300);
+  });
+
+  it('after Clear All, entries that wider criteria bring in stay unticked', async () => {
+    const fixture = await loaded('Manual');
+    await clickHeader(fixture);
+
+    const page = fixture.componentInstance;
+    page.Draft!.Criteria.EntryTypeScope = 'All';
+    page.OnCriteriaChanged();
+    page.Apply();
+    await vi.waitFor(() => expect(page.IsPreviewing).toBe(false));
+    fixture.detectChanges();
+
+    expect(requested.at(-1)).toEqual([]);
+    expect(ticked(fixture)).toEqual([]);
+    expect(page.Preview?.Candidates.length).toBe(3);
   });
 });

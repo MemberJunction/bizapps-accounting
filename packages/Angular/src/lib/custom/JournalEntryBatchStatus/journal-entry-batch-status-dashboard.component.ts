@@ -10,7 +10,8 @@ import {
   mjBizAppsAccountingJournalEntryBatchEntity,
 } from '@mj-biz-apps/accounting-entities';
 import { JournalEntryBatchDispatchClient } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
-import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import { AccountingEngineBase, UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
+import { BusinessTimeZoneEngine, IsBeforeDay, ToCalendarDay } from '@mj-biz-apps/common-entities';
 import { resolveBatchStatusWindow } from './batch-status-window';
 
 /** Generated value-list unions (rule 2c: derived from the entity, never hand-copied). */
@@ -89,6 +90,14 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   public PreviewEntries: PreviewEntry[] = [];
   public PreviewStart: Date | null = null;
   public PreviewEnd: Date | null = null;
+  /**
+   * `YYYY-MM-DD`; the build includes entries dated on or before it. Defaults to today's business day
+   * when the preview opens, like the batch workspace and the Build Batch modal (#426); cleared, the
+   * pool runs through the posting date, which this screen leaves at today.
+   */
+  public BuildCutoffDate = '';
+  /** Every unbatched Pending entry; the preview shows the ones the cutoff admits. */
+  private buildCandidates: PreviewEntry[] = [];
 
   public Batches: BatchRow[] = [];
   public Companies: { ID: string; Name: string }[] = [];
@@ -279,10 +288,20 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
 
   // ─── build-batch preview → build ─────────────────────────────────────────────
 
+  /**
+   * Whether the signed-in user holds the batch-operator Authorization (the Finance role) that a build
+   * requires on the server (#448). The server stays the authority; this only decides what shows.
+   */
+  public get MayBuild(): boolean {
+    return UserCanOperateJournalEntryBatches(this.contextUser(), this.ProviderToUse.Authorizations);
+  }
+
   /** Open the preview: gather the journal entries a build would include + the span they cover. */
   public async OpenBuildPreview(): Promise<void> {
+    if (!this.MayBuild) return;
     this.BuildPreviewVisible = true;
     this.PreviewLoading = true;
+    if (!this.BuildCutoffDate) this.BuildCutoffDate = BusinessTimeZoneEngine.Instance.Today();
     this.clearActionMessage();
     this.cdr.markForCheck();
     try {
@@ -308,24 +327,48 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
     const lines = jes.length ? await this.loadLines(jes.map(j => j.ID)) : [];
     const totalByJe = new Map<string, number>();
     for (const l of lines) totalByJe.set(l.JournalEntryID, (totalByJe.get(l.JournalEntryID) ?? 0) + (l.DebitAmount ?? 0));
-    this.PreviewEntries = jes.map(j => ({
+    this.buildCandidates = jes.map(j => ({
       ID: j.ID, EntryNumber: j.EntryNumber,
       EffectiveDate: j.EffectiveDate ? new Date(j.EffectiveDate) : null,
       EntryType: j.EntryType, Description: j.Description,
       Amount: Math.round((totalByJe.get(j.ID) ?? 0) * 100) / 100,
     }));
+    this.applyBuildCutoff();
+  }
+
+  public OnBuildCutoffChange(day: string): void {
+    this.BuildCutoffDate = day ?? '';
+    this.applyBuildCutoff();
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * Narrow the candidates to what the build takes: entries dated through the earlier of the cutoff
+   * and the posting date. This screen sends no posting date, so the server uses today's business day.
+   */
+  private applyBuildCutoff(): void {
+    const today = BusinessTimeZoneEngine.Instance.Today();
+    const cutoff = this.BuildCutoffDate;
+    const through = cutoff && IsBeforeDay(cutoff, today) ? cutoff : today;
+    this.PreviewEntries = this.buildCandidates.filter(e => {
+      const day = ToCalendarDay(e.EffectiveDate);
+      return !day || !IsBeforeDay(through, day);
+    });
     const times = this.PreviewEntries.map(e => e.EffectiveDate).filter((d): d is Date => d instanceof Date).map(d => d.getTime());
     this.PreviewStart = times.length ? new Date(Math.min(...times)) : null;
     this.PreviewEnd = times.length ? new Date(Math.max(...times)) : null;
   }
 
   public async OnBuildJournalEntryBatch(): Promise<void> {
-    if (this.Building) return;
+    if (this.Building || !this.MayBuild) return;
     this.Building = true;
     this.clearActionMessage();
     this.cdr.markForCheck();
     try {
-      const res = await new JournalEntryBatchDispatchClient(this.ProviderToUse as GraphQLDataProvider).BuildJournalEntryBatch(this.BuildTarget);
+      const res = await new JournalEntryBatchDispatchClient(this.ProviderToUse as GraphQLDataProvider).BuildJournalEntryBatch({
+        TargetSystem: this.BuildTarget,
+        Cutoff: this.BuildCutoffDate || null,
+      });
       if (res.Success && res.NothingToBatch) {
         this.setActionMessage('No pending journal entries to batch.', false);
         this.BuildPreviewVisible = false;

@@ -15,6 +15,7 @@
 }
 .bs-field .mj-input { min-width: 150px; }
 .bs-field input[type="date"] { min-width: 140px; }
+.bs-field__hint { font-size: 12px; color: var(--mj-status-warning); max-width: 220px; }
 
 /* ── banners ─────────────────────────────────────────────────────────────── */
 .bs-banner {
