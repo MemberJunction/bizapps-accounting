@@ -1,5 +1,42 @@
 # @mj-biz-apps/accounting-entities
 
+## 0.24.0
+
+### Minor Changes
+
+- ff56bcc: The 0.24 Metadata_Sync ships what metadata/ gained since 0.23, so hosts receive it through migrations: five finance exception types, the Gift Card Liability GL account role, the accounting API scopes and their MJAPI application scopes, eleven authorizations with two Finance grants, the Finance Exceptions Cleared and Journal Entries Held Back By Posting Start Date queries, form categories on 60 entity fields, and updated descriptions and action categories. A PostgreSQL counterpart carries the same records. The seed is idempotent and safe on a host that already ran `mj sync push`. As before, the Active posting scheduled jobs are not included.
+- 0ffa7e7: A journal entry batch's approval Task pointer is now set once (#313). Once `ApprovalTaskID` is set, neither it nor `ApprovalTaskRaisedAt` can change or clear, in any status (trigger error 50035), and a filtered unique index stops two batches from carrying the same approval Task. **Upgrade note:** the index fails to build if two batches already share an `ApprovalTaskID`, which only a hand-edited stamp can produce. The migration header has the query that finds them.
+- 266cf9c: New nullable column `AccountingCompanyProfile.BooksClosedThroughDate` (DATE): the last day of the latest month finance has closed for the company. A date on or before it is in a closed month. NULL means nothing is closed; existing profiles read NULL. Includes the CodeGen output for the column (entity subclass, GraphQL types, profile form field).
+- a577db6: A journal entry batch's cancel reason holds 1,000 characters, up from 500 (`JournalEntryBatch.CancelReason` is `NVARCHAR(1000)`). Migration `V202610201000` widens the column and regenerates the batch's base view and create/update/delete procedures, whose `@CancelReason` parameter was `nvarchar(500)` (#307).
+- d51bb87: Three column descriptions now say what the code does (#352): `JournalEntryBatchNumber` gives the global `BATCH-{seq:000000}` format with no company segment; `FinanceException.DedupeKey` says a repeat raise refreshes an Open row's creator fields and summary; `GLAccount.IsSystemSeeded` names `AccountingCompanyProfileEntityServer.SeedDefaultChartOfAccounts()` instead of the removed procedure. A new migration updates the extended properties and, through its CodeGen block, the entity field metadata.
+- ea5f9f7: Journal entry dates and the deferred-revenue waterfall:
+
+  - `vwJournalEntries` computes `EffectiveDayOfWeek` and `IsWeekend` the same way whatever the session's `DATEFIRST` (#395). Values on a `DATEFIRST 7` (US English) host are unchanged: 1 is Sunday, 7 is Saturday, and only Saturday and Sunday are the weekend. The PostgreSQL view reads the weekday from the date itself (`ISODOW`), so its values do not depend on the session time zone.
+  - `Accounting.CreateJournalEntry` / `CreateJournalEntries` store a draft's `EffectiveDate` as the business day it names (#427). A date-time with an offset is filed on the business day it falls on, not its UTC day; a `YYYY-MM-DD` day or a UTC-midnight string is that day. A date-time with no offset, or a day that does not exist, is refused with `MALFORMED_DRAFT`.
+  - The waterfall shows "Partly released" for a month only part of which is recognized, and "Released" only once all of it is (#429).
+  - The waterfall keeps counting a reversed entry until its reversal's day arrives, loading the reversal's date when the caller did not pass the reversal in (#430).
+
+- ea5f9f7: Metadata seeds and one filter guard:
+
+  - A `Gift Card Liability` GL account role (sequence 120), the name orders resolves when it books a gift card sale or redemption. Until a company links an account to it, orders books the card to Deferred Revenue and warns (#250).
+  - A `SUBSCRIPTION_TERM_LENGTH` finance exception type owned by orders, so a subscription line sold for a length other than its type's term is raised for finance review (#454).
+  - The Deferred Revenue role's description now says only what the role means (#441).
+  - The two Accounting actions look up their category by the ID this app seeds, not by the name `Accounting`, which MJ core also uses for a category (#406).
+  - Seeding the default chart of accounts validates the company ID as a UUID before putting it in a filter (#384).
+
+  All metadata changes reach a host with the next Metadata_Sync (`mj sync push`).
+
+- ea5f9f7: PostgreSQL fixes (#374, #436, #437).
+
+  - `pnpm run mj:migrate` no longer passes `--dir ./migrations`, so with `DB_PLATFORM=postgresql` it runs `migrations-pg/` instead of the T-SQL set. `mj.config.cjs` now sets `migrationsLocation`.
+  - Every file in `migrations-pg/` names the schema quoted, `"__mj_BizAppsAccounting"`. Unquoted, PostgreSQL folded it to `__mj_bizappsaccounting`, a schema neither `mj migrate --schema` nor MJ's runtime SQL uses. **Upgrade note:** the three PostgreSQL migrations released in 0.20–0.22 are edited in place. They could not have applied to a database whose schema `mj migrate` or the installer created, because their first statement against an existing table looked in the lowercase schema. A failed run may have left an empty lowercase `__mj_bizappsaccounting` schema behind; nothing reads it.
+  - Raising and clearing a finance exception on PostgreSQL quote the schema, table and column names, and a raise matches `DedupeKey` case-insensitively, as SQL Server's collation does, so `KEY-A` and `key-a` return one row. This does not run on PostgreSQL yet: no `migrations-pg/` file creates the Finance Exceptions table (#321).
+
+- da5d2c6: Move the predictive-scoring bench (training pipelines, models, scoring record process and binding) from `metadata/` to `demo-data/`, so the install seed no longer carries untrained models or an `Active` monthly scoring job. The record process is now pushed `Disabled` with its schedule off. Load it with `pnpm run demo:load`.
+- a74ce5f: A finance exception type for orders: `PROVIDER_PAYMENT_ORDER_DUPLICATE`, a keyed order that may duplicate one orders created from a card payment that matched no order. Shipped as metadata; it reaches a host with the next Metadata_Sync.
+- 5677f94: Two finance exception types for orders' payment-gateway checks: `PROVIDER_REFUND_NOT_BOOKED` (a refund made at the gateway that orders could not book against the payment by itself) and `PROVIDER_CHARGE_MISMATCH` (a difference the charge reconciliation found between the gateway's charges and orders' payments). Shipped as metadata; they reach a host with the next Metadata_Sync.
+- f7b9b1c: A migration now stores the generated validator code for eight CHECK constraints on Journal Entry Batches, Finance Exception Types and Finance Exceptions. Before it, a database built from migrations had no stored code for them, so every CodeGen run asked the AI again and wrote new method names and bodies. The rows carry the validators already committed, so generated code is unchanged and reproducible from migrations.
+
 ## 0.23.0
 
 ### Patch Changes

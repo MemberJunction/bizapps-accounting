@@ -1,5 +1,49 @@
 # @mj-biz-apps/accounting-server
 
+## 0.24.0
+
+### Minor Changes
+
+- 266cf9c: New nullable column `AccountingCompanyProfile.BooksClosedThroughDate` (DATE): the last day of the latest month finance has closed for the company. A date on or before it is in a closed month. NULL means nothing is closed; existing profiles read NULL. Includes the CodeGen output for the column (entity subclass, GraphQL types, profile form field).
+- a577db6: A journal entry batch's cancel reason holds 1,000 characters, up from 500 (`JournalEntryBatch.CancelReason` is `NVARCHAR(1000)`). Migration `V202610201000` widens the column and regenerates the batch's base view and create/update/delete procedures, whose `@CancelReason` parameter was `nvarchar(500)` (#307).
+- d51bb87: Three column descriptions now say what the code does (#352): `JournalEntryBatchNumber` gives the global `BATCH-{seq:000000}` format with no company segment; `FinanceException.DedupeKey` says a repeat raise refreshes an Open row's creator fields and summary; `GLAccount.IsSystemSeeded` names `AccountingCompanyProfileEntityServer.SeedDefaultChartOfAccounts()` instead of the removed procedure. A new migration updates the extended properties and, through its CodeGen block, the entity field metadata.
+
+### Patch Changes
+
+- Updated dependencies [96b1a48]
+- Updated dependencies [ff56bcc]
+- Updated dependencies [201d11f]
+- Updated dependencies [5ee4741]
+- Updated dependencies [0ffa7e7]
+- Updated dependencies [7b88d06]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [803a7ab]
+- Updated dependencies [6d866b6]
+- Updated dependencies [266cf9c]
+- Updated dependencies [74e2ad9]
+- Updated dependencies [a577db6]
+- Updated dependencies [47d5474]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [d51bb87]
+- Updated dependencies [140106d]
+- Updated dependencies [fa4f5fa]
+- Updated dependencies [ecdc1e0]
+- Updated dependencies [003d4e6]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [4c0476c]
+- Updated dependencies [aff9c70]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [a7c8e83]
+- Updated dependencies [074060f]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [da5d2c6]
+- Updated dependencies [a74ce5f]
+- Updated dependencies [5677f94]
+- Updated dependencies [f7b9b1c]
+  - @mj-biz-apps/accounting-core-entities-server@0.24.0
+  - @mj-biz-apps/accounting-entities@0.24.0
+  - @mj-biz-apps/accounting-actions@0.24.0
+
 ## 0.23.0
 
 ### Patch Changes
