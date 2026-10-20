@@ -936,12 +936,13 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    */
   public async Archive(reason: string, contextUser?: UserInfo): Promise<boolean> {
     if (!this.IsSaved) throw new Error('The batch must be saved before it can be archived.');
-    this.assertArchivable(reason);
     const user = contextUser ?? this.ContextCurrentUser;
     if (!user) throw new Error('The batch was not archived: no user was given, and the archive is recorded on the approval task as a user.');
     const provider = this.ProviderToUse as unknown as IMetadataProvider;
     const gate = JournalEntryBatchDispatchServices.Resolve().CreateCancelGate(provider);
+    // Authorize before the state checks: their messages name the ERP's reference, and an unauthorized caller learns nothing.
     await gate.assertMayArchive(this.ID, user);
+    this.assertArchivable(reason);
     const archive = { reason: reason.trim(), fromStatus: this.Status };
     const dbProvider = this.ProviderToUse as unknown as DatabaseProviderBase;
     await dbProvider.BeginTransaction();

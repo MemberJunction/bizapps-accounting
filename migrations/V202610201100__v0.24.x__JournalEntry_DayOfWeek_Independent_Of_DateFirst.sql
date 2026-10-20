@@ -20,8 +20,8 @@
 -- for Sunday. EffectiveDayOfWeek keeps the numbering the view has always
 -- produced on a DATEFIRST 7 host (1 = Sunday, 7 = Saturday), so models trained
 -- on those hosts see the same values. IsWeekend is 1 for Saturday and Sunday
--- only. The PostgreSQL conversion subtracts the two days as TIMESTAMPTZ, which
--- counts the same days when the session time zone is UTC (the DB default).
+-- only. The PostgreSQL counterpart uses EXTRACT(ISODOW ...) on the date, which
+-- no session setting or time zone changes.
 --
 -- Every other column is unchanged, in the same order and of the same type. The
 -- view is dropped and re-created, as every earlier definer did, so the grants

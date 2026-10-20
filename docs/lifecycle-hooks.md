@@ -160,7 +160,7 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   back what it loaded passes. The fields stay `AllowUpdateAPI = 1` on purpose: MJ leaves a field with it
   off out of the create and update procedures, so the server's own stamps would not persist either.
 - **`JournalEntryBatchEntityServer.Archive()` authorizes itself (#448)** through the resolved cancel gate's
-  `assertMayArchive`, before anything is written: before approval only the company's `ApprovalCFOUserID`
+  `assertMayArchive`, before anything is written and before the status checks (whose messages name the ERP's reference): before approval only the company's `ApprovalCFOUserID`
   (the builder may cancel a Pending batch but not archive it, since an archive cannot be undone), past
   approval the CFO or the batch's approver (who must then have a linked Person). The batch pages show
   Archive only to those users (`MayArchiveBatch`).

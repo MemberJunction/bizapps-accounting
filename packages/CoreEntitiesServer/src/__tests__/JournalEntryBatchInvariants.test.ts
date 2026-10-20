@@ -629,6 +629,17 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       expect(save).not.toHaveBeenCalled();
       expect(batch.Status).toBe('Pending');
     });
+
+    // The state checks name the ERP's reference, so an unauthorized caller must be refused first.
+    it('Archive() refuses an unauthorized user before saying the ERP accepted the batch', async () => {
+      cancelGate.assertMayArchive.mockRejectedValue(new Error('may archive it before approval'));
+      asSaved('Failed', { ExternalJournalEntryBatchRef: 'G00042' });
+
+      const refusal = batch.Archive('the ERP has it', USER);
+
+      await expect(refusal).rejects.toThrow('may archive it before approval');
+      await expect(refusal).rejects.not.toThrow(/G00042/);
+    });
   });
 
   // ─── only the verbs approve and archive (#447, #448) ──────────────────────

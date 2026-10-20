@@ -79,7 +79,14 @@ import {
 } from './FinanceExceptionClearPolicy.js';
 import { isSqlGuid } from './SqlGuards.js';
 
-const FINANCE_EXCEPTION_TABLE = '__mj_BizAppsAccounting.FinanceException';
+/**
+ * The Finance Exceptions table per platform. PostgreSQL folds unquoted names to lowercase, and the
+ * schema, table and columns are created quoted and mixed-case, so every PostgreSQL name is quoted.
+ */
+const FINANCE_EXCEPTION_TABLE: Record<DatabasePlatform, string> = {
+  sqlserver: '__mj_BizAppsAccounting.FinanceException',
+  postgresql: '"__mj_BizAppsAccounting"."FinanceException"',
+};
 export const FINANCE_EXCEPTION_TYPE_ENTITY = 'MJ_BizApps_Accounting: Finance Exception Types';
 
 /** Keys per existence lookup, so one filter stays a reasonable size however many are raised. */
@@ -299,7 +306,7 @@ function existingPredicate(chunk: ResolvedRaise[], platform: DatabasePlatform): 
     platform === 'postgresql'
       ? [...byType.entries()].map(
           ([typeID, keys]) =>
-            `(FinanceExceptionTypeID = ${bind(typeID)} AND lower(DedupeKey) IN (${keys.map(k => `lower(${bind(k)}::text)`).join(', ')}))`,
+            `("FinanceExceptionTypeID" = ${bind(typeID)} AND lower("DedupeKey") IN (${keys.map(k => `lower(${bind(k)}::text)`).join(', ')}))`,
         )
       : [...byType.entries()].map(
           ([typeID, keys]) => `(FinanceExceptionTypeID = ${bind(typeID)} AND DedupeKey IN (${keys.map(bind).join(', ')}))`,
@@ -315,11 +322,11 @@ function existingPredicate(chunk: ResolvedRaise[], platform: DatabasePlatform): 
  */
 function existingLookupSql(chunk: ResolvedRaise[], platform: DatabasePlatform): BoundSQL {
   const predicate = existingPredicate(chunk, platform);
-  const columns = 'ID, FinanceExceptionTypeID, DedupeKey, Status, SourceCreatedByUserID, CreatorUnresolved';
+  const names = ['ID', 'FinanceExceptionTypeID', 'DedupeKey', 'Status', 'SourceCreatedByUserID', 'CreatorUnresolved'];
   const SQL =
     platform === 'postgresql'
-      ? `SELECT ${columns} FROM ${FINANCE_EXCEPTION_TABLE} WHERE ${predicate.SQL} FOR UPDATE`
-      : `SELECT ${columns} FROM ${FINANCE_EXCEPTION_TABLE} WITH (UPDLOCK, HOLDLOCK) WHERE ${predicate.SQL}`;
+      ? `SELECT ${names.map(n => `"${n}"`).join(', ')} FROM ${FINANCE_EXCEPTION_TABLE.postgresql} WHERE ${predicate.SQL} FOR UPDATE`
+      : `SELECT ${names.join(', ')} FROM ${FINANCE_EXCEPTION_TABLE.sqlserver} WITH (UPDLOCK, HOLDLOCK) WHERE ${predicate.SQL}`;
   return { SQL, Parameters: predicate.Parameters };
 }
 
@@ -580,8 +587,8 @@ export async function ClearFinanceException(
 
 /** The row lock a clear takes before reading the row, per platform. */
 const CLEAR_LOCK_SQL: Record<DatabasePlatform, string> = {
-  sqlserver: `SELECT ID FROM ${FINANCE_EXCEPTION_TABLE} WITH (UPDLOCK, ROWLOCK) WHERE ID = ?`,
-  postgresql: `SELECT ID FROM ${FINANCE_EXCEPTION_TABLE} WHERE ID = $1 FOR UPDATE`,
+  sqlserver: `SELECT ID FROM ${FINANCE_EXCEPTION_TABLE.sqlserver} WITH (UPDLOCK, ROWLOCK) WHERE ID = ?`,
+  postgresql: `SELECT "ID" FROM ${FINANCE_EXCEPTION_TABLE.postgresql} WHERE "ID" = $1 FOR UPDATE`,
 };
 
 /**

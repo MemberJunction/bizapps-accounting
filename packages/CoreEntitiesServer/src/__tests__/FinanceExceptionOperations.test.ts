@@ -241,7 +241,7 @@ describe('Accounting.RaiseFinanceExceptions', () => {
     expect(lockParams).toEqual([`FinanceException|${typeID}|key-a`, `FinanceException|${typeID}|key-b`]);
     const [readSql, readParams] = s.executeSQL.mock.calls[1] as unknown as [string, string[]];
     expect(readSql).toMatch(
-      /FROM __mj_BizAppsAccounting\.FinanceException WHERE \(FinanceExceptionTypeID = \$1 AND lower\(DedupeKey\) IN \(lower\(\$2::text\), lower\(\$3::text\), lower\(\$4::text\)\)\) FOR UPDATE$/,
+      /^SELECT "ID", "FinanceExceptionTypeID", "DedupeKey", "Status", "SourceCreatedByUserID", "CreatorUnresolved" FROM "__mj_BizAppsAccounting"\."FinanceException" WHERE \("FinanceExceptionTypeID" = \$1 AND lower\("DedupeKey"\) IN \(lower\(\$2::text\), lower\(\$3::text\), lower\(\$4::text\)\)\) FOR UPDATE$/,
     );
     expect(readSql).not.toContain('WITH (');
     expect(readParams).toEqual([TYPES[0].ID, 'Key-A', 'KEY-A', 'KEY-B']);
@@ -256,7 +256,7 @@ describe('Accounting.RaiseFinanceExceptions', () => {
     expect(result.Output).toEqual({ Success: true, Results: [{ Index: 0, FinanceExceptionID: 'EXISTING-1', Created: false }] });
     expect(s.saved).toHaveLength(0);
     const [readSql] = s.executeSQL.mock.calls[1] as unknown as [string, string[]];
-    expect(readSql).toContain('lower(DedupeKey) IN (lower($2::text))');
+    expect(readSql).toContain('lower("DedupeKey") IN (lower($2::text))');
   });
 
   it('runs no SQL and reports WRITE_FAILED on a platform it has no locking SQL for', async () => {
@@ -414,7 +414,7 @@ describe('Accounting.ClearFinanceException', () => {
     const result = await clear(s, {});
     expect(result.Output).toEqual({ Success: true, Status: 'Reviewed' });
     const [sql, params] = s.executeSQL.mock.calls[0] as unknown as [string, string[]];
-    expect(sql).toBe('SELECT ID FROM __mj_BizAppsAccounting.FinanceException WHERE ID = $1 FOR UPDATE');
+    expect(sql).toBe('SELECT "ID" FROM "__mj_BizAppsAccounting"."FinanceException" WHERE "ID" = $1 FOR UPDATE');
     expect(params).toEqual([EXCEPTION_ID]);
   });
 

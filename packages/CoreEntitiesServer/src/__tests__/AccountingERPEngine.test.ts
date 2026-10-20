@@ -1312,6 +1312,23 @@ describe('Business Central renumbering a posting', () => {
       expect(result).toEqual({ status: 'NotFound' });
     });
 
+    // A cancel's recheck runs inside the cancel's transaction, which the raise would join.
+    it('does not raise inside an open transaction, keeps the hold, and raises at the next lookup outside one', async () => {
+      const raise = vi.fn().mockResolvedValueOnce(failed).mockResolvedValue(landed);
+      await postUnraised(raise);
+      const inTransaction = { ...(providerWith(taggedViewsWithCodes()) as object), TransactionDepth: 1 } as never;
+
+      const during = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, inTransaction);
+
+      expect(raise).toHaveBeenCalledTimes(1);
+      expect(during).toEqual({ status: 'Unavailable', reason: expect.stringMatching(new RegExp(`\\(${TAGGED_BATCH_ID}\\), and raising ${ERP_POSTING_NOT_READ_BACK} for them failed`)) });
+
+      const after = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+      expect(raise).toHaveBeenCalledTimes(2);
+      expect(after).toEqual({ status: 'NotFound' });
+    });
+
     it('does not hold it against another company', async () => {
       await postUnraised(vi.fn(async () => failed));
       const elsewhere = { ...(taggedBatch() as object), CompanyID: 'co-other' } as never;

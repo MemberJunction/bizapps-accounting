@@ -52,10 +52,13 @@ AS SELECT
     COALESCE(agg."TotalDebitAmount", 0) AS "TotalDebitAmount",
     COALESCE(agg."LineCount", 0) AS "LineCount",
     EXTRACT(MONTH FROM g."EffectiveDate") AS "EffectiveMonth",
-    -- 1 = Sunday through 7 = Saturday whatever the session's DATEFIRST (#395).
-    -- 1 January 1900 was a Monday.
-    (EXTRACT(DAY FROM (g."EffectiveDate"::TIMESTAMPTZ - '19000101'::TIMESTAMPTZ)) + 1) % 7 + 1 AS "EffectiveDayOfWeek",
-    CASE WHEN EXTRACT(DAY FROM (g."EffectiveDate"::TIMESTAMPTZ - '19000101'::TIMESTAMPTZ)) % 7 IN (5, 6) THEN 1 ELSE 0 END AS "IsWeekend",
+    -- 1 = Sunday through 7 = Saturday, matching the SQL Server view (#395). ISODOW is 1 = Monday
+    -- through 7 = Sunday and is read from the DATE itself, so the session time zone plays no part.
+    -- A TIMESTAMPTZ difference would not do: midnight in the session zone shifts by an hour across
+    -- daylight-saving changes, and EXTRACT(DAY FROM interval) then drops a day. The converter emits that
+    -- form for DATEDIFF(day, ...) (MemberJunction/MJ#5920), so these two lines are edited after conversion.
+    EXTRACT(ISODOW FROM g."EffectiveDate") % 7 + 1 AS "EffectiveDayOfWeek",
+    CASE WHEN EXTRACT(ISODOW FROM g."EffectiveDate") IN (6, 7) THEN 1 ELSE 0 END AS "IsWeekend",
     CASE WHEN g."LinkedRecordID" IS NOT NULL THEN 1 ELSE 0 END AS "HasLinkedRecord",
     CASE WHEN g."FileID" IS NOT NULL THEN 1 ELSE 0 END AS "HasFile"
 FROM

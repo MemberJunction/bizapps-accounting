@@ -6,7 +6,7 @@
  * an outbound table sync. Other apps hook in via BaseAccountingEngineExtension.
  */
 import { IntegrationEngine } from '@memberjunction/integration-engine';
-import { IMetadataProvider, IRunViewProvider, LogError, LogStatus, UserInfo } from '@memberjunction/core';
+import { DatabaseProviderBase, IMetadataProvider, IRunViewProvider, LogError, LogStatus, UserInfo } from '@memberjunction/core';
 import { BaseSingleton, EscapeSQLString, MJGlobal, UUIDsEqual } from '@memberjunction/global';
 import { ExternalFieldLimitEngine, ToCalendarDay } from '@mj-biz-apps/common-entities';
 import {
@@ -437,11 +437,22 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
   /**
    * Try again every held raise for the company (#414). Returns the batch IDs still held: their raise
    * failed again, so nothing in the database yet says the company's lookup may be blind.
+   *
+   * Inside an open transaction (the cancel's recheck runs after its writes and before its commit) no
+   * raise is tried and every held raise stays held. RaiseFinanceExceptions joins that transaction, so
+   * a failed raise would abort the caller's transaction on PostgreSQL and lose the cancel, and a raise
+   * that lands would be rolled back with it after its hold was already dropped. The next lookup outside
+   * a transaction tries again.
    */
   private async retryUnraisedUnreadPostings(companyId: string, provider: IMetadataProvider): Promise<string[]> {
     const stillHeld: string[] = [];
+    const inCallersTransaction = (provider as unknown as DatabaseProviderBase).TransactionDepth > 0;
     for (const [batchId, exception] of this.unraisedUnreadPostings) {
       if (!UUIDsEqual(exception.CompanyID, companyId)) continue;
+      if (inCallersTransaction) {
+        stillHeld.push(batchId);
+        continue;
+      }
       const why = await this.tryRaiseUnreadPosting(exception, provider);
       if (why === null) {
         this.unraisedUnreadPostings.delete(batchId);
