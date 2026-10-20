@@ -16,7 +16,7 @@ export interface TabReorder {
  * Dumb by design: it renders the tabs it is handed and emits intent. The store holds the state
  * machine; the host owns what a tab's payload means. That split keeps it framework-clean + transferable.
  *
- * **Browser-tab behavior lives HERE** (Marcelo 2026-07-21) so every consumer inherits it:
+ * **Browser-tab behavior lives HERE** so every consumer inherits it:
  *  - pinned new-tab button; the tab LIST scrolls horizontally *behind* it on overflow;
  *  - tabs size to their text up to `--ws-tab-max`, then ellipsize; the inline unsaved-dot pushes the label;
  *  - the tab body keeps the default arrow cursor (like browser tabs);
@@ -54,7 +54,7 @@ export interface TabReorder {
               <span class="ws-tab__label" [mjTip]="tab.Label">{{ tab.Label }}</span>
               @if (tab.Dirty) {
                 <!-- Inline dot (no reserved slot): it PUSHES the label, so the ellipsis shifts left on a
-                     capped tab and a short tab grows by the dot's width (Marcelo 2026-07-21). -->
+                     capped tab and a short tab grows by the dot's width. -->
                 <span class="ws-tab__dirty" aria-label="unsaved changes">&bull;</span>
               }
             </button>

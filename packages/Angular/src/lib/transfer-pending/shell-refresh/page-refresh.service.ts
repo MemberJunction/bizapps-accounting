@@ -4,8 +4,8 @@ import { Observable, Subject } from 'rxjs';
 /**
  * The shell header's Refresh button → the page currently in the body.
  *
- * WHY THIS IS PAGE-AWARE FOR FREE (Marcelo: "refresh the current body, not every single page in
- * the category"): the category shell renders its pages through an `@switch`, so exactly ONE page
+ * WHY THIS IS PAGE-AWARE FOR FREE (refresh reloads the current body, not every page in the
+ * category): the category shell renders its pages through an `@switch`, so exactly ONE page
  * component is instantiated at a time — the others are destroyed, not hidden. A component
  * subscribes on init and Angular tears the subscription down on destroy, so a refresh signal can
  * only ever reach the mounted page. There is no page registry to keep in sync and no way for a

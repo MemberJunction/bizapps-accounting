@@ -167,6 +167,18 @@ refuses a draft that spans companies, checks balance, and writes atomically. Hoo
   a send must start from `Approved` or `Failed` and advance `SendAttemptCount` by one, no update keeps a
   batch `Sent`, and the send stamp changes at no other time. Of two dispatches that loaded the same batch,
   only one reaches the ERP, whether the loser's save lands while the winner is `Sent` or after it has left.
+  Validated by the raw-SQL cases in `block1-runtime.ts`:
+  - **50031** status moves: `Posted`, `Cancelled` and `Archived` are terminal, no batch returns to
+    `Pending`, only a `Sent` batch becomes `Posted` or `Failed`, a `Sent` batch is neither cancelled
+    nor archived, and a batch is cancelled only with its summary pointer cleared.
+  - **50032** the cancel audit and the ERP check are written only by the update that cancels the
+    batch, and `SentAt` is never cleared once set.
+  - **50034** `SealMismatchDetectedAt` is set only on a retry's `Sent` → `Posted` (`SendAttemptCount`
+    above 1), and never changed or cleared after.
+
+  Validated by L23 in `phase2-encapsulation.live.test.ts`:
+  - **50033** `trg_JELD_Immutability`: a dimension tag on a line of a `Batched` or `GLPosted` entry
+    cannot be inserted, changed or deleted (#216).
   *(The period-close trigger + W4 routing were retired with the period tables.)*
 - **Batch lifecycle (CH-3):** `Pending → Approved → Sent → Posted | Failed`, plus `Cancelled` and
   `Archived` (the full graph is `LEGAL_TRANSITIONS` in `JournalEntryBatchEntityServer.ts`) — see

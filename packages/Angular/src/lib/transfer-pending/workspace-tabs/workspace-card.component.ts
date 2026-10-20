@@ -5,7 +5,7 @@ import { WorkspaceTabStripComponent, TabReorder } from './workspace-tab-strip.co
 
 /**
  * `mj-workspace-card` — the reusable frame every "workspace" screen shares (JE + batch workspaces,
- * order editor). A THIN, slotted wrapper (Marcelo 2026-07-21): it owns ONLY the invariant chrome —
+ * order editor). A THIN, slotted wrapper: it owns ONLY the invariant chrome —
  *   • the card surface (border + rounded corners + contained scroll),
  *   • the tab-strip row (delegated to `mj-workspace-tab-strip`, which carries all tab behavior),
  *   • an identity band beside the tabs, and
@@ -43,7 +43,7 @@ import { WorkspaceTabStripComponent, TabReorder } from './workspace-tab-strip.co
       <div class="ws-card__body">
         <ng-content></ng-content>
       </div>
-      <!-- Standardized action bar (Marcelo 2026-07-21): the SAME three verbs on every workspace —
+      <!-- Standardized action bar: the SAME three verbs on every workspace —
            a primary confirm/submit whose LABEL is the only thing that varies per use case, a neutral
            save-as-draft, and a neutral discard — so no workshop hand-rolls its own footer. Pinned
            below the scrolling body. Opt-in via [ShowFooter]; a [workspaceFooterNote] slot carries any

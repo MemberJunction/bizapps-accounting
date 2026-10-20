@@ -45,12 +45,11 @@ export class BatchesCategoryComponent extends CategoryShellBase {
   public get RailSections(): MJLeftNavSection[] {
     return [
       {
-        // ONE flat, unlabeled group (Marcelo 2026-07-29): section labels were filler ('MAIN'/'WORK'
+        // ONE flat, unlabeled group: section labels were filler ('MAIN'/'WORK'
         // carried no information); all five category rails standardize on a single flat group.
         items: [
           { id: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-gauge-high' },
-          // Label scheme mirrors the JE category (Marcelo 2026-08-06, JournalEntryBatch label
-          // sweep): primary list spelled out ("All journal entries" ↔ "All journal entry
+          // Label scheme mirrors the JE category: primary list spelled out ("All journal entries" ↔ "All journal entry
           // batches"), tool pages take the established "JE" abbreviation ("JE workspace" ↔
           // "JE batch workspace").
           { id: 'all-batches', label: 'All journal entry batches', icon: 'fa-solid fa-layer-group' },

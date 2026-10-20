@@ -37,8 +37,8 @@ interface BatchDraft {
   Selection: EntrySelection;
   /** Set once built — the tab becomes a read-only record of the batch. */
   BuiltJournalEntryBatchNumber?: string;
-  /** The loaded preview — stored PER-TAB so switching tabs does NOT re-query the server (Marcelo
-   *  2026-07-21). Null until the operator clicks Load / Apply (the query is deferred, never automatic). */
+  /** The loaded preview — stored PER-TAB so switching tabs does NOT re-query the server.
+   *  Null until the operator clicks Load / Apply (the query is deferred, never automatic). */
   Preview?: BatchPreview | null;
   /** True when the criteria changed since the last load — the shown preview is stale; Apply refreshes it. */
   PreviewStale?: boolean;
@@ -206,7 +206,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
       Status: 'draft',
       State: { Criteria: this.defaultCriteria(), Selection: ALL_ENTRIES, Memo: '', Preview: null, PreviewStale: false },
     });
-    // NO auto-query (Marcelo 2026-07-21): a new tab does NOT hit the server. The operator clicks
+    // NO auto-query: a new tab does NOT hit the server. The operator clicks
     // "Load entries" in the table (or Apply in the filters) to run the first query.
     this.cdr.markForCheck();
   }
@@ -245,7 +245,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   }
 
   public SelectTab(id: string): void {
-    // Just show the tab's OWN stored preview — no re-query (Marcelo 2026-07-21).
+    // Just show the tab's OWN stored preview — no re-query.
     this.tabs.Activate(id);
     this.cdr.markForCheck();
   }
@@ -288,7 +288,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   }
 
   public OnCriteriaChanged(): void {
-    // NO auto-query (Marcelo 2026-07-21): changing a filter does NOT hit the server. Mark the shown
+    // NO auto-query: changing a filter does NOT hit the server. Mark the shown
     // preview stale so the UI prompts "Apply to refresh"; the operator clicks Apply to re-query. This
     // is what keeps the page fast — no round-trip on every keystroke/filter tweak.
     const d = this.Draft;
@@ -539,7 +539,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
         // Keep a memo caption if the operator gave one; otherwise fall to the now-known batch number.
         this.renameActiveTab(this.batchTabLabel(d));
       }
-      // On confirm, refresh to a FRESH tab (Marcelo 2026-07-21) — the built batch stays in its own
+      // On confirm, refresh to a FRESH tab — the built batch stays in its own
       // read-only tab for review while a new draft is ready. (openNewDraft clears messages; set after.)
       const builtNumber = d.BuiltJournalEntryBatchNumber;
       const taskRaised = res.ApprovalTaskRaised;
@@ -569,7 +569,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   }
 
   /**
-   * Single-company selection for the build criteria (Marcelo 2026-07-21). The criteria model still holds
+   * Single-company selection for the build criteria. The criteria model still holds
    * `CompanyIDs: string[]` (the engine's multi-company shape), so this maps the single choice to a
    * 0-or-1-element array: null → [] (all companies), an id → [id]. Removing "all" + requiring exactly one
    * is the single-company engine invariant, landing with the zero-net work.
