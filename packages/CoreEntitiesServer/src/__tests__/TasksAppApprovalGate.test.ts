@@ -649,6 +649,8 @@ describe('TasksAppApprovalGate.onBatchBuilt — the approval Task', () => {
     expect(w.requests).toHaveLength(1);
     expect(w.requests[0].Name).toBe('Approve Journal Entry Batch #BATCH-0007 (posting date 2026-08-31)');
     expect(w.requests[0].Description).toContain('posting date 2026-08-31 — the journal date BusinessCentral receives');
+    // #466: a decision on the Task alone leaves the batch Pending, so the Task sends the approver to Accounting.
+    expect(w.requests[0].Description).toContain('Approve or reject it in the Accounting app, under Batches.');
   });
 
   // #387: the Tasks app lists a viewer's tasks by their Person, so a User assignee reached no inbox.

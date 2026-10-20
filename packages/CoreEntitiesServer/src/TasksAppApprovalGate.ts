@@ -147,7 +147,10 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
       Name: `Approve Journal Entry Batch #${batch.JournalEntryBatchNumber} (posting date ${postingDay})`,
       TypeID: typeId,
       Description: `CFO approval required to dispatch Journal Entry Batch #${batch.JournalEntryBatchNumber} to ${batch.TargetSystem}, ` +
-        `posting date ${postingDay} — the journal date ${batch.TargetSystem} receives.`,
+        `posting date ${postingDay} — the journal date ${batch.TargetSystem} receives. ` +
+        // A decision recorded on this Task alone does not move the batch (#466): only the
+        // Accounting app's decision approves or cancels it, so the approver is sent there.
+        'Approve or reject it in the Accounting app, under Batches. A decision recorded on this task does not change the batch.',
       Priority: 'High',
       CreatedByPersonID: builderPersonId,
       LinkEntityID: batchEntityId,

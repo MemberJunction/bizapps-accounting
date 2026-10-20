@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ChangeDetectorRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -274,51 +273,6 @@ describe('DispatchStatusPageComponent — who sees Cancel on a Failed batch (#33
   });
 });
 
-/**
- * #398: the Mismatch retry dialog puts the override on the left and Cancel on the right, like every
- * other dialog. Cancel stays the primary (default) action, and the override stays disabled until the
- * batch number is retyped. The page's real markup for that dialog is rendered on its own: the rest of
- * the page (its grid) needs a full metadata provider and is not under test.
- */
-function mismatchRetryDialogMarkup(): string {
-  // Specs run from the package root (vitest.dom.config.ts); import.meta.url is not a file URL under jsdom.
-  const html = readFileSync(join(process.cwd(), 'src/lib/custom/shell/pages/dispatch-status.page.html'), 'utf8');
-  const start = html.indexOf(`<mj-dialog [Visible]="RetryConfirmBatch !== null && RetryConfirmKind === 'Mismatch'"`);
-  const end = html.indexOf('</mj-dialog>', start);
-  expect(start, 'the Mismatch retry dialog is in the page template').toBeGreaterThan(-1);
-  return html.slice(start, end + '</mj-dialog>'.length);
-}
-
-describe('DispatchStatusPageComponent — Mismatch retry dialog button order (#398, DOM)', () => {
-  beforeEach(async () => {
-    stubPageLoads();
-    stubApproverRead();
-    signInAs(APPROVED_BY_USER_ID);
-    await TestBed.configureTestingModule({ imports: [AccountingShellModule], providers: [PageRefreshService] })
-      .overrideComponent(DispatchStatusPageComponent, { set: { template: mismatchRetryDialogMarkup() } })
-      .compileComponents();
-  });
-
-  it('shows the override first, disabled, and Cancel second as the primary action', async () => {
-    const fixture = TestBed.createComponent(DispatchStatusPageComponent);
-    fixture.componentRef.setInput('Provider', stubbedReadsProvider());
-    fixture.detectChanges();
-    await fixture.whenStable();
-    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
-    const page = fixture.componentInstance;
-    page.RetryConfirmBatch = await failedBatch();
-    page.RetryConfirmKind = 'Mismatch';
-    page.RetryConfirmReason = 'the ERP already holds this document';
-    fixture.componentRef.injector.get(ChangeDetectorRef).markForCheck();
-    fixture.detectChanges();
-
-    const buttons = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('mj-dialog-actions button'));
-    expect(buttons.map((b) => b.textContent?.trim())).toEqual(['It is not this batch — post again', 'Cancel']);
-    expect(buttons[0].disabled, 'the override waits for the retyped number').toBe(true);
-    expect(buttons[1].getAttribute('variant'), 'Cancel stays the default action').toBe('primary');
-  });
-});
-
 describe('DispatchStatusPageComponent — Retry needs the batch-operator grant (#448)', () => {
   let dispatches: number;
 
@@ -361,5 +315,26 @@ describe('DispatchStatusPageComponent — Retry needs the batch-operator grant (
     expect(page.RetryBlockedReason(batch)).toBe('Retrying a dispatch requires the Finance role.');
     await page.Retry(batch);
     expect(dispatches).toBe(0);
+  });
+
+  it('opens the shared retry dialog when the ERP lookup cannot settle the retry, and retries confirmed (#466)', async () => {
+    signInHolding(OTHER_USER_ID, true);
+    const confirms: boolean[] = [];
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'DispatchJournalEntryBatch').mockImplementation(async (_id, confirm = false) => {
+      confirms.push(confirm);
+      return confirm
+        ? { Success: true, Status: 'Posted', ExternalJournalEntryBatchRef: 'JEB-1' }
+        : { Success: true, Status: 'Failed', ConfirmationRequired: 'the ERP has no lookup', ConfirmationKind: 'Unavailable' };
+    });
+    const page = await renderPage();
+    const batch = await failedBatch();
+
+    await page.Retry(batch);
+    expect(page.RetryConfirm.Batch).toBe(batch);
+    expect(page.RetryConfirm.Reason).toBe('the ERP has no lookup');
+
+    await page.ConfirmRetry();
+    expect(confirms).toEqual([false, true]);
+    expect(page.RetryConfirm.IsOpen).toBe(false);
   });
 });

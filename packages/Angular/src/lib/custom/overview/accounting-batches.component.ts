@@ -24,9 +24,11 @@ import {
     PreviewEntryWire,
     BuildJournalEntryBatchOptionsInput,
 } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
-import { BatchActionDialogState } from '../JournalEntryBatchDispatch/batch-action-dialog/batch-action-dialog.state';
+import { BatchAction, BatchActionDialogState } from '../JournalEntryBatchDispatch/batch-action-dialog/batch-action-dialog.state';
 import { BatchActionDialogComponent } from '../JournalEntryBatchDispatch/batch-action-dialog/batch-action-dialog.component';
-import { CompanyApprovers, IsErpAcceptedFailedBatch, LoadCompanyApprovers, MayArchiveBatch, MayCancelApprovedBatch, MayCancelPendingBatch } from '../JournalEntryBatchDispatch/batch-action-permission';
+import { RetryConfirmState } from '../JournalEntryBatchDispatch/retry-confirm-dialog/retry-confirm-dialog.state';
+import { RetryConfirmDialogComponent } from '../JournalEntryBatchDispatch/retry-confirm-dialog/retry-confirm-dialog.component';
+import { CompanyApprovers, IsErpAcceptedFailedBatch, LoadCompanyApprovers, MayArchiveBatch, MayCancelApprovedBatch, MayCancelPendingBatch, MayDecideBatch } from '../JournalEntryBatchDispatch/batch-action-permission';
 
 /**
  * The batch fields this page reads, PICKED from the generated entity class rather than
@@ -79,7 +81,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 @Component({
     selector: 'mj-accounting-batches-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent, BatchActionDialogComponent],
+    imports: [CommonModule, FormsModule, MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent, BatchActionDialogComponent, RetryConfirmDialogComponent],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div class="mja-batches-layout">
@@ -250,22 +252,55 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                             <strong>{{ batch.TotalDebits | currency }}</strong>
                                         </td>
                                         <td class="mja-td-action">
-                                            @if (CanArchive(batch)) {
-                                                <button mjButton variant="secondary" size="sm" type="button"
-                                                        [disabled]="ArchivingBatchID === batch.ID"
-                                                        title="Close this batch permanently without sending it to the ERP. Its journal entries stay locked to it."
-                                                        (click)="OnArchive(batch, $event)">
-                                                    <i class="fa-solid fa-box-archive"></i> Archive
-                                                </button>
-                                            }
-                                            @if (CanCancel(batch)) {
-                                                <button mjButton variant="secondary" size="sm" type="button"
-                                                        [disabled]="CancellingBatchID === batch.ID"
-                                                        title="Cancel this batch and return its journal entries to the next build."
-                                                        (click)="OnCancel(batch, $event)">
-                                                    <i class="fa-solid fa-ban"></i> Cancel
-                                                </button>
-                                            }
+                                            <div class="mja-row-actions">
+                                                <!-- Confirm/affirmative LEFT, then secondary, per the MJ button convention. -->
+                                                @if (CanDispatch(batch)) {
+                                                    <button mjButton variant="primary" size="sm" type="button"
+                                                            [disabled]="DispatchingBatchID === batch.ID"
+                                                            [title]="'Send this approved batch to ' + batch.TargetSystem + '.'"
+                                                            (click)="OnDispatch(batch, $event)">
+                                                        <i class="fa-solid fa-paper-plane"></i> Dispatch
+                                                    </button>
+                                                }
+                                                @if (CanRetry(batch)) {
+                                                    <button mjButton variant="primary" size="sm" type="button"
+                                                            [disabled]="DispatchingBatchID === batch.ID"
+                                                            [title]="'Send this batch to ' + batch.TargetSystem + ' again. The ERP is checked first, so a batch it already holds is not posted twice.'"
+                                                            (click)="OnDispatch(batch, $event)">
+                                                        <i class="fa-solid fa-rotate-right"></i> Retry
+                                                    </button>
+                                                }
+                                                @if (CanDecide(batch)) {
+                                                    <button mjButton variant="success" size="sm" type="button"
+                                                            [disabled]="DecidingBatchID === batch.ID"
+                                                            title="Approve this batch so it can be dispatched to the ERP."
+                                                            (click)="OnApprove(batch, $event)">
+                                                        <i class="fa-solid fa-thumbs-up"></i> Approve
+                                                    </button>
+                                                    <button mjButton variant="danger" size="sm" type="button"
+                                                            [disabled]="DecidingBatchID === batch.ID"
+                                                            title="Reject this batch. It is cancelled and its journal entries return to the next build."
+                                                            (click)="OnReject(batch, $event)">
+                                                        <i class="fa-solid fa-thumbs-down"></i> Reject
+                                                    </button>
+                                                }
+                                                @if (CanArchive(batch)) {
+                                                    <button mjButton variant="secondary" size="sm" type="button"
+                                                            [disabled]="ArchivingBatchID === batch.ID"
+                                                            title="Close this batch permanently without sending it to the ERP. Its journal entries stay locked to it."
+                                                            (click)="OnArchive(batch, $event)">
+                                                        <i class="fa-solid fa-box-archive"></i> Archive
+                                                    </button>
+                                                }
+                                                @if (CanCancel(batch)) {
+                                                    <button mjButton variant="secondary" size="sm" type="button"
+                                                            [disabled]="CancellingBatchID === batch.ID"
+                                                            title="Cancel this batch and return its journal entries to the next build."
+                                                            (click)="OnCancel(batch, $event)">
+                                                        <i class="fa-solid fa-ban"></i> Cancel
+                                                    </button>
+                                                }
+                                            </div>
                                             <i class="fa-solid fa-arrow-up-right-from-square"></i>
                                         </td>
                                     </tr>
@@ -481,8 +516,11 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                 </mj-dialog-actions>
             </mj-dialog>
 
-            <!-- Archive and Cancel (#405): the shared batch-action dialog, as on Batch approvals and Dispatch status. -->
+            <!-- Reject, Archive and Cancel (#405): the shared batch-action dialog, as on Batch approvals and Dispatch status. -->
             <mja-batch-action-dialog [State]="ActionDialog" (Confirm)="ConfirmActionDialog()" (Dismiss)="CloseActionDialog()" />
+
+            <!-- A Failed batch's retry, when the ERP lookup cannot settle whether it posted (#182, #466). -->
+            <mja-retry-confirm-dialog [State]="RetryConfirm" (Confirm)="ConfirmRetry()" (Dismiss)="CancelRetry()" />
         </div>
     `,
     styles: [`
@@ -871,7 +909,22 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
         }
 
         .mja-td-action > * { vertical-align: middle; }
-        .mja-td-action > button + i { margin-left: 10px; }
+        .mja-td-action > .mja-row-actions + i { margin-left: 10px; }
+
+        /* Up to four buttons (Approve, Reject, Archive, Cancel on a Pending batch, #466): they wrap
+           two to a line instead of widening the table past the page. The min-width keeps a pair on
+           one line, since the shrink-to-fit cell would otherwise stack them one per line. */
+        .mja-row-actions {
+            display: inline-flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 6px;
+            min-width: 210px;
+            max-width: 220px;
+            white-space: nowrap;
+        }
+        /* A row with no actions (Posted, Archived) keeps no blank 210px. */
+        .mja-row-actions:empty { display: none; }
 
         .mja-loading {
             display: flex;
@@ -1128,9 +1181,121 @@ export class AccountingBatchesPageComponent implements OnInit {
     /** Per-row in-flight ids so the acting row's button disables, not every row's. */
     public ArchivingBatchID: string | null = null;
     public CancellingBatchID: string | null = null;
+    public DecidingBatchID: string | null = null;
+    public DispatchingBatchID: string | null = null;
 
-    /** The Archive / Cancel dialog (#405), shared with Batch approvals and Dispatch status. */
+    /** The Reject / Archive / Cancel dialog (#405), shared with Batch approvals and Dispatch status. */
     public ActionDialog = new BatchActionDialogState<BatchItem>();
+
+    /** A Failed batch's retry waiting on the operator's ERP check (#182), shared with Dispatch status. */
+    public RetryConfirm = new RetryConfirmState<BatchItem>();
+
+    /** Whether any row's action is in flight: one batch action at a time. */
+    private get anyRowBusy(): boolean {
+        return !!(this.ArchivingBatchID || this.CancellingBatchID || this.DecidingBatchID || this.DispatchingBatchID);
+    }
+
+    /**
+     * Approve and Reject show on a Pending batch to the users the server would record a decision from
+     * (#339): the company's configured approver, and not the user who built the batch. This page is the
+     * app's one batch list, so a batch built here is decided here too (#466). The server stays the authority.
+     */
+    public CanDecide(batch: BatchItem): boolean {
+        if (batch.Status !== 'Pending' || this.DecidingBatchID === batch.ID) return false;
+        return MayDecideBatch(batch, Metadata.Provider?.CurrentUser?.ID, this.companyApprovers);
+    }
+
+    /** Dispatch sends an Approved batch to the ERP; it needs the batch-operator Authorization (#448). */
+    public CanDispatch(batch: BatchItem): boolean {
+        return batch.Status === 'Approved' && this.DispatchingBatchID !== batch.ID && this.MayOperateBatches;
+    }
+
+    /** Retry re-sends a Failed batch under its original approval; same Authorization as Dispatch. */
+    public CanRetry(batch: BatchItem): boolean {
+        return batch.Status === 'Failed' && this.DispatchingBatchID !== batch.ID && this.MayOperateBatches;
+    }
+
+    /**
+     * Record the approver's approval: the batch moves Pending→Approved and can be dispatched. The
+     * decision is recorded on the batch's approval Task too, so the Task closes with it.
+     */
+    public async OnApprove(batch: BatchItem, event: Event): Promise<void> {
+        // The row itself opens the record — an action button inside it must not also navigate.
+        event.stopPropagation();
+        if (this.anyRowBusy) return;
+        this.DecidingBatchID = batch.ID;
+        this.ActionMessage = null;
+        this.cdr.markForCheck();
+        try {
+            const res = await this.dispatchClient.RecordDecision(batch.ID, 'Approved');
+            this.ActionMessageIsError = !res.Success;
+            this.ActionMessage = res.Success
+                ? `Approved batch ${batch.JournalEntryBatchNumber}. It can now be dispatched to ${batch.TargetSystem}.`
+                : (res.ErrorMessage ?? `Your approval of batch ${batch.JournalEntryBatchNumber} was not recorded. Try again.`);
+            await this.LoadBatches();
+        } finally {
+            this.DecidingBatchID = null;
+            this.cdr.markForCheck();
+        }
+    }
+
+    /** A rejection cancels the batch, so it asks for the reason first (golive #302). */
+    public OnReject(batch: BatchItem, event: Event): void {
+        event.stopPropagation();
+        this.openActionDialog(batch, 'Reject');
+    }
+
+    /**
+     * Send an Approved batch, or retry a Failed one. `Success` means only that the call returned: an
+     * ERP rejection comes back as `Success` with the batch at `Failed`, so anything other than `Posted`
+     * is reported as an error. A retry the server's ERP lookup cannot settle opens the retry dialog.
+     */
+    public async OnDispatch(batch: BatchItem, event: Event): Promise<void> {
+        event.stopPropagation();
+        if (this.anyRowBusy || !(this.CanDispatch(batch) || this.CanRetry(batch))) return;
+        await this.dispatch(batch, false);
+    }
+
+    /** Retry with the operator's word that the batch has not posted in the ERP. */
+    public async ConfirmRetry(): Promise<void> {
+        const batch = this.RetryConfirm.Batch;
+        if (!batch || !this.RetryConfirm.CanConfirm) return;
+        this.RetryConfirm.Close();
+        if (!this.CanRetry(batch)) return;
+        await this.dispatch(batch, true);
+    }
+
+    public CancelRetry(): void {
+        this.RetryConfirm.Close();
+        this.cdr.markForCheck();
+    }
+
+    private async dispatch(batch: BatchItem, confirmNotAlreadyPostedInERP: boolean): Promise<void> {
+        this.DispatchingBatchID = batch.ID;
+        this.ActionMessage = null;
+        this.cdr.markForCheck();
+        try {
+            const res = await this.dispatchClient.DispatchJournalEntryBatch(batch.ID, confirmNotAlreadyPostedInERP);
+            if (res.Success && res.ConfirmationRequired) {
+                this.RetryConfirm.Open(batch, res.ConfirmationRequired, res.ConfirmationKind ?? null);
+                return;
+            }
+            this.ActionMessageIsError = !(res.Success && res.Status === 'Posted');
+            if (res.Success && res.Status === 'Posted') {
+                const ref = res.ExternalJournalEntryBatchRef ? ` (ref ${res.ExternalJournalEntryBatchRef})` : '';
+                this.ActionMessage = `Dispatched batch ${batch.JournalEntryBatchNumber} to ${batch.TargetSystem}: Posted${ref}.`;
+            } else if (res.Success) {
+                this.ActionMessage = `Batch ${batch.JournalEntryBatchNumber} did not post; it is ${res.Status ?? 'unknown'}. Open the batch for the ERP's error, then retry it.`;
+            } else {
+                this.ActionMessage = res.ErrorMessage ?? `Batch ${batch.JournalEntryBatchNumber} was not sent to the ERP. Try again.`;
+            }
+            // Every outcome reloads: a server error can land after the batch has already moved.
+            await this.LoadBatches();
+        } finally {
+            this.DispatchingBatchID = null;
+            this.cdr.markForCheck();
+        }
+    }
 
     /**
      * Archive is offered wherever the server's LEGAL_TRANSITIONS allows it (Pending / Approved / Failed),
@@ -1212,33 +1377,48 @@ export class AccountingBatchesPageComponent implements OnInit {
         const dialog = this.ActionDialog;
         const batch = dialog.Batch;
         if (!batch || !dialog.Action || !dialog.CanConfirm) return;
-        const archiving = dialog.Action === 'Archive';
-        this.setRowBusy(batch.ID, archiving);
+        const action = dialog.Action;
+        this.setRowBusy(action, batch.ID);
         dialog.Busy = true;
         this.ActionMessage = null;
         this.cdr.markForCheck();
         try {
-            const needsCheck = archiving ? await this.archive(batch, dialog.TrimmedReason) : await this.cancel(batch, dialog);
+            const needsCheck = action === 'Archive'
+                ? await this.archive(batch, dialog.TrimmedReason)
+                : action === 'Reject'
+                    ? await this.reject(batch, dialog.TrimmedReason)
+                    : await this.cancel(batch, dialog);
             dialog.Busy = false;
             if (needsCheck) return;
             dialog.Close();
             await this.LoadBatches();
         } finally {
             dialog.Busy = false;
-            this.setRowBusy(null, archiving);
+            this.setRowBusy(action, null);
             this.cdr.markForCheck();
         }
     }
 
-    private openActionDialog(batch: BatchItem, action: 'Archive' | 'Cancel'): void {
-        if (this.ArchivingBatchID || this.CancellingBatchID) return;
+    private openActionDialog(batch: BatchItem, action: BatchAction): void {
+        if (this.anyRowBusy) return;
         this.ActionDialog.Open(batch, action, Metadata.Provider);
         this.cdr.markForCheck();
     }
 
-    private setRowBusy(id: string | null, archiving: boolean): void {
-        if (archiving) this.ArchivingBatchID = id;
+    private setRowBusy(action: BatchAction, id: string | null): void {
+        if (action === 'Archive') this.ArchivingBatchID = id;
+        else if (action === 'Reject') this.DecidingBatchID = id;
         else this.CancellingBatchID = id;
+    }
+
+    /** Reject; the reason becomes the decision's notes and the batch's CancelReason. Never needs the ERP check. */
+    private async reject(batch: BatchItem, reason: string): Promise<false> {
+        const res = await this.dispatchClient.RecordDecision(batch.ID, 'Rejected', reason);
+        this.ActionMessageIsError = !res.Success;
+        this.ActionMessage = res.Success
+            ? `Rejected batch ${batch.JournalEntryBatchNumber}. It is cancelled, and its journal entries return to the next build.`
+            : (res.ErrorMessage ?? `Your rejection of batch ${batch.JournalEntryBatchNumber} was not recorded. Try again.`);
+        return false;
     }
 
     /** Archive; never needs the ERP check. */
