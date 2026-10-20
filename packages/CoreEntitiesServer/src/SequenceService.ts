@@ -23,6 +23,13 @@ import { DatabasePlatform, DatabaseProviderBase, IMetadataProvider, UserInfo } f
 
 const ACCOUNTING_SCHEMA = '__mj_BizAppsAccounting';
 
+/**
+ * PostgreSQL folds the migrations' unquoted schema to lowercase, while the function names are
+ * created quoted. The provider auto-quotes mixed-case identifiers, so the schema is written in
+ * lowercase and the function name quoted, or the call names a schema or function that does not exist.
+ */
+const ACCOUNTING_SCHEMA_PG = '__mj_bizappsaccounting';
+
 /** The SQL that returns the next number in one column, per platform. */
 type NumberingSQL = Record<DatabasePlatform, string>;
 
@@ -35,7 +42,7 @@ const JOURNAL_ENTRY_NUMBER_SQL: NumberingSQL = {
         @EntryNumber = @entryNumber OUTPUT;
     SELECT @entryNumber AS EntryNumber;
   `,
-  postgresql: `SELECT ${ACCOUNTING_SCHEMA}.spAssignNextJournalEntryNumber($1::uuid, $2::integer) AS EntryNumber`,
+  postgresql: `SELECT ${ACCOUNTING_SCHEMA_PG}."spAssignNextJournalEntryNumber"($1::uuid, $2::integer) AS EntryNumber`,
 };
 
 const JOURNAL_ENTRY_BATCH_NUMBER_SQL: NumberingSQL = {
@@ -45,7 +52,7 @@ const JOURNAL_ENTRY_BATCH_NUMBER_SQL: NumberingSQL = {
         @JournalEntryBatchNumber = @batchNumber OUTPUT;
     SELECT @batchNumber AS JournalEntryBatchNumber;
   `,
-  postgresql: `SELECT ${ACCOUNTING_SCHEMA}.spAssignNextJournalEntryBatchNumber() AS JournalEntryBatchNumber`,
+  postgresql: `SELECT ${ACCOUNTING_SCHEMA_PG}."spAssignNextJournalEntryBatchNumber"() AS JournalEntryBatchNumber`,
 };
 
 /**

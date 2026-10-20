@@ -20,6 +20,7 @@ import {
   buildJournalEntryBatchFromExplicitIds,
   EmptyJournalEntryBatchError,
   JournalEntryBatchPostingDateError,
+  regenerateJournalEntryBatch,
 } from '../JournalEntryBatchEngine.js';
 import { inMemoryProvider, journal, profile, testUser, ACP_ENTITY, JEL_ENTITY } from './helpers/in-memory-journal-provider.js';
 
@@ -197,5 +198,45 @@ describe('batch build — a posting date in a closed month is refused (golive #3
 
     await expect(buildJournalEntryBatchFromExplicitIds([ENTRY], 'BusinessCentral', 'USER-1', testUser, failing, undefined, '2026-09-30'))
       .rejects.toThrow(/could not read company .* books-closed-through date: timeout/);
+  });
+});
+
+// ─── regenerate: the batch keeps its posting date, which may have closed since ─
+
+describe('regenerate — a batch whose posting date has since closed is refused', () => {
+  const BATCH = 'bbbbbbbb-0000-0000-0000-000000000316';
+
+  /** A Pending batch built for 2026-08-31, and a provider that records whether a transaction began. */
+  function regenerateProvider(closedThrough: string | null) {
+    const { provider } = buildProvider(closedThrough);
+    const beginTransaction = vi.fn().mockRejectedValue(new Error('transaction began'));
+    const batch = {
+      ID: BATCH,
+      CompanyID: COMPANY,
+      Status: 'Pending',
+      PostingDate: new Date('2026-08-31T00:00:00Z'),
+      Load: async () => true,
+    };
+    const withBatch = {
+      ...provider,
+      GetEntityObject: async () => batch,
+      BeginTransaction: beginTransaction,
+    } as unknown as IMetadataProvider;
+    return { provider: withBatch, beginTransaction };
+  }
+
+  it('refuses before tearing anything down, and says to cancel and rebuild', async () => {
+    const { provider, beginTransaction } = regenerateProvider('2026-08-31');
+    const regenerate = regenerateJournalEntryBatch(BATCH, 'BusinessCentral', testUser, provider);
+
+    await expect(regenerate).rejects.toThrow(JournalEntryBatchPostingDateError);
+    await expect(regenerate).rejects.toThrow(/closed through 2026-08-31.*cancel this batch and build a new one/);
+    expect(beginTransaction).not.toHaveBeenCalled();
+  });
+
+  it('goes ahead while the posting date is still open', async () => {
+    const { provider, beginTransaction } = regenerateProvider('2026-07-31');
+    await expect(regenerateJournalEntryBatch(BATCH, 'BusinessCentral', testUser, provider)).rejects.toThrow(/transaction began/);
+    expect(beginTransaction).toHaveBeenCalledOnce();
   });
 });

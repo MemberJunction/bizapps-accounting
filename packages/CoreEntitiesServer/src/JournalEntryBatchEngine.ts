@@ -270,8 +270,12 @@ async function assertPostingDayCoversMembers(jeIds: string[], postingDay: Calend
  * would refuse the batch once it was sent, leaving a Failed batch to work out; this says so at the
  * build. FAILS CLOSED: a read that fails throws, since guessing "open" builds a batch into a month
  * finance has closed. A company with no profile row, or no date, has nothing closed.
+ * Regenerate keeps the batch's posting date, so its refusal says to cancel and build anew instead.
  */
-async function assertPostingDayOpen(companyId: string, postingDay: CalendarDay, contextUser: UserInfo, p: Providers): Promise<void> {
+async function assertPostingDayOpen(
+  companyId: string, postingDay: CalendarDay, contextUser: UserInfo, p: Providers,
+  operation: 'buildJournalEntryBatch' | 'regenerateJournalEntryBatch' = 'buildJournalEntryBatch',
+): Promise<void> {
   const res = await p.rv.RunView<{ BooksClosedThroughDate: Date | string | null }>(
     {
       EntityName: ACP_ENTITY,
@@ -282,10 +286,16 @@ async function assertPostingDayOpen(companyId: string, postingDay: CalendarDay, 
     },
     contextUser,
   );
-  if (!res.Success) throw new Error(`buildJournalEntryBatch: could not read company ${companyId}'s books-closed-through date: ${res.ErrorMessage ?? 'unknown'}`);
+  if (!res.Success) throw new Error(`${operation}: could not read company ${companyId}'s books-closed-through date: ${res.ErrorMessage ?? 'unknown'}`);
   const closedThrough = ToCalendarDay(res.Results?.[0]?.BooksClosedThroughDate ?? null);
   const problem = ClosedBooksPostingDateProblem(postingDay, closedThrough);
-  if (problem) throw new JournalEntryBatchPostingDateError(problem);
+  if (!problem) return;
+  if (operation === 'regenerateJournalEntryBatch') {
+    throw new JournalEntryBatchPostingDateError(
+      `${problem} Regenerate keeps the batch's posting date, so cancel this batch and build a new one with an open posting date.`,
+    );
+  }
+  throw new JournalEntryBatchPostingDateError(problem);
 }
 
 // ─── buildJournalEntryBatch ──────────────────────────────────────────────────────────────
@@ -1223,6 +1233,9 @@ export async function regenerateJournalEntryBatch(
   if (batch.Status !== 'Pending') {
     throw new Error(`regenerateJournalEntryBatch: batch ${batchId} is ${batch.Status}; only a Pending batch can be regenerated`);
   }
+  // The month may have closed since the build; the ERP would refuse the batch under its kept PostingDate.
+  const postingDay = ToCalendarDay(batch.PostingDate);
+  if (postingDay) await assertPostingDayOpen(batch.CompanyID, postingDay, contextUser, p, 'regenerateJournalEntryBatch');
 
   // ONE transaction (D10 rev. 2026-07-29): teardown + re-gather + rebuild commit all-or-none.
   // Candidates are gathered AFTER teardown (inside the transaction) so the batch's own returning

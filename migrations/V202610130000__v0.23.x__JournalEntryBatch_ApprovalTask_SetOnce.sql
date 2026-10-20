@@ -30,10 +30,9 @@
 --    a batch's stamp is always the Task its own build raised. Task Links are not
 --    used to prove that: they are writable through the tasks app.
 --
--- The index fails to build if two existing batches share an ApprovalTaskID.
--- Only a stamp changed by hand can produce that; find it before upgrading with
---   SELECT ApprovalTaskID, COUNT(*) FROM __mj_BizAppsAccounting.JournalEntryBatch
---    WHERE ApprovalTaskID IS NOT NULL GROUP BY ApprovalTaskID HAVING COUNT(*) > 1;
+-- The index cannot build if two existing batches share an ApprovalTaskID. Only
+-- a stamp changed by hand can produce that; step 0 refuses the migration with
+-- the query that finds them, rather than leaving a bare index-creation error.
 --
 -- THROW with no ROLLBACK TRANSACTION first, as the other batch triggers: the
 -- entity's spUpdate runs inside INSERT-EXEC, where a ROLLBACK in the trigger is
@@ -42,6 +41,18 @@
 --
 -- This runs once, in order, against a database that has every earlier migration.
 -- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 0. Pre-check: no two batches may already share an approval Task
+-- -----------------------------------------------------------------------------
+IF EXISTS (
+    SELECT 1 FROM __mj_BizAppsAccounting.JournalEntryBatch
+    WHERE ApprovalTaskID IS NOT NULL
+    GROUP BY ApprovalTaskID
+    HAVING COUNT(*) > 1
+)
+    THROW 50036, 'Migration V202610130000 cannot apply: at least two JournalEntryBatch rows carry the same ApprovalTaskID. The build stamps each batch with the Task it raises, so these stamps were changed by hand. Find them (SELECT ApprovalTaskID, COUNT(*) FROM __mj_BizAppsAccounting.JournalEntryBatch WHERE ApprovalTaskID IS NOT NULL GROUP BY ApprovalTaskID HAVING COUNT(*) > 1), point each batch back at the Task its own build raised, and re-run.', 1;
+GO
 
 -- -----------------------------------------------------------------------------
 -- 1. The approval Task pointer is set once

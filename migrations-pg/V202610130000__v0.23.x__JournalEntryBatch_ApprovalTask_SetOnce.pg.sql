@@ -49,9 +49,9 @@ CREATE UNIQUE  INDEX IF NOT EXISTS UQ_JournalEntryBatch_ApprovalTaskID
 -- ===================== Triggers =====================
 
 -- SKIPPED: trigger (auto-conversion not supported)
--- -- =============================================================================
--- Migration: V202610130000__v0.23.x__JournalEntryBatch_ApprovalTask_SetOnce.sql
--- Description: #313 — a batch's appro
+-- -- -----------------------------------------------------------------------------
+-- 1. The approval Task pointer is set once
+-- ------------------------------------------------------------------------
 
 
 -- ===================== Other =====================
