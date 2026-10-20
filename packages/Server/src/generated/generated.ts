@@ -94,6 +94,13 @@ export class mjBizAppsAccountingAccountingCompanyProfile_ {
     @Field({nullable: true, description: `The first EffectiveDate this company posts to the ERP. Journal entries dated before it never enter a posting batch (for example, history brought in at cutover that the ERP already holds). NULL means no floor: every Pending entry is a candidate.`}) 
     PostingStartDate?: Date;
         
+    @Field(() => Float, {nullable: true, description: `The amount (total debits) at or below which a manual journal entry is approved by a holder of ManualJournalEntryApproverRoleID; above it, by the Approval CFO. NULL, the default, switches manual-entry approval off for this company: manual entries batch as before.`}) 
+    ManualJournalEntryApprovalThreshold?: number;
+        
+    @Field({nullable: true, description: `The role whose holders approve a manual journal entry at or below ManualJournalEntryApprovalThreshold, never the entry's creator. NULL sends every manual entry to the Approval CFO while the threshold is set.`}) 
+    @MaxLength(36)
+    ManualJournalEntryApproverRoleID?: string;
+        
     @Field({nullable: true}) 
     @MaxLength(50)
     Name?: string;
@@ -125,6 +132,10 @@ export class mjBizAppsAccountingAccountingCompanyProfile_ {
     @Field({nullable: true}) 
     @MaxLength(100)
     ApprovalCFOUser?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(50)
+    ManualJournalEntryApproverRole?: string;
         
     @Field(() => Float, {nullable: true}) 
     _mj__Latitude?: number;
@@ -209,6 +220,12 @@ export class CreatemjBizAppsAccountingAccountingCompanyProfileInput {
     @Field({ nullable: true })
     PostingStartDate: Date | null;
 
+    @Field(() => Float, { nullable: true })
+    ManualJournalEntryApprovalThreshold: number | null;
+
+    @Field({ nullable: true })
+    ManualJournalEntryApproverRoleID: string | null;
+
     @Field({ nullable: true })
     Name?: string;
 
@@ -284,6 +301,12 @@ export class UpdatemjBizAppsAccountingAccountingCompanyProfileInput {
 
     @Field({ nullable: true })
     PostingStartDate?: Date | null;
+
+    @Field(() => Float, { nullable: true })
+    ManualJournalEntryApprovalThreshold?: number | null;
+
+    @Field({ nullable: true })
+    ManualJournalEntryApproverRoleID?: string | null;
 
     @Field({ nullable: true })
     Name?: string;
@@ -2740,6 +2763,9 @@ export class mjBizAppsAccountingGLAccount_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
+    @Field(() => Boolean, {nullable: true, description: `A control account (AR, deferred revenue, unbilled, customer deposits, cash, or any account the company names): a manual journal entry with a line on it always needs the company's Approval CFO, whatever its amount. Default 0.`}) 
+    IsControlAccount?: boolean;
+        
     @Field({nullable: true}) 
     @MaxLength(50)
     Company?: string;
@@ -2814,6 +2840,9 @@ export class CreatemjBizAppsAccountingGLAccountInput {
     @Field({ nullable: true })
     Description: string | null;
 
+    @Field(() => Boolean, { nullable: true })
+    IsControlAccount?: boolean;
+
     @Field(() => RestoreContextInput, { nullable: true })
     RestoreContext___?: RestoreContextInput;
 }
@@ -2859,6 +2888,9 @@ export class UpdatemjBizAppsAccountingGLAccountInput {
 
     @Field({ nullable: true })
     Description?: string | null;
+
+    @Field(() => Boolean, { nullable: true })
+    IsControlAccount?: boolean;
 
     @Field(() => [KeyValuePairInput], { nullable: true })
     OldValues___?: KeyValuePairInput[];
@@ -3449,6 +3481,25 @@ export class mjBizAppsAccountingJournalEntry_ {
     @Field({nullable: true, description: `Timestamp when the journal entry was last scored by the predictive anomaly model.`}) 
     PredictedAnomalyScoredAt?: Date;
         
+    @Field({nullable: true, description: `Set when the entry needs approval: Standard (a holder of the company's manual-entry approver role) or CFO (above the threshold, a line on a control account, or no other approver available). Set when a manual entry is created, or its amounts, accounts, date or company change, while its company has a ManualJournalEntryApprovalThreshold. An entry with a level is not a batch candidate until ApprovedAt is set. NULL: no approval needed.`}) 
+    @MaxLength(20)
+    ApprovalLevel?: string;
+        
+    @Field({nullable: true, description: `The user whose save raised the current approval request: the creator, or whoever last changed the entry's amounts, accounts, date or company. That user may not approve it. Set exactly when ApprovalLevel is.`}) 
+    @MaxLength(36)
+    ApprovalRequestedByUserID?: string;
+        
+    @Field({nullable: true, description: `The approval Task raised for this manual entry, stamped in the same transaction. The approval is read from this column, never from a Task Link.`}) 
+    @MaxLength(36)
+    ApprovalTaskID?: string;
+        
+    @Field({nullable: true, description: `When the manual entry was approved. Set together with ApprovedByUserID, only on an entry with an ApprovalLevel; cleared when the entry's amounts, accounts, date or company change afterwards.`}) 
+    ApprovedAt?: Date;
+        
+    @Field({nullable: true, description: `The user who approved the manual entry: never ApprovalRequestedByUserID. Set together with ApprovedAt.`}) 
+    @MaxLength(36)
+    ApprovedByUserID?: string;
+        
     @Field({nullable: true}) 
     @MaxLength(50)
     Company?: string;
@@ -3476,6 +3527,18 @@ export class mjBizAppsAccountingJournalEntry_ {
     @Field({nullable: true}) 
     @MaxLength(500)
     File?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(100)
+    ApprovalRequestedByUser?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(255)
+    ApprovalTask?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(100)
+    ApprovedByUser?: string;
         
     @Field({nullable: true}) 
     @MaxLength(9)
@@ -3566,6 +3629,21 @@ export class CreatemjBizAppsAccountingJournalEntryInput {
     @Field({ nullable: true })
     PredictedAnomalyScoredAt: Date | null;
 
+    @Field({ nullable: true })
+    ApprovalLevel: string | null;
+
+    @Field({ nullable: true })
+    ApprovalRequestedByUserID: string | null;
+
+    @Field({ nullable: true })
+    ApprovalTaskID: string | null;
+
+    @Field({ nullable: true })
+    ApprovedAt: Date | null;
+
+    @Field({ nullable: true })
+    ApprovedByUserID: string | null;
+
     @Field(() => RestoreContextInput, { nullable: true })
     RestoreContext___?: RestoreContextInput;
 }
@@ -3629,6 +3707,21 @@ export class UpdatemjBizAppsAccountingJournalEntryInput {
 
     @Field({ nullable: true })
     PredictedAnomalyScoredAt?: Date | null;
+
+    @Field({ nullable: true })
+    ApprovalLevel?: string | null;
+
+    @Field({ nullable: true })
+    ApprovalRequestedByUserID?: string | null;
+
+    @Field({ nullable: true })
+    ApprovalTaskID?: string | null;
+
+    @Field({ nullable: true })
+    ApprovedAt?: Date | null;
+
+    @Field({ nullable: true })
+    ApprovedByUserID?: string | null;
 
     @Field(() => [KeyValuePairInput], { nullable: true })
     OldValues___?: KeyValuePairInput[];

@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <img alt="MJ Version" src="https://img.shields.io/badge/MemberJunction-6.1.5%2B-blue?style=flat-square" />
+  <img alt="MJ Version" src="https://img.shields.io/badge/MemberJunction-6.1.6%2B-blue?style=flat-square" />
   <img alt="Angular" src="https://img.shields.io/badge/Angular-21-DD0031?style=flat-square&logo=angular&logoColor=white" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white" />
   <img alt="SQL Server" src="https://img.shields.io/badge/SQL%20Server-2019%2B-CC2927?style=flat-square&logo=microsoftsqlserver&logoColor=white" />
@@ -210,6 +210,30 @@ Set your JE's origin so drill-through works: `LinkedEntityID` = your entity's MJ
 
 Seed data (GL account roles, default per-company COA scaffolding) is authored as **metadata** (`metadata/`), never hand-written SQL INSERTs — customizable per deployment. It reaches a host through the `…__Metadata_Sync.sql` migration generated at release ([docs/database-migrations.md](docs/database-migrations.md)). There are no system-level default accounts: **GL account defaults start at the company level** as company-scoped `GLAccountLink` rows (D12).
 
+### Who may clear finance exceptions
+
+The package seeds one role, `Finance`, holding `MJ.BizApps.Accounting.FinanceExceptions.Clear`: out of the box any Finance holder who did not create the source record may clear any exception. A host narrows that by granting these authorizations (all shipped, none granted) to its own roles, as `MJ: Authorization Roles` rows in its own metadata:
+
+| Authorization (`MJ.BizApps.Accounting.FinanceExceptions.` …) | Once granted to a role |
+|---|---|
+| `ClearType.<TYPE CODE>` | only its holders clear that type; holding `Clear` no longer does |
+| `ClearUnattributed` | only its holders clear an exception whose creator is unresolved or the system user (otherwise an unresolved creator is refused, and a system creator follows the type) |
+| `EscalatedCreator` + `ClearEscalated` | an exception on a record created by an `EscalatedCreator` holder is cleared only by a `ClearEscalated` holder (both must be granted) |
+
+Precedence: an unattributed creator first, then an escalated creator, then the type's right, then `Clear`. The source record's creator can never clear its exception, so the escalated lane is how a senior person's own work reaches their peers: grant `EscalatedCreator` and `ClearEscalated` to the same senior roles (say `CFO` and a senior finance lead role) and an exception on a CFO-created record is cleared by the lead, one on a lead-created record by the CFO or another lead, never by the creator. It comes before the type's right deliberately: when the creator is the only holder of that type's right, the exception would otherwise be clearable by nobody. `ClearEscalated` applies to every type, so grant it only to roles trusted to clear any type. A rule is in force only while it has a grant row; to say "nobody may clear this type", grant its right to a role with no members. For example, to let only a `CFO` role clear `PRICE_BELOW_ENGINE_UNAPPROVED`:
+
+```json
+{
+  "fields": {
+    "AuthorizationID": "@lookup:MJ: Authorizations.Name=MJ.BizApps.Accounting.FinanceExceptions.ClearType.PRICE_BELOW_ENGINE_UNAPPROVED",
+    "RoleID": "@lookup:MJ: Roles.Name=CFO",
+    "Type": "Allow"
+  }
+}
+```
+
+The rules and refusal codes are in [docs/lifecycle-hooks.md](docs/lifecycle-hooks.md) §2c. Saved query "Finance Exceptions Cleared" lists every clearing decision by month.
+
 ---
 
 ## Database Support
@@ -339,7 +363,7 @@ Ruling of record: **build first, iterate in the system** — plans stay thin; no
 
 | Layer | Technology | Version |
 |---|---|---|
-| **Platform** | [MemberJunction](https://github.com/MemberJunction/MJ) | 6.1.5+ |
+| **Platform** | [MemberJunction](https://github.com/MemberJunction/MJ) | 6.1.6+ |
 | **Runtime** | Node.js | 18+ |
 | **Language** | TypeScript | 5.9 (strict) |
 | **Database (primary)** | SQL Server / Azure SQL | 2019+ |
@@ -348,7 +372,7 @@ Ruling of record: **build first, iterate in the system** — plans stay thin; no
 | **UI Framework** | Angular | 21 |
 | **Build** | Turborepo | 2.7 |
 | **Validation** | Zod | 3.25 |
-| **SQL Conversion** | [`@memberjunction/sql-converter`](https://github.com/MemberJunction/MJ/tree/main/packages/SQLConverter) (through the `mj` CLI) | 6.1.5+ |
+| **SQL Conversion** | [`@memberjunction/sql-converter`](https://github.com/MemberJunction/MJ/tree/main/packages/SQLConverter) (through the `mj` CLI) | 6.1.6+ |
 
 ---
 

@@ -130,6 +130,56 @@ export async function ResolvePersonIDsForUsers(
 }
 
 /**
+ * EVERY Person bound to a user, not just the one {@link ResolvePersonIDForUser} picks: the user's
+ * own People link and every Person whose deprecated `LinkedUserID` names the user. A separation-of-
+ * duties check needs all of them, because one Person can be bound to two users (one through
+ * `LinkedUserID`, the other through its own link), which a one-Person-per-user answer hides.
+ *
+ * Ordered deterministically: the own-link Person first (the one {@link ResolvePersonIDForUser}
+ * returns), then the `LinkedUserID` Persons oldest first. Inactive Persons are included: an
+ * inactive Person's past decision still belongs to the user.
+ *
+ * @returns the Person IDs, empty when the user has none.
+ * @throws when `userID` is not a UUID (a security check must not read "no Persons" from a bad ID)
+ *   or a lookup fails.
+ */
+export async function ResolveAllPersonIDsForUser(
+    userID: string,
+    provider: IMetadataProvider,
+    contextUser?: UserInfo,
+): Promise<string[]> {
+    if (!IsValidUUID(userID)) throw new Error(`'${userID}' is not a valid user ID, so the Persons bound to it cannot be looked up.`);
+    const view = RunView.FromMetadataProvider(provider);
+
+    const users = await view.RunView<{ LinkedEntityID: string | null; LinkedEntityRecordID: string | null }>({
+        EntityName: USERS_ENTITY,
+        ExtraFilter: `ID = '${userID}'`,
+        Fields: ['LinkedEntityID', 'LinkedEntityRecordID'],
+        MaxRows: 1,
+        ResultType: 'simple',
+        BypassCache: true,
+    }, contextUser);
+    if (!users?.Success) throw new Error(`User lookup failed: ${users?.ErrorMessage ?? 'no result'}`);
+    const row = users.Results?.[0];
+    const ownLink = row ? LinkedPersonRecordID({ ID: userID, ...row }, provider) : null;
+
+    const clauses = [`LinkedUserID = '${userID}'`];
+    if (ownLink) clauses.push(`ID = '${ownLink}'`);
+    const people = await view.RunView<{ ID: string }>({
+        EntityName: PEOPLE_ENTITY,
+        ExtraFilter: clauses.join(' OR '),
+        Fields: ['ID'],
+        OrderBy: '__mj_CreatedAt ASC',
+        ResultType: 'simple',
+        BypassCache: true,
+    }, contextUser);
+    if (!people?.Success) throw new Error(`Person lookup failed: ${people?.ErrorMessage ?? 'no result'}`);
+    const ids = (people.Results ?? []).map((person) => person.ID);
+    const own = ownLink ? ids.filter((id) => id.toLowerCase() === ownLink.toLowerCase()) : [];
+    return [...own, ...ids.filter((id) => !own.includes(id))];
+}
+
+/**
  * The user bound to each Person: a user whose `LinkedEntityID` is People or a subtype and whose
  * `LinkedEntityRecordID` is the Person ID, else the Person's deprecated `LinkedUserID`.
  * When several users link one Person, an active user is taken first.

@@ -1,0 +1,110 @@
+[
+  {
+    "fields": {
+      "Name": "MJ.BizApps.Accounting.FinanceExceptions.ClearType.WON_DEAL_ORDER_NOT_CONFIRMED",
+      "ParentID": null,
+      "IsActive": true,
+      "UseAuditLog": true,
+      "Description": "Who may clear WON_DEAL_ORDER_NOT_CONFIRMED finance exceptions through Accounting.ClearFinanceException. Shipped granted to no role, which leaves the type under MJ.BizApps.Accounting.FinanceExceptions.Clear. Once any role is granted it (Allow), only its holders may clear this type, and holding MJ.BizApps.Accounting.FinanceExceptions.Clear no longer does. Checked as a direct grant: it has no parent. The source record's creator is still refused, and an unattributed or escalated creator is decided by MJ.BizApps.Accounting.FinanceExceptions.ClearUnattributed / MJ.BizApps.Accounting.FinanceExceptions.ClearEscalated when those are granted."
+    },
+    "primaryKey": {
+      "ID": "0CBE1D3B-6949-4340-A895-F790C9D2DF3A"
+    }
+  },
+  {
+    "fields": {
+      "Name": "MJ.BizApps.Accounting.FinanceExceptions.ClearType.OVERLAPPING_SUBSCRIPTION",
+      "ParentID": null,
+      "IsActive": true,
+      "UseAuditLog": true,
+      "Description": "Who may clear OVERLAPPING_SUBSCRIPTION finance exceptions through Accounting.ClearFinanceException. Shipped granted to no role, which leaves the type under MJ.BizApps.Accounting.FinanceExceptions.Clear. Once any role is granted it (Allow), only its holders may clear this type, and holding MJ.BizApps.Accounting.FinanceExceptions.Clear no longer does. Checked as a direct grant: it has no parent. The source record's creator is still refused, and an unattributed or escalated creator is decided by MJ.BizApps.Accounting.FinanceExceptions.ClearUnattributed / MJ.BizApps.Accounting.FinanceExceptions.ClearEscalated when those are granted."
+    },
+    "primaryKey": {
+      "ID": "6D6EB2DD-7A11-4F7A-9B76-6E6245796393"
+    }
+  },
+  {
+    "fields": {
+      "Name": "MJ.BizApps.Accounting.FinanceExceptions.ClearType.ERP_POSTING_NOT_READ_BACK",
+      "ParentID": null,
+      "IsActive": true,
+      "UseAuditLog": true,
+      "Description": "Who may clear ERP_POSTING_NOT_READ_BACK finance exceptions through Accounting.ClearFinanceException. Shipped granted to no role, which leaves the type under MJ.BizApps.Accounting.FinanceExceptions.Clear. Once any role is granted it (Allow), only its holders may clear this type, and holding MJ.BizApps.Accounting.FinanceExceptions.Clear no longer does. Checked as a direct grant: it has no parent. The source record's creator is still refused, and an unattributed or escalated creator is decided by MJ.BizApps.Accounting.FinanceExceptions.ClearUnattributed / MJ.BizApps.Accounting.FinanceExceptions.ClearEscalated when those are granted."
+    },
+    "primaryKey": {
+      "ID": "01003664-5843-41B5-A6B7-B0D892ECC7C8"
+    }
+  },
+  {
+    "fields": {
+      "Name": "MJ.BizApps.Accounting.FinanceExceptions.ClearType.PROGRESS_UNATTESTED",
+      "ParentID": null,
+      "IsActive": true,
+      "UseAuditLog": true,
+      "Description": "Who may clear PROGRESS_UNATTESTED finance exceptions through Accounting.ClearFinanceException. Shipped granted to no role, which leaves the type under MJ.BizApps.Accounting.FinanceExceptions.Clear. Once any role is granted it (Allow), only its holders may clear this type, and holding MJ.BizApps.Accounting.FinanceExceptions.Clear no longer does. Checked as a direct grant: it has no parent. The source record's creator is still refused, and an unattributed or escalated creator is decided by MJ.BizApps.Accounting.FinanceExceptions.ClearUnattributed / MJ.BizApps.Accounting.FinanceExceptions.ClearEscalated when those are granted."
+    },
+    "primaryKey": {
+      "ID": "6036FD7E-7B88-41FD-87AA-A9F3C6247556"
+    }
+  },
+  {
+    "fields": {
+      "Name": "MJ.BizApps.Accounting.FinanceExceptions.ClearType.PROGRESS_JUDGMENT_CALL",
+      "ParentID": null,
+      "IsActive": true,
+      "UseAuditLog": true,
+      "Description": "Who may clear PROGRESS_JUDGMENT_CALL finance exceptions through Accounting.ClearFinanceException. Shipped granted to no role, which leaves the type under MJ.BizApps.Accounting.FinanceExceptions.Clear. Once any role is granted it (Allow), only its holders may clear this type, and holding MJ.BizApps.Accounting.FinanceExceptions.Clear no longer does. Checked as a direct grant: it has no parent. The source record's creator is still refused, and an unattributed or escalated creator is decided by MJ.BizApps.Accounting.FinanceExceptions.ClearUnattributed / MJ.BizApps.Accounting.FinanceExceptions.ClearEscalated when those are granted."
+    },
+    "primaryKey": {
+      "ID": "0A54FC89-3302-4F16-AC53-925F3160FB61"
+    }
+  },
+  {
+    "fields": {
+      "Name": "MJ.BizApps.Accounting.FinanceExceptions.ClearType.PRICE_BELOW_ENGINE_UNAPPROVED",
+      "ParentID": null,
+      "IsActive": true,
+      "UseAuditLog": true,
+      "Description": "Who may clear PRICE_BELOW_ENGINE_UNAPPROVED finance exceptions through Accounting.ClearFinanceException. Shipped granted to no role, which leaves the type under MJ.BizApps.Accounting.FinanceExceptions.Clear. Once any role is granted it (Allow), only its holders may clear this type, and holding MJ.BizApps.Accounting.FinanceExceptions.Clear no longer does. Checked as a direct grant: it has no parent. The source record's creator is still refused, and an unattributed or escalated creator is decided by MJ.BizApps.Accounting.FinanceExceptions.ClearUnattributed / MJ.BizApps.Accounting.FinanceExceptions.ClearEscalated when those are granted."
+    },
+    "primaryKey": {
+      "ID": "9CD9E6CA-55BA-477E-9383-ED2846FA88C8"
+    }
+  },
+  {
+    "fields": {
+      "Name": "MJ.BizApps.Accounting.FinanceExceptions.ClearUnattributed",
+      "ParentID": null,
+      "IsActive": true,
+      "UseAuditLog": true,
+      "Description": "Who may clear a finance exception whose source record has no attributable creator: CreatorUnresolved is set, or the creator is the MJ system user (a renewal job, conversion or import). Shipped granted to no role, which keeps the original rules: an unresolved creator is refused until the login is linked, and a system-created record follows its type. Once granted (Allow), only its holders may clear those exceptions, whatever their type. Checked as a direct grant."
+    },
+    "primaryKey": {
+      "ID": "3118412C-8B4E-43E8-9CB2-FAAB85DC138D"
+    }
+  },
+  {
+    "fields": {
+      "Name": "MJ.BizApps.Accounting.FinanceExceptions.EscalatedCreator",
+      "ParentID": null,
+      "IsActive": true,
+      "UseAuditLog": false,
+      "Description": "A marker, not a permission: grant it to the roles whose own work must be reviewed one level up. A finance exception on a source record created by a holder is cleared only by a holder of MJ.BizApps.Accounting.FinanceExceptions.ClearEscalated, whatever its type. Takes effect only while both this and MJ.BizApps.Accounting.FinanceExceptions.ClearEscalated are granted to some role. A creator the user cache does not know is treated as a holder."
+    },
+    "primaryKey": {
+      "ID": "EFF34891-7228-4B2D-B32C-07920D22A407"
+    }
+  },
+  {
+    "fields": {
+      "Name": "MJ.BizApps.Accounting.FinanceExceptions.ClearEscalated",
+      "ParentID": null,
+      "IsActive": true,
+      "UseAuditLog": true,
+      "Description": "Who may clear a finance exception on a source record created by a holder of MJ.BizApps.Accounting.FinanceExceptions.EscalatedCreator. Shipped granted to no role (escalation off). Checked as a direct grant."
+    },
+    "primaryKey": {
+      "ID": "1F99A6A5-D421-4B74-8A78-DD205E65779D"
+    }
+  }
+]

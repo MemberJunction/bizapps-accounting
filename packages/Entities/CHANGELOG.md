@@ -1,5 +1,11 @@
 # @mj-biz-apps/accounting-entities
 
+## 0.23.0
+
+### Patch Changes
+
+- b5646b8: Requires MemberJunction 6.1.6, the 6.1 LTS release QA runs. Every `@memberjunction/*` range and both root overrides are `^6.1.6`, and `mj-app.json` declares `>=6.1.6 <7.0.0`.
+
 ## 0.22.2
 
 ## 0.22.1

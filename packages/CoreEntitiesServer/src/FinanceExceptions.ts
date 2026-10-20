@@ -3,7 +3,8 @@
  *
  *   GetFinanceExceptionTypes   the detectors' thresholds (read-only)
  *   RaiseFinanceExceptions     idempotent raise from a consuming app, joining its transaction
- *   ClearFinanceException      a reviewer who did not create the source record clears one
+ *   ClearFinanceException      a reviewer who did not create the source record clears one, holding
+ *                              the right the exception's rule names (FinanceExceptionClearPolicy.ts)
  *
  * WHO READS AND WRITES. The callers are detectors running as whoever triggered them — the user
  * booking an order, the user attesting progress, a nightly job — and none of them holds rights on
@@ -24,9 +25,18 @@
  *
  * FAILURE MODEL. Logical failures come back inside the output as `Success: false` with coded
  * `Errors`; the operations never throw for them.
+ *
+ * NO SELF-CLOSING (YET). An exception stays Open until a person clears it, even when the condition
+ * behind it has since been fixed (the order confirmed, the progress attested, the read-back
+ * succeeded). Whether exceptions should close themselves is an open product question (golive #320
+ * §4 rule 2 / question 4). If it is adopted, the place for it is a separate operation the owning
+ * detector calls when its condition clears — not this one — that saves through
+ * SaveFinanceExceptionClearance as `Corrected`, with the system user as reviewer and a note naming
+ * the condition, so automatic closes stay distinguishable from human decisions on the monthly
+ * cleared list (saved query "Finance Exceptions Cleared"). It would need no new clearing right: the
+ * rights here govern decisions to accept or waive.
  */
 import {
-  AuthorizationEvaluator,
   EntityInfo,
   IMetadataProvider,
   IRunViewProvider,
@@ -55,12 +65,18 @@ import {
   FinanceExceptionEntityServer,
   SaveFinanceExceptionClearance,
 } from './FinanceExceptionEntityServer.js';
+import {
+  FINANCE_EXCEPTIONS_CLEAR_AUTH,
+  FinanceExceptionClearRuleRefusal,
+  HoldsAnyFinanceExceptionClearRight,
+  HoldsFinanceExceptionClearRule,
+  ResolveFinanceExceptionClearRule,
+  type FinanceExceptionClearContext,
+} from './FinanceExceptionClearPolicy.js';
 import { isSqlGuid } from './SqlGuards.js';
 
 const FINANCE_EXCEPTION_TABLE = '__mj_BizAppsAccounting.FinanceException';
 export const FINANCE_EXCEPTION_TYPE_ENTITY = 'MJ_BizApps_Accounting: Finance Exception Types';
-/** Held by the Finance role. Fails closed: an authorization missing from the catalog is held by nobody. */
-export const FINANCE_EXCEPTIONS_CLEAR_AUTH = 'MJ.BizApps.Accounting.FinanceExceptions.Clear';
 
 /** Keys per existence lookup, so one filter stays a reasonable size however many are raised. */
 const EXISTING_LOOKUP_CHUNK = 100;
@@ -397,11 +413,26 @@ export async function RaiseFinanceExceptions(
 
 type ClearRefusal = { Code: string; Message: string };
 
+/** What the clearing rule reads, from the provider's metadata and the server's user cache. */
+export function FinanceExceptionClearContextFor(provider: IMetadataProvider): FinanceExceptionClearContext {
+  const users = UserCache.Instance;
+  return {
+    Authorizations: provider.Authorizations ?? [],
+    AuthorizationRoles: provider.AuthorizationRoles ?? [],
+    Roles: provider.Roles ?? [],
+    SystemUserID: users.GetSystemUser()?.ID ?? null,
+    FindUser: (userID: string) => (users.Users ?? []).find(u => UUIDsEqual(u.ID, userID)),
+  };
+}
+
+/**
+ * Whether the user holds any finance exception clearing right: the default
+ * MJ.BizApps.Accounting.FinanceExceptions.Clear, or a per-type / unattributed / escalated right a host
+ * has granted. Which exceptions they may clear is decided per record (FinanceExceptionClearPolicy).
+ */
 export function UserCanClearFinanceExceptions(user: UserInfo | null | undefined, provider: IMetadataProvider): boolean {
   if (!user) return false;
-  const catalog = provider.Authorizations ?? [];
-  const auth = catalog.find(a => a.Name === FINANCE_EXCEPTIONS_CLEAR_AUTH);
-  return !!auth && new AuthorizationEvaluator().UserCanExecuteWithAncestors(auth, user, catalog);
+  return HoldsAnyFinanceExceptionClearRight(FinanceExceptionClearContextFor(provider), user);
 }
 
 function inputRefusal(input: AccountingClearFinanceExceptionInput | null | undefined): ClearRefusal | null {
@@ -417,22 +448,7 @@ function inputRefusal(input: AccountingClearFinanceExceptionInput | null | undef
   return null;
 }
 
-/**
- * The creator has no linked login, so whether the reviewer is the creator cannot be checked, and
- * clearing is refused (golive #279). The row's summary is appended because the raising app names
- * the creator there, so the message says whose login to link. Once it is linked, the next raise
- * refreshes the row (refreshCreator) and it can be cleared.
- */
-function creatorUnresolvedRefusal(record: FinanceExceptionEntityServer): ClearRefusal | null {
-  if (!record.CreatorUnresolved) return null;
-  return {
-    Code: 'CREATOR_UNRESOLVED',
-    Message:
-      "The record's creator has no linked login, so separation of duties cannot be checked. Link the creator " +
-      `to a login; the exception can be cleared after the next check refreshes it. ${record.Summary}`,
-  };
-}
-
+/** The checks that hold whatever the rule: still Open, and the reviewer is not the source record's creator. */
 function recordRefusal(record: FinanceExceptionEntityServer, reviewer: UserInfo): ClearRefusal | null {
   if (record.Status !== 'Open') {
     return { Code: 'NOT_OPEN', Message: `Finance exception ${record.ID} is already ${record.Status}.` };
@@ -440,7 +456,32 @@ function recordRefusal(record: FinanceExceptionEntityServer, reviewer: UserInfo)
   if (record.SourceCreatedByUserID && UUIDsEqual(record.SourceCreatedByUserID, reviewer.ID)) {
     return { Code: 'CREATOR_CANNOT_CLEAR', Message: 'You created the record this exception is about, so someone else must review it.' };
   }
-  return creatorUnresolvedRefusal(record);
+  return null;
+}
+
+/**
+ * Whether this reviewer may clear this exception under its rule (FinanceExceptionClearPolicy).
+ * A CreatorUnresolved row with no ClearUnattributed grant is refused as CREATOR_UNRESOLVED: the
+ * creator cannot be compared with the reviewer. Once the creator's login is linked, the next raise
+ * refreshes the row (refreshCreator) and it can be cleared.
+ */
+async function ruleRefusal(
+  record: FinanceExceptionEntityServer,
+  reviewer: UserInfo,
+  provider: IMetadataProvider,
+  ledger: UserInfo,
+): Promise<ClearRefusal | null> {
+  const type = (await loadFinanceExceptionTypes(provider, ledger)).find(t => UUIDsEqual(t.ID, record.FinanceExceptionTypeID));
+  if (!type) {
+    return { Code: 'TYPE_UNKNOWN', Message: `Finance exception ${record.ID} names a finance exception type that could not be read.` };
+  }
+  const context = FinanceExceptionClearContextFor(provider);
+  const resolution = ResolveFinanceExceptionClearRule(
+    { TypeCode: type.Code, SourceCreatedByUserID: record.SourceCreatedByUserID, CreatorUnresolved: !!record.CreatorUnresolved, Summary: record.Summary },
+    context,
+  );
+  if ('Refusal' in resolution) return resolution.Refusal;
+  return HoldsFinanceExceptionClearRule(context, resolution.Rule, reviewer) ? null : FinanceExceptionClearRuleRefusal(context, resolution.Rule, type.Code);
 }
 
 export async function ClearFinanceException(
@@ -448,9 +489,12 @@ export async function ClearFinanceException(
   provider: IMetadataProvider,
   reviewer: UserInfo,
 ): Promise<AccountingClearFinanceExceptionOutput> {
-  // FIRST, BEFORE ANY READ: who may clear is the control.
+  // FIRST, BEFORE ANY READ: a caller with no clearing right at all learns nothing about the row.
   if (!UserCanClearFinanceExceptions(reviewer, provider)) {
-    return { Success: false, Errors: [{ Code: 'NOT_AUTHORIZED', Message: `You need the Finance role to clear a finance exception (authorization ${FINANCE_EXCEPTIONS_CLEAR_AUTH}).` }] };
+    return {
+      Success: false,
+      Errors: [{ Code: 'NOT_AUTHORIZED', Message: `You hold no right to clear finance exceptions (authorization ${FINANCE_EXCEPTIONS_CLEAR_AUTH}, or a per-type clearing right).` }],
+    };
   }
   const invalid = inputRefusal(input);
   if (invalid || !input) return { Success: false, Errors: [invalid ?? { Code: 'MALFORMED_INPUT', Message: 'Input is required.' }] };
@@ -485,7 +529,7 @@ async function clearLocked(
   if (!(await record.Load(input.FinanceExceptionID))) {
     return { Success: false, Errors: [{ Code: 'NOT_FOUND', Message: `No finance exception has the ID ${input.FinanceExceptionID}.` }] };
   }
-  const refusal = recordRefusal(record, reviewer);
+  const refusal = recordRefusal(record, reviewer) ?? (await ruleRefusal(record, reviewer, provider, ledger));
   if (refusal) return { Success: false, Status: record.Status, Errors: [refusal] };
 
   record.Status = input.Outcome;
