@@ -311,7 +311,7 @@ async function main(): Promise<void> {
     const impostor = await makeJE(ctx, companyA, 45, 45); // typed Manual, not Reversal
     await expectThrow(
       () => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET ReversesJournalEntryID='${orig.ID}' WHERE ID='${impostor.ID}'`),
-      'must be typed with JournalEntryType',
+      'must have the Reversal entry type',
     );
   });
 

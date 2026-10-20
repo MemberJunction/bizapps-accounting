@@ -38,8 +38,8 @@ interface BatchDraft {
   Selection: EntrySelection;
   /** Set once built — the tab becomes a read-only record of the batch. */
   BuiltJournalEntryBatchNumber?: string;
-  /** The loaded preview — stored PER-TAB so switching tabs does NOT re-query the server (Marcelo
-   *  2026-07-21). Null until the operator clicks Load / Apply (the query is deferred, never automatic). */
+  /** The loaded preview — stored PER-TAB so switching tabs does NOT re-query the server.
+   *  Null until the operator clicks Load / Apply (the query is deferred, never automatic). */
   Preview?: BatchPreview | null;
   /** True when the criteria changed since the last load — the shown preview is stale; Apply refreshes it. */
   PreviewStale?: boolean;
@@ -207,7 +207,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
       Status: 'draft',
       State: { Criteria: this.defaultCriteria(), Selection: ALL_ENTRIES, Memo: '', Preview: null, PreviewStale: false },
     });
-    // NO auto-query (Marcelo 2026-07-21): a new tab does NOT hit the server. The operator clicks
+    // NO auto-query: a new tab does NOT hit the server. The operator clicks
     // "Load entries" in the table (or Apply in the filters) to run the first query.
     this.cdr.markForCheck();
   }
@@ -246,7 +246,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   }
 
   public SelectTab(id: string): void {
-    // Just show the tab's OWN stored preview — no re-query (Marcelo 2026-07-21).
+    // Just show the tab's OWN stored preview — no re-query.
     this.tabs.Activate(id);
     this.cdr.markForCheck();
   }
@@ -260,7 +260,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   /** "Keep as draft tab" — the tab already holds the state; this just makes that explicit + clean. */
   public KeepAsDraft(): void {
     if (this.tabs.ActiveId) this.tabs.MarkClean(this.tabs.ActiveId);
-    this.ActionMessage = 'Kept as a draft tab — it stays for this session (drafts are not saved to the database in v1).';
+    this.ActionMessage = 'Kept as a draft tab. Drafts last only for this browser session and are not saved, so closing the app discards it.';
     this.ActionIsError = false;
     this.cdr.markForCheck();
   }
@@ -289,7 +289,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   }
 
   public OnCriteriaChanged(): void {
-    // NO auto-query (Marcelo 2026-07-21): changing a filter does NOT hit the server. Mark the shown
+    // NO auto-query: changing a filter does NOT hit the server. Mark the shown
     // preview stale so the UI prompts "Apply to refresh"; the operator clicks Apply to re-query. This
     // is what keeps the page fast — no round-trip on every keystroke/filter tweak.
     const d = this.Draft;
@@ -532,7 +532,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     if (this.IsBuilt) return 'This tab is already built.';
     if (!this.Preview || this.Preview.Candidates.length === 0) return 'Nothing matches these criteria.';
     if (this.IncludedCount === 0) return 'Every entry is excluded — nothing to build.';
-    if (!this.IsBalanced) return 'The selection does not balance (Dr ≠ Cr) — it would be rejected by the ledger.';
+    if (!this.IsBalanced) return 'The selected entries do not balance: total debits must equal total credits. Include or exclude entries until they match.';
     if (this.PostingDateProblem) return this.PostingDateProblem;
     if (this.PostingDateWarning && !this.PostingDateConfirmed) return `Confirm posting this batch in ${this.PostingMonth}.`;
     return null;
@@ -560,14 +560,14 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
         // Keep a memo caption if the operator gave one; otherwise fall to the now-known batch number.
         this.renameActiveTab(this.batchTabLabel(d));
       }
-      // On confirm, refresh to a FRESH tab (Marcelo 2026-07-21) — the built batch stays in its own
+      // On confirm, refresh to a FRESH tab — the built batch stays in its own
       // read-only tab for review while a new draft is ready. (openNewDraft clears messages; set after.)
       const builtNumber = d.BuiltJournalEntryBatchNumber;
       const taskRaised = res.ApprovalTaskRaised;
       this.openNewDraft();
       this.ActionMessage = taskRaised
         ? `Built batch ${builtNumber} — sent for CFO approval. Its tab is kept for review; this is a fresh batch.`
-        : `Built batch ${builtNumber}. ⚠ Its approval task could not be raised — the batch is valid and can be retried from Batch approvals.`;
+        : `Built batch ${builtNumber}, but its approval request was not created, so no one will be asked to approve it. The batch is valid; retry the approval request from Batch approvals.`;
       this.ActionIsError = false;
     } catch (e) {
       this.setError(e instanceof Error ? e.message : String(e));
@@ -590,7 +590,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   }
 
   /**
-   * Single-company selection for the build criteria (Marcelo 2026-07-21). The criteria model still holds
+   * Single-company selection for the build criteria. The criteria model still holds
    * `CompanyIDs: string[]` (the engine's multi-company shape), so this maps the single choice to a
    * 0-or-1-element array: null → [] (all companies), an id → [id]. Removing "all" + requiring exactly one
    * is the single-company engine invariant, landing with the zero-net work.

@@ -150,7 +150,7 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
       this.ContextCurrentUser,
     );
     if (!res.Success) {
-      throw new Error(`AccountingCompanyProfileEntityServer: failed to read company ${this.ID}'s GL accounts: ${res.ErrorMessage ?? 'unknown error'}`);
+      throw new Error(`Could not check whether company ${this.ID} owns active GL accounts: ${res.ErrorMessage ?? 'unknown error'}`);
     }
     return res.Results?.[0]?.Code ?? null;
   }

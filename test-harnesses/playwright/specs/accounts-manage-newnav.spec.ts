@@ -101,7 +101,7 @@ test('All accounts: create → rename → identity-lock rejection, all through t
   // The entity's rejection SURFACES as an error alert. ⚠ KNOWN UPSTREAM GAP (MJ-UPSTREAM
   // 2026-07-30): the GraphQL save path drops server-side ValidateAsync messages, so the alert
   // currently reads "Unknown error" instead of the identity-lock text. When MJ fixes the
-  // plumbing, tighten this to /identity fields are immutable from creation/i.
+  // plumbing, tighten this to /cannot change after the account is created/i.
   await expect(editor.locator('[role="alert"], .gla-editor__error').first(),
     'an error alert surfaces on rejection').toBeVisible();
   await editor.getByRole('button', { name: /Cancel/i }).click();

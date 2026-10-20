@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: V202610112000__v0.23.x__AccountingCompanyProfile_BooksClosedThroughDate.sql
+-- Migration: V202610201010__v0.24.x__AccountingCompanyProfile_BooksClosedThroughDate.sql
 -- Description: a per-company books-closed-through date. Finance sets it when a
 --              month-end close finishes.
 -- =============================================================================

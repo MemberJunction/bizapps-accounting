@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: V202610121200__v0.23.x__Field_Descriptions_Match_Code.sql
+-- Migration: V202610201020__v0.24.x__Field_Descriptions_Match_Code.sql
 -- Description: three column descriptions rewritten to say what the code does
 --              (#352).
 -- =============================================================================

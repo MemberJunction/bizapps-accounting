@@ -1,6 +1,6 @@
 /**
  * Server-side subclass of JournalEntryBatch — the batch's OWN invariants + owned collections
- * (enriched 2026-07-29 per Marcelo's review: "some of it should be in a BaseEntity subclass").
+ * (enriched 2026-07-29: rules that touch only the batch belong on its BaseEntity subclass).
  *
  * WHAT LIVES HERE (single-aggregate concerns):
  *   - JournalEntryBatchNumber: atomic counter sproc on first save.
@@ -24,7 +24,7 @@
  * WHAT DELIBERATELY STAYS IN THE ENGINE (multi-aggregate orchestration — JournalEntryBatchEngine.ts):
  *   build/regenerate (gather candidates → net → create summary → lock N independent JEs → raise
  *   the approval task) and dispatch (gate + ERP poster seam). Those compose MANY aggregates and
- *   run behind Remote Operations per the engine+transaction ruling (Marcelo 2026-07-21).
+ *   run behind Remote Operations per the engine+transaction rule (see JournalEntryBatchOperations.ts).
  */
 
 import { createHash } from 'node:crypto';
@@ -310,6 +310,22 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       fail(`An Approved batch must carry both ApprovedAt and ApprovedByUserID.`);
     }
 
+    // WHO is the user approving (golive #320 §3): an approval cannot be recorded in someone else's
+    // name. TasksAppApprovalGate.assertApproved trusts ApprovedByUserID for a decision that names no
+    // Person, so a save naming the CFO while signed in as someone else must not land. Checked on the
+    // approval edge AND whenever the field itself changes (an Approved batch's approver rewritten),
+    // so the entity layer holds without the T-SQL freeze trigger, which PostgreSQL has no copy of.
+    // A save that names an approver with no signed-in user fails rather than skipping the check.
+    const approverChanged = this.isApproving || !!this.GetFieldByName('ApprovedByUserID')?.Dirty;
+    if (approverChanged && this.ApprovedByUserID) {
+      const approver = this.ContextCurrentUser?.ID;
+      if (!approver) {
+        fail(`An approval is recorded in the name of the user approving, but this save has no signed-in user, so ApprovedByUserID ${this.ApprovedByUserID} cannot be checked.`);
+      } else if (!UUIDsEqual(this.ApprovedByUserID, approver)) {
+        fail(`An approval is recorded in the name of the user approving: ApprovedByUserID must be you, not ${this.ApprovedByUserID}.`);
+      }
+    }
+
     // Archive audit triple: an Archived batch says WHY it will never post, plus who and when.
     // Enforced at the DB too (CK_JournalEntryBatch_ArchiveAudit) — the reason is required by #214.
     if (this.Status === 'Archived' && (!this.ArchiveReason?.trim() || !this.ArchivedAt || !this.ArchivedByUserID)) {
@@ -344,7 +360,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     }
     // A batch is born Pending — no path creates it mid-lifecycle.
     if (this.Status && this.Status !== 'Pending') {
-      problems.push(`A new batch must start at Status='Pending' (got '${this.Status}') — lifecycle transitions happen through the batching process.`);
+      problems.push(`A new batch must start as Pending, not '${this.Status}'; its status changes only through the batching process.`);
     }
     return problems;
   }
@@ -357,8 +373,8 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     const oldStatus = this.loadedStatus;
     if (!oldStatus || this.Status === oldStatus) return [];
     if (!(LEGAL_TRANSITIONS[oldStatus] ?? []).includes(this.Status)) {
-      const legal = (LEGAL_TRANSITIONS[oldStatus] ?? []).filter(s => s !== oldStatus).join(', ') || '(terminal)';
-      return [`Illegal batch status transition '${oldStatus}' → '${this.Status}'. Legal from '${oldStatus}': ${legal}.`];
+      const legal = (LEGAL_TRANSITIONS[oldStatus] ?? []).filter(s => s !== oldStatus).join(', ') || 'nothing; it is final';
+      return [`A batch cannot go from ${oldStatus} to ${this.Status}. From ${oldStatus} it can go to: ${legal}.`];
     }
     if (DISPATCH_TARGETS.includes(this.Status) && !this._dispatching) {
       return [
@@ -551,7 +567,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID=${sqlGuidLiteral(summaryId, 'summary journal entry')}`, Fields: ['ID', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple', BypassCache: true },
       user,
     );
-    if (!lineRes.Success) throw new Error(`JournalEntryBatchEntityServer: could not load summary lines: ${lineRes.ErrorMessage ?? 'unknown'}`);
+    if (!lineRes.Success) throw new Error(`Could not load the batch's summary lines: ${lineRes.ErrorMessage ?? 'unknown error'}`);
     const lines = lineRes.Results ?? [];
     if (lines.length === 0) return { lines, dimensions: [] };
 
@@ -560,7 +576,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       { EntityName: JELD_ENTITY, ExtraFilter: `JournalEntryLineID IN (${lineIds})`, Fields: ['JournalEntryLineID', 'DimensionID', 'DimensionValueID'], ResultType: 'simple', BypassCache: true },
       user,
     );
-    if (!dimRes.Success) throw new Error(`JournalEntryBatchEntityServer: could not load summary line dimensions: ${dimRes.ErrorMessage ?? 'unknown'}`);
+    if (!dimRes.Success) throw new Error(`Could not load the dimensions on the batch's summary lines: ${dimRes.ErrorMessage ?? 'unknown error'}`);
     return { lines, dimensions: dimRes.Results ?? [] };
   }
 
@@ -626,10 +642,10 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    * Cancelled state the database does not hold.
    */
   public async Cancel(contextUser?: UserInfo, options: JournalEntryBatchCancelOptions = {}): Promise<boolean> {
-    if (!this.IsSaved) throw new Error('JournalEntryBatchEntityServer.Cancel: the batch must be saved.');
+    if (!this.IsSaved) throw new Error('The batch must be saved before it can be cancelled.');
     this.assertCancellable(options);
     const user = contextUser ?? this.ContextCurrentUser;
-    if (!user) throw new Error('JournalEntryBatchEntityServer.Cancel: a context user is required; the cancel is authorized as that user.');
+    if (!user) throw new Error('Cancelling a batch needs a signed-in user, because the cancel is authorized as that user.');
     const authorized = await this.authorizeCancel(user, options);
     const summaryId = this.SummaryJournalEntryID;
     const dbProvider = this.ProviderToUse as unknown as DatabaseProviderBase;
@@ -735,16 +751,16 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
   private assertCancellable(options: JournalEntryBatchCancelOptions): void {
     const label = this.JournalEntryBatchNumber ?? this.ID;
     if (!CANCELLABLE_FROM.includes(this.Status)) {
-      throw new Error(`JournalEntryBatchEntityServer.Cancel: batch ${label} is ${this.Status}; only a ${CANCELLABLE_FROM.join(' / ')} batch can be cancelled.`);
+      throw new Error(`The batch was not cancelled: batch ${label} is ${this.Status}, and only a ${CANCELLABLE_FROM.join(' or ')} batch can be cancelled.`);
     }
     if (this.Status === 'Failed' && this.ExternalJournalEntryBatchRef) {
       throw new Error(
-        `JournalEntryBatchEntityServer.Cancel: the ERP accepted batch ${label} as ${this.ExternalJournalEntryBatchRef}; only recording it Posted failed. ` +
+        `The batch was not cancelled: the ERP accepted batch ${label} as ${this.ExternalJournalEntryBatchRef}; only recording it Posted failed. ` +
           'Cancelling would release its entries to post again. Retry it from Dispatch status instead: the retry records it Posted without sending it again.',
       );
     }
     if (this.Status !== 'Pending' && !options.reason?.trim()) {
-      throw new Error(`JournalEntryBatchEntityServer.Cancel: batch ${label} is ${this.Status}; cancelling it discards an approved summary, so a reason is required.`);
+      throw new Error(`The batch was not cancelled: batch ${label} is ${this.Status}, and cancelling it discards an approved summary, so a reason is required.`);
     }
   }
 
@@ -754,7 +770,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    */
   private assertReason(options: JournalEntryBatchCancelOptions): void {
     if (!options.reason?.trim()) {
-      throw new Error(`JournalEntryBatchEntityServer.Cancel: batch ${this.JournalEntryBatchNumber ?? this.ID} is Pending and was not rejected; a reason is required to cancel it.`);
+      throw new Error(`The batch was not cancelled: batch ${this.JournalEntryBatchNumber ?? this.ID} is Pending and was not rejected, so a reason is required to cancel it.`);
     }
   }
 
@@ -777,7 +793,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       this.ERPNotPostedBasis = erpNotPostedBasis;
     }
     this.Status = 'Cancelled';
-    await this.saveCancelled(`Cancel: ${fromStatus}→Cancelled`);
+    await this.saveCancelled(`Saving the cancel of ${fromStatus} batch ${this.JournalEntryBatchNumber ?? this.ID}`);
   }
 
   /**
@@ -797,7 +813,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
   private async saveCancelled(label: string): Promise<void> {
     this._cancelling = true;
     try {
-      if (!(await this.Save())) throw new Error(`${label} failed: ${this.LatestResult?.CompleteMessage ?? 'unknown'}`);
+      if (!(await this.Save())) throw new Error(`${label} failed: ${this.LatestResult?.CompleteMessage ?? 'unknown error'}`);
     } finally {
       this._cancelling = false;
     }
@@ -820,15 +836,15 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    * the archive rolls back and the instance is reloaded.
    */
   public async Archive(reason: string, contextUser?: UserInfo): Promise<boolean> {
-    if (!this.IsSaved) throw new Error('JournalEntryBatchEntityServer.Archive: the batch must be saved.');
+    if (!this.IsSaved) throw new Error('The batch must be saved before it can be archived.');
     if (!ARCHIVABLE_FROM.includes(this.Status)) {
-      throw new Error(`JournalEntryBatchEntityServer.Archive: batch ${this.JournalEntryBatchNumber} is ${this.Status}; only a ${ARCHIVABLE_FROM.join(' / ')} batch can be archived.`);
+      throw new Error(`The batch was not archived: batch ${this.JournalEntryBatchNumber} is ${this.Status}, and only a ${ARCHIVABLE_FROM.join(' or ')} batch can be archived.`);
     }
     if (!reason?.trim()) {
-      throw new Error(`JournalEntryBatchEntityServer.Archive: an archive reason is required — it is the only record of why batch ${this.JournalEntryBatchNumber} will never post.`);
+      throw new Error(`The batch was not archived: a reason is required, because it is the only record of why batch ${this.JournalEntryBatchNumber} will never post.`);
     }
     const user = contextUser ?? this.ContextCurrentUser;
-    if (!user) throw new Error('JournalEntryBatchEntityServer.Archive: a context user is required; the archive is recorded on the approval Task as that user.');
+    if (!user) throw new Error('The batch was not archived: no user was given, and the archive is recorded on the approval task as a user.');
     const provider = this.ProviderToUse as unknown as IMetadataProvider;
     const gate = JournalEntryBatchDispatchServices.Resolve().CreateCancelGate(provider);
     const archive = { reason: reason.trim(), fromStatus: this.Status };
@@ -839,7 +855,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       this.ArchivedAt = new Date();
       this.ArchivedByUserID = user.ID;
       this.Status = 'Archived';
-      if (!(await this.Save())) throw new Error(`Archive: →Archived failed: ${this.LatestResult?.CompleteMessage ?? 'unknown'}`);
+      if (!(await this.Save())) throw new Error(`The batch was not archived: saving it failed: ${this.LatestResult?.CompleteMessage ?? 'unknown error'}`);
       await gate.recordArchive(this.ID, archive, user);
       await dbProvider.CommitTransaction();
       return true;
@@ -860,7 +876,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     const summaryId = this.SummaryJournalEntryID;
     if (summaryId) {
       this.SummaryJournalEntryID = null;
-      if (!(await this.Save())) throw new Error(`batch teardown: clearing SummaryJournalEntryID failed: ${this.LatestResult?.CompleteMessage ?? 'unknown'}`);
+      if (!(await this.Save())) throw new Error(`Could not release the batch's entries: clearing its summary entry link failed: ${this.LatestResult?.CompleteMessage ?? 'unknown error'}`);
     }
     await this.ReleaseMembersAndDeleteSummary(summaryId, user);
   }
@@ -875,13 +891,13 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
   public async CancelAfterTeardown(): Promise<void> {
     const label = this.JournalEntryBatchNumber ?? this.ID;
     if (this.Status !== 'Pending') {
-      throw new Error(`JournalEntryBatchEntityServer.CancelAfterTeardown: batch ${label} is ${this.Status}; only a Pending batch is cancelled after its teardown.`);
+      throw new Error(`Batch ${label} is ${this.Status}; only a Pending batch can be cancelled after its entries are released.`);
     }
     if (this.SummaryJournalEntryID) {
-      throw new Error(`JournalEntryBatchEntityServer.CancelAfterTeardown: batch ${label} still points at its summary journal entry; run TearDownSummaryAndUnlock first, or cancel it with Cancel.`);
+      throw new Error(`Batch ${label} still points at its summary journal entry; release its entries first (TearDownSummaryAndUnlock), or cancel it with Cancel.`);
     }
     this.Status = 'Cancelled';
-    await this.saveCancelled('CancelAfterTeardown: Pending→Cancelled');
+    await this.saveCancelled(`Saving the cancel of Pending batch ${this.JournalEntryBatchNumber ?? this.ID}`);
   }
 
   /**
@@ -909,13 +925,13 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       { EntityName: JE_ENTITY, ExtraFilter: `JournalEntryBatchID='${this.ID}' AND Status='Batched'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
       user,
     );
-    if (!res.Success) throw new Error(`batch teardown: member scan failed: ${res.ErrorMessage ?? 'unknown'}`);
+    if (!res.Success) throw new Error(`Could not release the batch's entries: loading them failed: ${res.ErrorMessage ?? 'unknown error'}`);
     for (const row of res.Results ?? []) {
       const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
       await je.Load(row.ID);
       je.Status = 'Pending';
       je.JournalEntryBatchID = null;
-      if (!(await je.Save())) throw new Error(`batch teardown: JE ${row.ID} Batched→Pending failed: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
+      if (!(await je.Save())) throw new Error(`Could not release the batch's entries: journal entry ${row.ID} could not be set back to Pending: ${je.LatestResult?.CompleteMessage ?? 'unknown error'}`);
     }
   }
 
@@ -926,18 +942,18 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${summaryId}'`, ResultType: 'entity_object', BypassCache: true },
       user,
     );
-    if (!lineRes.Success) throw new Error(`batch teardown: summary line scan failed: ${lineRes.ErrorMessage ?? 'unknown'}`);
+    if (!lineRes.Success) throw new Error(`Could not delete the batch's summary entry: loading its lines failed: ${lineRes.ErrorMessage ?? 'unknown error'}`);
     for (const line of lineRes.Results ?? []) {
-      if (!(await line.Delete())) throw new Error(`batch teardown: delete summary line ${line.ID} failed: ${line.LatestResult?.CompleteMessage ?? 'unknown'}`);
+      if (!(await line.Delete())) throw new Error(`Could not delete the batch's summary entry: deleting line ${line.ID} failed: ${line.LatestResult?.CompleteMessage ?? 'unknown error'}`);
     }
     const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
-    if (!(await je.Load(summaryId))) throw new Error(`batch teardown: summary JE ${summaryId} not found`);
-    if (!(await je.Delete())) throw new Error(`batch teardown: delete summary JE failed: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    if (!(await je.Load(summaryId))) throw new Error(`Could not delete the batch's summary entry: entry ${summaryId} was not found.`);
+    if (!(await je.Delete())) throw new Error(`Could not delete the batch's summary entry: ${je.LatestResult?.CompleteMessage ?? 'unknown error'}`);
   }
 
   private async assignJournalEntryBatchNumber(): Promise<void> {
     if (!this.ContextCurrentUser) {
-      throw new Error('JournalEntryBatchEntityServer.assignJournalEntryBatchNumber: ContextCurrentUser is required');
+      throw new Error('A batch number cannot be assigned without a signed-in user.');
     }
     const batchNumber = await getNextJournalEntryBatchNumber(
       this.ContextCurrentUser,

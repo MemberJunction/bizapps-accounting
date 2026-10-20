@@ -6,13 +6,18 @@
  * recorded a terminal Approved / ApprovedWithConditions decision against the linked approval Task.
  *
  *   onBatchBuilt(batchId): batches are SINGLE-COMPANY (D7) — resolve the batch's CompanyID →
- *     that company's AccountingCompanyProfile.ApprovalCFOUserID (a __mj.User). If null,
- *     HARD-FAIL (per the per-company-field decision — no role fallback). Then
- *     CreateApprovalRequest ONE "Approve JE Batch #<JournalEntryBatchNumber> (posting date <day>)" Task linked to the batch
- *     (polymorphic Task Link), assigned to that CFO User. (Interim shape pending the
- *     approval-flow review with Robert.)
- *   assertApproved(batchId): find the Task linked to the batch; require a terminal Approved /
- *     ApprovedWithConditions Task Decision; otherwise THROW (blocks the send).
+ *     that company's AccountingCompanyProfile.ApprovalCFOUserID (a __mj.User), then that user's
+ *     active linked Person. If either is missing, HARD-FAIL (per the per-company-field decision —
+ *     no role fallback). Then CreateApprovalRequest ONE "Approve JE Batch #<JournalEntryBatchNumber>
+ *     (posting date <day>)" Task linked to the batch (polymorphic Task Link), assigned to the CFO's
+ *     Person (#387). The Tasks app lists a viewer's tasks by their Person, so a task assigned to
+ *     the User record reached no one's inbox.
+ *   assertApproved(batchId): load the Task named by the batch's stamped ApprovalTaskID (not a Task
+ *     Link, which anyone with tasks-app write access can create); require a terminal Approved /
+ *     ApprovedWithConditions Task Decision made by an allowed decider — the company's CFO, who did not
+ *     build the batch (golive #320 §3; a decision saved straight into the tasks app by anyone else does
+ *     not count); otherwise THROW (blocks the send). Fails closed when ApprovalTaskID is empty.
+ *     The Task records the batch's builder as its creator (CreatedByPersonID).
  *   recordDecision(batchId, outcome, decidedByPersonId, notes): record the decision on the batch's
  *     stamped approval Task via TaskOrchestrationService (#313). The shared entry point for BOTH the in-app approve
  *     control and the Tasks inbox. It refuses first, writing nothing, when the batch is no longer
@@ -37,7 +42,8 @@
  *
  * CONNECTS TO:
  *   READS:  Journal Entry Batches · Accounting Company Profiles · Task Links · Task Decisions
- *           · Task Decision Outcomes · Task Types · People
+ *           · Task Decision Outcomes · Task Types · People · Users (the CFO's, builder's and deciders'
+ *           People links, through person-user-link.ts)
  *   WRITES (via TaskOrchestrationService): Tasks · Task Links · Task Assignments · Task Decisions
  *   WRITES (directly): Task Comments (a cancelled or archived batch) · Tasks (Status, closing a Pending batch's Task)
  *   ENTITY (gated): 'MJ_BizApps_Accounting: Journal Entry Batches'
@@ -65,7 +71,7 @@ import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
 } from '@mj-biz-apps/accounting-entities';
 import type { JournalEntryBatchApprovalGate, JournalEntryBatchCancelGate, RecordedArchive, RecordedCancellation } from './JournalEntryBatchEngine.js';
-import { ResolvePersonIDForUser } from './person-user-link.js';
+import { ResolveAllPersonIDsForUser, ResolvePersonIDForUser, ResolvePersonIDsForUsers } from './person-user-link.js';
 import { requireSqlGuid } from './SqlGuards.js';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
@@ -75,17 +81,13 @@ const TASK_LINK_ENTITY = 'MJ_BizApps_Tasks: Task Links';
 const TASK_DECISION_ENTITY = 'MJ_BizApps_Tasks: Task Decisions';
 const TASK_DECISION_OUTCOME_ENTITY = 'MJ_BizApps_Tasks: Task Decision Outcomes';
 const TASK_COMMENT_ENTITY = 'MJ_BizApps_Tasks: Task Comments';
+const PERSON_ENTITY = 'MJ_BizApps_Common: People';
 
 /** What closed a batch, for the approval Task's comment and errors. */
 type BatchCloseAction = 'cancel' | 'archive';
 
 /** The seeded generic approval TaskType that CreateApprovalRequest expects. */
 const APPROVAL_REQUEST_TASK_TYPE = 'Approval Request';
-
-/** The approver assignments now reference __mj Users (ApprovalCFOUserID is a User FK).
- *  NB: MJ 5.x core entity names carry the 'MJ: ' prefix — bare 'Users' resolves to nothing
- *  (latent bug caught by live spec L13, 2026-07-29). */
-const USER_ENTITY = 'MJ: Users';
 
 // Which terminal outcomes count as "approved to send" is tasks-core's answer, asked per row via
 // IsApprovalOutcome. It used to be a Set literal here. A Set of a subset of the union is a
@@ -100,7 +102,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
   private readonly orchestration = new TaskOrchestrationService();
 
   constructor(private readonly provider: IMetadataProvider) {
-    if (!provider) throw new Error('TasksAppApprovalGate: an IMetadataProvider must be injected — there is no global fallback');
+    if (!provider) throw new Error('The batch approval gate was created without a database provider; the calling code must pass one.');
   }
 
   /** The injected provider viewed through its RunView interface. */
@@ -110,10 +112,11 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
 
   /**
    * PRECONDITION (D10 rev. 2026-07-29): run by the engine BEFORE any batch write. A company with
-   * no configured CFO could never approve a batch, so the build fails fast, before a row exists.
+   * no configured CFO, or whose CFO has no linked Person, could never have its batch approved from
+   * the Tasks app, so the build fails fast, before a row exists.
    */
   async assertCanRaise(companyId: string, contextUser: UserInfo): Promise<void> {
-    await this.resolveCFOUserIdForCompany(companyId, contextUser);
+    await this.resolveCFOPersonIdForCompany(companyId, contextUser);
   }
 
   /**
@@ -123,30 +126,37 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
    */
   async onBatchBuilt(batchId: string, contextUser: UserInfo): Promise<string | null> {
     const batch = await this.loadBatch(batchId, contextUser);
-    const cfoUserId = await this.resolveCFOUserIdForCompany(batch.CompanyID, contextUser);
+    const cfoPersonId = await this.resolveCFOPersonIdForCompany(batch.CompanyID, contextUser);
     const typeId = await this.resolveApprovalTaskTypeId(contextUser);
     // Task Link's EntityID / assignee EntityID are UUID FKs to __mj.Entity.ID — resolve names → IDs.
     const batchEntityId = this.batchEntityId();
-    const userEntityId = this.resolveUserEntityId();
+    const personEntityId = this.personEntityId();
     // The posting date is the journal date the ERP receives, so the approver approves it too (golive #315).
     const postingDay = ToCalendarDay(batch.PostingDate);
+    // The builder is the requester (golive #320 §3): recorded as the Task's creator, so the tasks app's
+    // PreventSelfApproval setting (bizapps-tasks#136, not yet released, ships off) can refuse them a
+    // decision on it once it is released and enabled. ResolvePersonIDsForUsers gives the one Person the
+    // tasks app resolves for the builder (own People link, else LinkedUserID), the same rule as the
+    // CFO's assignee above. A builder with no Person leaves it blank.
+    const builderPersonId = batch.BatchedByUserID ? await this.builderPersonId(batch.BatchedByUserID, contextUser) : undefined;
     await this.orchestration.CreateApprovalRequest({
       Name: `Approve Journal Entry Batch #${batch.JournalEntryBatchNumber} (posting date ${postingDay})`,
       TypeID: typeId,
       Description: `CFO approval required to dispatch Journal Entry Batch #${batch.JournalEntryBatchNumber} to ${batch.TargetSystem}, ` +
         `posting date ${postingDay} — the journal date ${batch.TargetSystem} receives.`,
       Priority: 'High',
+      CreatedByPersonID: builderPersonId,
       LinkEntityID: batchEntityId,
       LinkRecordID: batchId,
-      ApproverPersonEntityID: userEntityId,
-      ApproverPersonRecordIDs: [cfoUserId],
+      ApproverPersonEntityID: personEntityId,
+      ApproverPersonRecordIDs: [cfoPersonId],
     }, contextUser);
     // CreateApprovalRequest logs (not throws) on a failed link — verify the link actually persisted,
     // else assertApproved would block the send forever with no recoverable signal. (This read runs
     // on the same provider as the open build transaction, so it sees the uncommitted Task.)
     const task = await this.resolveBatchTask(batchId, contextUser);
     if (!task) {
-      throw new Error(`Approval Task for batch ${batchId} was created but its Task Link did not persist — check tasks-app schema/permissions.`);
+      throw new Error(`The approval task for batch ${batchId} was created, but its link to the batch was not saved. Check the Tasks app setup and permissions.`);
     }
     // Hand the ID back so the engine stamps JournalEntryBatch.ApprovalTaskID in the build
     // transaction — "does this batch have a task?" becomes a column read, not a Task-Link walk.
@@ -162,19 +172,75 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     // forging approval and dispatching real journal lines to the ERP. The engine stamps
     // ApprovalTaskID inside the build transaction, so a legitimately-built batch always has it;
     // a missing value fails closed.
-    const task = await this.resolveStampedApprovalTask(batchId, contextUser);
-    if (!task) throw new Error(`Batch ${batchId} has no stamped approval Task — it was not raised through TasksAppApprovalGate.onBatchBuilt.`);
-    if (!(await this.hasTerminalDecision(task.ID, 'Approval', contextUser))) {
-      throw new Error(`Batch ${batchId} is not approved — no terminal Approved/ApprovedWithConditions decision on its approval Task.`);
+    const stamped = await this.resolveStampedApprovalTask(batchId, contextUser);
+    if (!stamped) throw new Error(`Batch ${batchId} cannot be sent: it has no approval task, so it was not built through the approval process.`);
+    const { task, batch } = stamped;
+    const approvals = await this.terminalDecisions(task.ID, 'Approval', contextUser);
+    if (approvals.length === 0) {
+      throw new Error(`Batch ${batchId} is not approved yet: its approval task has no Approved decision.`);
     }
+    const refusal = await this.approvalRefusal(batch, approvals, contextUser);
+    if (refusal) throw new Error(`Batch ${batch.JournalEntryBatchNumber ?? batchId} cannot be sent: ${refusal}`);
   }
 
-  /** Load the approval Task named by the batch's own ApprovalTaskID column (fails closed on null). */
-  private async resolveStampedApprovalTask(batchId: string, contextUser: UserInfo): Promise<mjBizAppsTasksTaskEntity | null> {
+  /**
+   * SECURITY (golive #320 §3): why none of the approval Task's Approved decisions came from an
+   * allowed decider — the company's configured CFO, who did not build the batch — or null when one
+   * did. recordDecision enforces that at the write, but a decision can also be saved straight into
+   * the tasks app (the Tasks inbox, or any user allowed to create a Task Decision), so the read
+   * checks it too:
+   *   - a decision with no Person (an approver User with no linked Person, which recordDecision
+   *     permits) counts only when the batch's own approval audit names the CFO, because that is what
+   *     the sanctioned approval writes (RecordJournalEntryBatchDecision → approveJournalEntryBatch,
+   *     whose ApprovedByUserID JournalEntryBatchEntityServer requires to be the approving user);
+   *   - a decision attributed to a Person counts only when that Person is bound to the CFO user and
+   *     not to the builder. One Person can be bound to two users (the builder through
+   *     People.LinkedUserID, the CFO through User.LinkedEntityRecordID), which the user-level check
+   *     cannot see.
+   * Each refusal names its own cause: no approver configured, the approver built the batch, the
+   * approver's Person is also the builder's, or nobody allowed decided. The CFO and builder Person
+   * lookups run only when a decision needs them.
+   * The CFO is read as configured NOW: a batch approved by a former CFO is cancelled and rebuilt.
+   */
+  private async approvalRefusal(
+    batch: mjBizAppsAccountingJournalEntryBatchEntity, approvals: mjBizAppsTasksTaskDecisionEntity[], contextUser: UserInfo,
+  ): Promise<string | null> {
+    const cfoUserId = await this.readCFOUserIdForCompany(batch.CompanyID, contextUser);
+    if (!cfoUserId) {
+      return `company ${batch.CompanyID} has no approver configured, so no decision on its approval task can count. ` +
+        `Set the Approval CFO on the company's Accounting Company Profile.`;
+    }
+    if (UUIDsEqual(cfoUserId, batch.BatchedByUserID)) {
+      return `the company's Approval CFO (user ${cfoUserId}) built this batch, and the user who built a batch may not approve it, ` +
+        `so no decision on its approval task can count. Cancel it and have someone other than the Approval CFO build it again.`;
+    }
+    if (approvals.some(d => !d.DecidedByPersonID) && UUIDsEqual(batch.ApprovedByUserID, cfoUserId)) return null;
+    const deciderPersonIds = approvals.map(d => d.DecidedByPersonID).filter((id): id is string => !!id);
+    const among = (ids: string[], id: string): boolean => ids.some(p => UUIDsEqual(p, id));
+    const cfoPersonIds = deciderPersonIds.length > 0 ? await this.personIdsForUserId(cfoUserId, contextUser) : [];
+    const byCfo = deciderPersonIds.filter(id => among(cfoPersonIds, id));
+    if (byCfo.length > 0) {
+      const builderPersonIds = batch.BatchedByUserID ? await this.personIdsForUserId(batch.BatchedByUserID, contextUser) : [];
+      if (byCfo.some(id => !among(builderPersonIds, id))) return null;
+      return `its approval came from a Person linked to the company's Approval CFO (user ${cfoUserId}) who is also linked to ` +
+        `the user who built the batch, and the builder may not approve their own batch. Someone other than the builder must approve it.`;
+    }
+    return `its approval task has an Approved decision, but not one made by the company's configured approver ` +
+      `(the Approval CFO on its Accounting Company Profile, user ${cfoUserId}). A decision recorded by anyone else does not count.`;
+  }
+
+  /**
+   * Load the approval Task named by the batch's own ApprovalTaskID column (fails closed on null),
+   * with the batch it was read from, so a caller needs no second batch load.
+   */
+  private async resolveStampedApprovalTask(
+    batchId: string, contextUser: UserInfo,
+  ): Promise<{ task: mjBizAppsTasksTaskEntity; batch: mjBizAppsAccountingJournalEntryBatchEntity } | null> {
     requireSqlGuid(batchId, 'TasksAppApprovalGate.resolveStampedApprovalTask');
     const batch = await this.provider.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
     if (!(await batch.Load(batchId))) return null;
-    return this.loadStampedApprovalTask(batch, contextUser);
+    const task = await this.loadStampedApprovalTask(batch, contextUser);
+    return task ? { task, batch } : null;
   }
 
   /** Load the Task an already-loaded batch's ApprovalTaskID names; null when it has none or it does not load. */
@@ -194,8 +260,8 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
    * the newest Task Link, which a newer link to a self-rejected Task could redirect.
    */
   async isRejected(batchId: string, contextUser: UserInfo): Promise<boolean> {
-    const task = await this.resolveStampedApprovalTask(batchId, contextUser);
-    return !!task && (await this.hasTerminalDecision(task.ID, 'Rejection', contextUser));
+    const stamped = await this.resolveStampedApprovalTask(batchId, contextUser);
+    return !!stamped && (await this.terminalDecisions(stamped.task.ID, 'Rejection', contextUser)).length > 0;
   }
 
   /**
@@ -221,13 +287,13 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     if (!UUIDsEqual(cfoUserId, contextUser.ID)) {
       throw new Error(
         `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the configured approver for company ${batch.CompanyID} ` +
-        `(AccountingCompanyProfile.ApprovalCFOUserID) may record an approval decision — the current user is not that approver.`,
+        `(the Approval CFO on its Accounting Company Profile) can approve or reject it, and you are not that approver.`,
       );
     }
     if (UUIDsEqual(contextUser.ID, batch.BatchedByUserID)) {
       throw new Error(
-        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: the user who built a batch may not approve it — ` +
-        `separation of duties requires an approver other than JournalEntryBatch.BatchedByUserID.`,
+        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: the user who built a batch may not approve it. ` +
+        `Someone other than the builder must approve it.`,
       );
     }
     this.assertDecidable(batch, outcome, notes);
@@ -235,7 +301,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     // it — never the newest Task Link, which a forged newer link could point at another Task. A batch
     // with no stamp is refused: assertApproved could never send it, whatever was decided.
     const task = await this.loadStampedApprovalTask(batch, contextUser);
-    if (!task) throw new Error(`Batch ${batch.JournalEntryBatchNumber ?? batchId} has no stamped approval Task to record a decision against — it was not raised through TasksAppApprovalGate.onBatchBuilt.`);
+    if (!task) throw new Error(`Batch ${batch.JournalEntryBatchNumber ?? batchId} has no approval task to record the decision on, so it was not built through the approval process.`);
     await this.orchestration.RecordDecision({ TaskID: task.ID, OutcomeCode: outcome, DecidedByPersonID: decidedByPersonId, Notes: notes }, contextUser);
   }
 
@@ -264,7 +330,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
   /** JournalEntryBatch.CancelReason's length, read from the entity's field metadata so it follows the column. */
   private cancelReasonMaxLength(): number {
     const max = this.provider.EntityByName(BATCH_ENTITY)?.Fields.find((f) => f.Name === 'CancelReason')?.MaxLength;
-    if (!max) throw new Error(`TasksAppApprovalGate: no length metadata for ${BATCH_ENTITY}.CancelReason.`);
+    if (!max) throw new Error(`The '${BATCH_ENTITY}' entity's CancelReason field has no length in the metadata, so a rejection's notes cannot be checked against it.`);
     return max;
   }
 
@@ -287,7 +353,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     if (!allowed.some(id => UUIDsEqual(id, contextUser.ID))) {
       throw new Error(
         `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the company's configured approver ` +
-        `(AccountingCompanyProfile.ApprovalCFOUserID) or the user who approved this batch may cancel it after approval.`,
+        `(the Approval CFO on its Accounting Company Profile) or the user who approved this batch may cancel it after approval.`,
       );
     }
     // Same condition recordCancellation uses (#223): the stamped ApprovalTaskID, not a Task Link.
@@ -310,7 +376,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     if (!allowed.some(id => UUIDsEqual(id, contextUser.ID))) {
       throw new Error(
         `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the company's configured approver ` +
-        `(AccountingCompanyProfile.ApprovalCFOUserID) or the user who built this batch may cancel it before approval.`,
+        `(the Approval CFO on its Accounting Company Profile) or the user who built this batch may cancel it before approval.`,
       );
     }
   }
@@ -403,7 +469,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
   private noLinkedPersonError(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo, action: BatchCloseAction = 'cancel'): Error {
     return new Error(
       `Batch ${batch.JournalEntryBatchNumber ?? batch.ID}: the ${action} cannot be recorded on its approval Task because user ` +
-      `${contextUser.Email ?? contextUser.ID} has no linked Person (the user's LinkedEntityID/LinkedEntityRecordID to MJ_BizApps_Common: People or a subtype, or People.LinkedUserID). ` +
+      `${contextUser.Email ?? contextUser.ID} has no linked Person record. ` +
       `An administrator must link this user to a Person before the batch can be ${action === 'cancel' ? 'cancelled' : 'archived'} after approval.`,
     );
   }
@@ -421,29 +487,53 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     try {
       return await ResolvePersonIDForUser(contextUser, this.provider, contextUser);
     } catch (error) {
-      throw new Error(`TasksAppApprovalGate: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`Could not look up the person linked to the current user: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   private async loadBatch(batchId: string, contextUser: UserInfo): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
     const batch = await this.provider.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
-    if (!(await batch.Load(batchId))) throw new Error(`TasksAppApprovalGate: batch ${batchId} not found`);
+    if (!(await batch.Load(batchId))) throw new Error(`Batch ${batchId} was not found.`);
     return batch;
   }
 
   /**
    * The CFO User of a company (batches are single-company, D7 — the header carries CompanyID).
-   * Hard-fail when the company lacks a configured CFO. Shared by the pre-write `assertCanRaise`
-   * precondition and the in-transaction `onBatchBuilt`.
+   * Hard-fail when the company lacks a configured CFO. Shared by `recordDecision` and, through
+   * `resolveCFOPersonIdForCompany`, by the pre-write `assertCanRaise` precondition and the
+   * in-transaction `onBatchBuilt`.
    */
   private async resolveCFOUserIdForCompany(companyId: string, contextUser: UserInfo): Promise<string> {
     const acp = await this.provider.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, contextUser);
-    if (!(await acp.Load(companyId))) throw new Error(`TasksAppApprovalGate: no AccountingCompanyProfile for company ${companyId}`);
+    if (!(await acp.Load(companyId))) throw new Error(`Company ${companyId} has no Accounting Company Profile, so its batch approver cannot be found.`);
     const cfo = acp.ApprovalCFOUserID;
     if (!cfo) {
-      throw new Error(`No CFO configured for company ${companyId}; set AccountingCompanyProfile.ApprovalCFOUserID before batching for approval.`);
+      throw new Error(`No CFO configured for company ${companyId}. Set the Approval CFO on the company's Accounting Company Profile before building batches for approval.`);
     }
     return cfo;
+  }
+
+  /**
+   * The CFO's active linked Person: the user's own People link first, else People.LinkedUserID, the
+   * same rule the Tasks app uses to find the signed-in user's tasks. The approval Task is assigned to
+   * this Person, so a CFO without one would never see it; refuse instead.
+   */
+  private async resolveCFOPersonIdForCompany(companyId: string, contextUser: UserInfo): Promise<string> {
+    const cfoUserId = await this.resolveCFOUserIdForCompany(companyId, contextUser);
+    let found: Map<string, string>;
+    try {
+      found = await ResolvePersonIDsForUsers([cfoUserId], this.provider, contextUser, { ActiveOnly: true });
+    } catch (error) {
+      throw new Error(`Could not look up the Person linked to the Approval CFO of company ${companyId}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const personId = found.get(cfoUserId.toLowerCase());
+    if (!personId) {
+      throw new Error(
+        `The Approval CFO on company ${companyId}'s Accounting Company Profile (user ${cfoUserId}) is not linked to an active Person, ` +
+        `so the batch's approval task would not appear in anyone's Tasks inbox. An administrator must link that user to a Person before batches are built for approval.`,
+      );
+    }
+    return personId;
   }
 
   private async resolveApprovalTaskTypeId(contextUser: UserInfo): Promise<string> {
@@ -452,13 +542,14 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
       contextUser,
     );
     const type = res.Results?.[0];
-    if (!res.Success || !type) throw new Error(`TasksAppApprovalGate: TaskType '${APPROVAL_REQUEST_TASK_TYPE}' not found (is bizapps-tasks metadata seeded?)`);
+    if (!res.Success || !type) throw new Error(`The '${APPROVAL_REQUEST_TASK_TYPE}' task type is not set up, so no approval task can be raised. Make sure the Tasks app metadata is installed.`);
     return type.ID;
   }
 
-  private resolveUserEntityId(): string {
-    const entity = this.provider.EntityByName(USER_ENTITY);
-    if (!entity) throw new Error(`TasksAppApprovalGate: entity '${USER_ENTITY}' not found in metadata`);
+  /** The People EntityID, the assignee entity of the approval Task (#387). */
+  private personEntityId(): string {
+    const entity = this.provider.EntityByName(PERSON_ENTITY);
+    if (!entity) throw new Error(`The '${PERSON_ENTITY}' entity is missing from the metadata, so the approval task cannot be assigned.`);
     return entity.ID;
   }
 
@@ -486,27 +577,52 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
   /** Resolve the Journal Entry Batches EntityID for Task Link filtering. */
   private batchEntityId(): string {
     const entity = this.provider.EntityByName(BATCH_ENTITY);
-    if (!entity) throw new Error(`TasksAppApprovalGate: entity '${BATCH_ENTITY}' not found in metadata`);
+    if (!entity) throw new Error(`The '${BATCH_ENTITY}' entity is missing from the metadata, so the approval task cannot be linked.`);
     return entity.ID;
   }
 
   /**
-   * True when the Task has at least one terminal decision of the given kind: an approval
-   * (Approved/ApprovedWithConditions) or a rejection (any other terminal outcome).
-   * WHO decided is enforced at the WRITE (recordDecision requires contextUser to be the company's
-   * ApprovalCFOUserID); this read deliberately stays "any terminal decision of that kind on the task"
-   * because decisions can legitimately carry no DecidedByPersonID (an approver User with no linked Person).
+   * The Task's terminal decisions of the given kind: approvals (Approved/ApprovedWithConditions) or
+   * rejections (any other terminal outcome). WHO made an approval is checked by the caller
+   * (approvalRefusal for a send); a rejection counts from anyone who could record it, because
+   * recordDecision only accepts one from the CFO and a forged rejection can only stop a send.
    */
-  private async hasTerminalDecision(taskId: string, kind: 'Approval' | 'Rejection', contextUser: UserInfo): Promise<boolean> {
-    requireSqlGuid(taskId, 'TasksAppApprovalGate.hasTerminalDecision');
+  private async terminalDecisions(taskId: string, kind: 'Approval' | 'Rejection', contextUser: UserInfo): Promise<mjBizAppsTasksTaskDecisionEntity[]> {
+    requireSqlGuid(taskId, 'TasksAppApprovalGate.terminalDecisions');
     const decRes = await this.viewProvider.RunView<mjBizAppsTasksTaskDecisionEntity>(
       { EntityName: TASK_DECISION_ENTITY, ExtraFilter: `TaskID='${taskId}'`, ResultType: 'entity_object', BypassCache: true },
       contextUser,
     );
+    if (!decRes.Success) throw new Error(`Could not read the decisions on approval task ${taskId}: ${decRes.ErrorMessage ?? 'unknown error'}`);
     const decisions = decRes.Results ?? [];
-    if (decisions.length === 0) return false;
+    if (decisions.length === 0) return [];
     const outcomes = await this.loadTerminalOutcomeIds(kind, contextUser);
-    return decisions.some(d => outcomes.some(oid => UUIDsEqual(oid, d.OutcomeID)));
+    return decisions.filter(d => outcomes.some(oid => UUIDsEqual(oid, d.OutcomeID)));
+  }
+
+  /**
+   * Every bizapps-common Person bound to an MJ user (own People link first, then LinkedUserID Persons
+   * oldest first). The separation-of-duties checks need ALL of them, not the one Person
+   * ResolvePersonIDsForUsers picks: a Person shared by the CFO and the builder must be caught
+   * whichever link binds it to each.
+   */
+  private async personIdsForUserId(userId: string, contextUser: UserInfo): Promise<string[]> {
+    try {
+      return await ResolveAllPersonIDsForUser(userId, this.provider, contextUser);
+    } catch (error) {
+      throw new Error(`Could not look up the Persons linked to user ${userId}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** The builder's Person for the Task's CreatedByPersonID, or undefined when they have none. */
+  private async builderPersonId(userId: string, contextUser: UserInfo): Promise<string | undefined> {
+    let found: Map<string, string>;
+    try {
+      found = await ResolvePersonIDsForUsers([userId], this.provider, contextUser);
+    } catch (error) {
+      throw new Error(`Could not look up the Person linked to the batch's builder (user ${userId}): ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return found.get(userId.toLowerCase());
   }
 
   /** The terminal TaskDecisionOutcome IDs that are an approval, or that are not (a rejection). */

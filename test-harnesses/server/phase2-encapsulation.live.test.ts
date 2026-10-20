@@ -276,7 +276,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     born.Status = 'Sent'; // illegal: a batch is born Pending
     const bornSaved = await born.Save();
     expect(bornSaved).toBe(false);
-    expect(born.LatestResult?.CompleteMessage ?? '').toContain("must start at Status='Pending'");
+    expect(born.LatestResult?.CompleteMessage ?? '').toContain('must start as Pending');
 
     // ...and the guard itself: an unclaimed create is refused even when everything else is legal.
     const handTyped = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, ctx.user);
@@ -373,7 +373,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     expect(await fresh.Save(), `fresh account save: ${fresh.LatestResult?.CompleteMessage}`).toBe(true);
     fresh.Code = '19998'; // never referenced by anything — still refused
     expect(await fresh.Save()).toBe(false);
-    expect(fresh.LatestResult?.CompleteMessage ?? '').toMatch(/immutable from creation/);
+    expect(fresh.LatestResult?.CompleteMessage ?? '').toMatch(/cannot change after the account is created/);
 
     // Cosmetic fields stay editable on both.
     const gl2 = await provider.GetEntityObject<GLAccountEntityServer>(GL_ENTITY, ctx.user);
@@ -507,7 +507,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     // A SECOND company-A link on the same StartedAt is the ambiguous tie — refused, with guidance.
     const dupe = await makeLink(ctx.company.cashGL); // cash is also company A's book
     expect(await dupe.Save()).toBe(false);
-    expect(dupe.LatestResult?.CompleteMessage ?? '').toMatch(/same StartedAt/);
+    expect(dupe.LatestResult?.CompleteMessage ?? '').toMatch(/same start date/);
 
     // forCompanyID disambiguates resolution per company over the SAME record + role.
     await AccountingEngineBase.Instance.ConfigEx({ forceRefresh: true, contextUser: ctx.user, provider });

@@ -31,7 +31,7 @@ export class JournalEntryBatchDispatchServices {
   /** The highest-priority registration: the real services unless something replaced them. */
   public static Resolve(): JournalEntryBatchDispatchServices {
     const services = MJGlobal.Instance.ClassFactory.CreateInstance<JournalEntryBatchDispatchServices>(JournalEntryBatchDispatchServices);
-    if (!services) throw new Error('JournalEntryBatchDispatchServices: the ClassFactory resolved no instance');
+    if (!services) throw new Error('Batches cannot be sent: no batch dispatch services are registered on this server.');
     return services;
   }
 

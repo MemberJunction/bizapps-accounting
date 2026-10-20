@@ -1,5 +1,35 @@
 # @mj-biz-apps/accounting-core-entities-server
 
+## 0.23.0
+
+### Minor Changes
+
+- 12a7026: A journal entry batch's approval task is assigned to the Person linked to the company's Approval CFO, not to the CFO's user record, so it appears in the CFO's My Tasks and Approvals in the Tasks app. The Person is found by the user's own People link first, then `People.LinkedUserID`, and must be Active. Building a batch is refused, before anything is written, when the CFO has no such Person. A migration moves open approval tasks already assigned to a user to that user's Person and lists any it cannot move.
+
+### Patch Changes
+
+- b5646b8: Requires MemberJunction 6.1.6, the 6.1 LTS release QA runs. Every `@memberjunction/*` range and both root overrides are `^6.1.6`, and `mj-app.json` declares `>=6.1.6 <7.0.0`.
+- Updated dependencies [b5646b8]
+  - @mj-biz-apps/accounting-entities@0.23.0
+  - @mj-biz-apps/accounting-engine-base@0.23.0
+
+## 0.22.2
+
+### Patch Changes
+
+- de62630: Rewrite the Accounting app's error and warning messages so they say what went wrong and what to do next, without internal class, field or action names.
+  - @mj-biz-apps/accounting-engine-base@0.22.2
+  - @mj-biz-apps/accounting-entities@0.22.2
+
+## 0.22.1
+
+### Patch Changes
+
+- 95623ed: The packages' dependencies on each other are caret ranges (`^0.22.0`) instead of exact versions. A host that pins or overrides one package of this app at a later compatible version no longer forces an exact-match copy of its siblings. Changesets keeps the caret and moves its floor on each release.
+- Updated dependencies [95623ed]
+  - @mj-biz-apps/accounting-engine-base@0.22.1
+  - @mj-biz-apps/accounting-entities@0.22.1
+
 ## 0.22.0
 
 ### Minor Changes

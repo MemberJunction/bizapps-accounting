@@ -102,7 +102,7 @@ export class JournalEntryBatchWorkspaceClient {
       IncludedJournalEntryIDs: includedIds,
     });
     if (!res.Success || !res.Output) {
-      const msg = res.ErrorMessage ?? 'Preview failed.';
+      const msg = res.ErrorMessage ?? 'Could not load the entries that match these criteria. Try again.';
       LogError(`JournalEntryBatchWorkspaceClient.Preview: ${msg}`);
       throw new Error(msg);
     }
@@ -117,7 +117,7 @@ export class JournalEntryBatchWorkspaceClient {
         // Always Explicit from the workspace: the operator SAW a list and ticked it, so the build must
         // be exactly that list — not a re-sweep. Cutoff/CompanyIDs are DELIBERATELY omitted: the
         // Explicit path batches exactly these ids, so those two fields were dead payload the server
-        // discards (Marcelo #4, 2026-07-21). Empty / zero-net selections now throw server-side
+        // discards. Empty / zero-net selections now throw server-side
         // (EmptyBatchError) and surface as res.Success=false — never a silent NothingToBatch.
         Source: 'Explicit',
         JournalEntryIDs: includedIds,
@@ -127,7 +127,7 @@ export class JournalEntryBatchWorkspaceClient {
       },
     );
     if (!res.Success || !res.Output) {
-      const msg = res.ErrorMessage ?? 'Build failed.';
+      const msg = res.ErrorMessage ?? 'The journal entry batch was not built. Try again.';
       LogError(`JournalEntryBatchWorkspaceClient.Build: ${msg}`);
       throw new Error(msg);
     }

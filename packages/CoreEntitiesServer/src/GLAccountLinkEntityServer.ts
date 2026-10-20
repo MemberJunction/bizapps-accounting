@@ -1,7 +1,7 @@
 /**
  * Server-side subclass of GLAccountLink — the write-time tie guard for account resolution.
  *
- * THE RULE (Amith 2026-07-29, the retained half of the BA-D32 package): no ambiguous tie per
+ * THE RULE (the retained half of the BA-D32 package): no ambiguous tie per
  * (record, role, company, window). Overlapping windows are legitimate and necessary — that is how
  * a link is superseded (`pickActiveLinkIndex`: latest StartedAt wins). What is NOT legitimate is
  * two Active links for the same (EntityID, RecordID, GLAccountRoleID) whose accounts belong to
@@ -12,7 +12,7 @@
  * Cardinality=Many roles (BankAccount, BA-D34) skip this guard: N Active same-window links
  * are the point. ResolveLinkedAccount refuses those roles; ResolveLinkedAccounts returns the set.
  *
- * COMPANY IS DERIVED, NOT STORED (Amith 2026-07-29): the link's company is its GLAccount's
+ * COMPANY IS DERIVED, NOT STORED: the link's company is its GLAccount's
  * CompanyID, read through the FK. Safe because GLAccount identity fields are immutable from
  * creation (GLAccountEntityServer), so the derivation can never drift. Links to DIFFERENT
  * companies' accounts may share a window freely — that is exactly the multi-company case
@@ -89,7 +89,7 @@ export class GLAccountLinkEntityServer extends mjBizAppsAccountingGLAccountLinkE
     // Loud on failure: silently answering "no tie" would let the ambiguity through, and the whole
     // point of this guard is that the ambiguity is otherwise invisible (both accounts balance).
     if (!res.Success) {
-      throw new Error(`GLAccountLinkEntityServer: failed to check for a conflicting active link: ${res.ErrorMessage ?? 'unknown error'}`);
+      throw new Error(`Could not check for a conflicting active account link: ${res.ErrorMessage ?? 'unknown error'}`);
     }
 
     // Same StartedAt is only a TIE when the sibling's account belongs to MY company (derived
@@ -98,10 +98,10 @@ export class GLAccountLinkEntityServer extends mjBizAppsAccountingGLAccountLinkE
       const siblingCompanyId = await this.companyOfAccount(sibling.GLAccountID);
       if (siblingCompanyId && siblingCompanyId.toLowerCase() === myCompanyId.toLowerCase()) {
         fail(
-          `Another Active link already exists for this record + role + company with the same StartedAt ` +
-            `(${startedAt ?? 'unset'}). Resolution picks the latest StartedAt, so two rows sharing one would ` +
-            `resolve arbitrarily between two accounts. To supersede the existing link, set its EndedAt and ` +
-            `give this row a later StartedAt.`,
+          `Another active link already exists for this record, role and company with the same start date ` +
+            `(${startedAt ?? 'none'}). The account is picked by the latest start date, so two links sharing one would ` +
+            `pick between two accounts at random. To replace the existing link, give it an end date and ` +
+            `give this one a later start date.`,
         );
         return;
       }
@@ -128,7 +128,7 @@ export class GLAccountLinkEntityServer extends mjBizAppsAccountingGLAccountLinkE
     );
     if (!res.Success) {
       throw new Error(
-        `GLAccountLinkEntityServer: failed to read role cardinality for ${roleId}: ${res.ErrorMessage ?? 'unknown error'}`,
+        `Could not read account role ${roleId}: ${res.ErrorMessage ?? 'unknown error'}`,
       );
     }
     return (res.Results?.[0]?.Cardinality ?? 'One') === 'Many';
@@ -142,7 +142,7 @@ export class GLAccountLinkEntityServer extends mjBizAppsAccountingGLAccountLinkE
       this.ContextCurrentUser,
     );
     if (!res.Success) {
-      throw new Error(`GLAccountLinkEntityServer: failed to resolve the account's company for ${glAccountId}: ${res.ErrorMessage ?? 'unknown error'}`);
+      throw new Error(`Could not find the company of GL account ${glAccountId}: ${res.ErrorMessage ?? 'unknown error'}`);
     }
     return res.Results?.[0]?.CompanyID ?? null;
   }

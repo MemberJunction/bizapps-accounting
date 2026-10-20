@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: V202610121500__v0.23.x__JournalEntry_Numbering_Functions.pg-only.sql
+-- Migration: V202610201030__v0.24.x__JournalEntry_Numbering_Functions.pg-only.sql
 -- Description: #343 — PostgreSQL twins of spAssignNextJournalEntryNumber and
 --              spAssignNextJournalEntryBatchNumber.
 -- =============================================================================

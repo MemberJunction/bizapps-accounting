@@ -117,12 +117,12 @@ export abstract class CategoryShellBase extends BaseDashboard {
 
   /**
    * ── The shell header ──────────────────────────────────────────────────────
-   * Marcelo (2026-07-16), revising his earlier call: the header shows the CATEGORY, not the
-   * sub-page — *"the tab that we're in is really more descriptive of where we are"*. The sub-page
+   * The header shows the CATEGORY, not the sub-page — the top-nav tab describes where the user
+   * is better than the page name does. The sub-page
    * name is already the rail's active item, inches away, so restating it bought nothing. The
    * category is the one piece of context NOT otherwise on screen once you are deep in a page.
    *
-   * NO header stat capsules (Marcelo 2026-07-29 — the former `HeaderStats` chip row is REMOVED):
+   * NO header stat capsules (the former `HeaderStats` chip row is REMOVED):
    * live state under the title made the header busy, misaligned it against stat-less categories,
    * and duplicated the rail badges. Live state belongs on the RAIL as actionable-only count
    * badges (shown only when action is needed; absence = healthy). The header carries only the

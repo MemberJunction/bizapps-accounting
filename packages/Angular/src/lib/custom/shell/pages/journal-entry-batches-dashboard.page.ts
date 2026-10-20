@@ -202,7 +202,7 @@ export class JournalEntryBatchesDashboardPageComponent extends AccountingDashboa
         Tooltip: 'Pending journal entries waiting to be batched (in your company scope).' },
       { Id: 'unstamped', Label: 'JE batches with no approval task', Value: c.unstamped, Icon: 'fa-solid fa-link-slash',
         GoTo: 'approvals', Warn: c.unstamped > 0,
-        Tooltip: 'Built journal entry batches whose approval task could not be raised (MOD-14). Each is valid — the task needs retrying, or nobody will be asked to approve it.' },
+        Tooltip: 'Built journal entry batches with no approval request, so no one will be asked to approve them. Each batch is valid; retry its approval request from Batch approvals.' },
     ];
   }
 
@@ -227,9 +227,9 @@ export class JournalEntryBatchesDashboardPageComponent extends AccountingDashboa
     );
 
     // RunView reports failure in the result, it does not throw — so check, don't assume.
-    if (!inbox.Success) throw new Error(inbox.ErrorMessage ?? 'Could not load the approval inbox');
-    if (!failed.Success) throw new Error(failed.ErrorMessage ?? 'Could not load the failed dispatches');
-    if (!recent.Success) throw new Error(recent.ErrorMessage ?? 'Could not load recent journal entry batches');
+    if (!inbox.Success) throw new Error(inbox.ErrorMessage ?? 'Could not load the approval inbox. Refresh the page to try again.');
+    if (!failed.Success) throw new Error(failed.ErrorMessage ?? 'Could not load the failed dispatches. Refresh the page to try again.');
+    if (!recent.Success) throw new Error(recent.ErrorMessage ?? 'Could not load recent journal entry batches. Refresh the page to try again.');
 
     return { inbox: inbox.Results ?? [], failed: failed.Results ?? [], recent: recent.Results ?? [] };
   }

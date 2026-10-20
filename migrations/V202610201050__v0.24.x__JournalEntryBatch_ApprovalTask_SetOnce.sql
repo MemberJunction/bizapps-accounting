@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: V202610130000__v0.23.x__JournalEntryBatch_ApprovalTask_SetOnce.sql
+-- Migration: V202610201050__v0.24.x__JournalEntryBatch_ApprovalTask_SetOnce.sql
 -- Description: #313 — a batch's approval Task pointer is set once, by the build,
 --              and no two batches carry the same approval Task.
 -- =============================================================================
@@ -51,7 +51,7 @@ IF EXISTS (
     GROUP BY ApprovalTaskID
     HAVING COUNT(*) > 1
 )
-    THROW 50036, 'Migration V202610130000 cannot apply: at least two JournalEntryBatch rows carry the same ApprovalTaskID. The build stamps each batch with the Task it raises, so these stamps were changed by hand. Find them (SELECT ApprovalTaskID, COUNT(*) FROM __mj_BizAppsAccounting.JournalEntryBatch WHERE ApprovalTaskID IS NOT NULL GROUP BY ApprovalTaskID HAVING COUNT(*) > 1), point each batch back at the Task its own build raised, and re-run.', 1;
+    THROW 50036, 'Migration V202610201050 cannot apply: at least two JournalEntryBatch rows carry the same ApprovalTaskID. The build stamps each batch with the Task it raises, so these stamps were changed by hand. Find them (SELECT ApprovalTaskID, COUNT(*) FROM __mj_BizAppsAccounting.JournalEntryBatch WHERE ApprovalTaskID IS NOT NULL GROUP BY ApprovalTaskID HAVING COUNT(*) > 1), point each batch back at the Task its own build raised, and re-run.', 1;
 GO
 
 -- -----------------------------------------------------------------------------

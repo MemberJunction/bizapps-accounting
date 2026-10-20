@@ -76,7 +76,7 @@ export async function getNextJournalEntryNumber(
   const value = rows?.[0]?.EntryNumber;
   if (!value || typeof value !== 'string') {
     throw new Error(
-      `SequenceService.getNextJournalEntryNumber: spAssignNextJournalEntryNumber returned no value for CompanyID=${companyId}, FiscalYear=${fiscalYear}`,
+      `Could not get the next journal entry number for company ${companyId}, fiscal year ${fiscalYear}: the number sequence returned nothing.`,
     );
   }
   return value;
@@ -100,7 +100,7 @@ export async function getNextJournalEntryBatchNumber(
   const value = rows?.[0]?.JournalEntryBatchNumber;
   if (!value || typeof value !== 'string') {
     throw new Error(
-      'SequenceService.getNextJournalEntryBatchNumber: spAssignNextJournalEntryBatchNumber returned no value',
+      'Could not get the next batch number: the number sequence returned nothing.',
     );
   }
   return value;
@@ -112,11 +112,11 @@ export async function getNextJournalEntryBatchNumber(
  */
 function getDatabaseProvider(provider: IMetadataProvider): DatabaseProviderBase {
   if (!provider) {
-    throw new Error('SequenceService: an IMetadataProvider must be injected — there is no global fallback');
+    throw new Error('The number sequence service was called without a database provider; the calling code must pass one.');
   }
   const database = provider as unknown as DatabaseProviderBase;
   if (!(database.PlatformKey in JOURNAL_ENTRY_NUMBER_SQL)) {
-    throw new Error(`SequenceService: journal entry numbering has no SQL for database platform '${database.PlatformKey}'`);
+    throw new Error(`Journal entry numbering does not support the '${database.PlatformKey}' database platform.`);
   }
   return database;
 }

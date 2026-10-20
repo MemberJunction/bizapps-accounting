@@ -34,9 +34,10 @@ export interface PreviewEntry { ID: string; EntryNumber: string; EffectiveDate: 
 
 /** One batch row in the table, with its inferred date range + lazily-loaded JE detail. */
 /**
- * The batch's own fields are PICKED from the generated entity class, never re-declared (Amith,
- * PR #148 review). Everything below the intersection is derived or UI state, not a column:
- * the inferred date range, the company list, and the expand/detail cache.
+ * The batch's own fields are PICKED from the generated entity class, never re-declared, so the
+ * compiler checks every field name and type against the schema. Everything below the
+ * intersection is derived or UI state, not a column: the inferred date range, the company list,
+ * and the expand/detail cache.
  *
  * `BatchedAt` is re-declared as nullable on purpose — the column is NOT NULL, but this page
  * builds rows before the value is resolved.
@@ -60,7 +61,7 @@ export type BatchRow = Pick<
 type SortField = 'Status' | 'TargetSystem' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'StartDate' | 'EndDate' | 'BatchedAt';
 
 /**
- * Batch Status — the filterable roll-up over every JE batch. Enhances the read-only view (Marcelo, 2026-07-08):
+ * Batch Status — the filterable roll-up over every JE batch. Enhances the read-only view with:
  * status toggles + company (incl. All) + target-system filters, an inferred Start→End date range per batch (from
  * its journal entries), summary stats, an in-page Build Batch action, and an expandable per-batch row whose indented
  * table shows that batch's journal entries and their Dr/Cr lines (account, company, amounts). It loads batches +
@@ -98,7 +99,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
 
   /** Filters. Empty status set = show all; null company/target = "All". */
   public SelectedStatuses = new Set<BatchStatus>();
-  /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = no narrowing. */
+  /** MULTI-select company narrowing: empty = no narrowing. */
   public SelectedCompanyIDs: string[] = [];
   public SelectedTarget: TargetSystem | null = null;
   /** Target used by the in-page Build action (defaults to the filtered target, else Business Central). */
@@ -121,7 +122,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   async GetResourceDisplayName(_data: ResourceData): Promise<string> { return 'Batch Status'; }
 
   /** The category header's Refresh reaches this dashboard through the shared channel —
-   *  the inline mj-refresh-button was removed (Marcelo 2026-08-05: the header owns the ONE
+   *  the inline mj-refresh-button was removed (the header owns the ONE
    *  refresh control, orders-style). Subscribing is also what makes the header button SHOW
    *  while this page is mounted (CanRefreshActivePage = HasSubscriber). */
   /** OPTIONAL: provided per category shell; a directly-mounted resource (or a bare TestBed) has none. */
@@ -187,7 +188,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   public OnToDateChange(v: string): void { this.ToDate = v || null; this.ActiveWindow = null; this.cdr.markForCheck(); }
 
   /**
-   * Moving-window presets (Robert 2026-07-09: "last day/week/month" windows). Sets the From/To
+   * Moving-window presets (last day / week / month). Sets the From/To
    * range. Anchored on the BUSINESS day via `resolveBatchStatusWindow`
    * (`BusinessTimeZoneEngine.Instance.Today()`), not the browser's local day — see that file for
    * why this component may read the engine directly.
@@ -333,7 +334,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
         this.BuildPreviewVisible = false;
         await this.loadAll();
       } else {
-        this.setActionMessage(res.ErrorMessage ?? 'Build failed.', true);
+        this.setActionMessage(res.ErrorMessage ?? 'The journal entry batch was not built. Try again.', true);
       }
     } finally {
       this.Building = false;
@@ -404,7 +405,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   /** JE headers per batch (for the inferred date range + to fetch each batch's lines on expand). */
   private async loadJEHeaders(): Promise<Map<string, JEHeader[]>> {
     // The batch's own SUMMARY JE also carries JournalEntryBatchID — it is the consolidation OF the sources,
-    // so counting it alongside them doubles every amount (Marcelo 2026-07-30: a 350/350 batch
+    // so counting it alongside them doubles every amount (a 350/350 batch
     // drilled down as 700/700). Exclude summaries here so the map holds SOURCE JEs only; the
     // detail then re-derives the same netted posting the summary persists.
     const [res, batches] = await Promise.all([

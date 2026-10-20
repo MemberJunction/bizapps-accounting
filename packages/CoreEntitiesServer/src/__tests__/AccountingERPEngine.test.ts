@@ -1381,7 +1381,7 @@ describe('AccountingERPEngine — choosing the posting connection (#256)', () =>
   it('refuses as before when the company has no connection for the target, running only afterPostFailure', async () => {
     const { runVerb, posted, found } = await postAndFind([connection(CI_PROD, 'HubSpot', 'HubSpot')]);
 
-    const error = `No active 'BusinessCentral' integration for company ${COMPANY}.`;
+    const error = `Company ${COMPANY} has no active 'BusinessCentral' connection, so the batch cannot be sent. Ask an administrator to set one up.`;
     expect(posted).toEqual({ success: false, error });
     expect(found).toEqual({ status: 'Unavailable' });
     expect(runVerb).not.toHaveBeenCalled();
@@ -1571,7 +1571,7 @@ describe('AccountingERPEngine.SyncMasterData — ERP connections only (#256)', (
       expect(out.Success).toBe(false);
       expect(out.Results[0]).toMatchObject({ Success: false, CompanyIntegrationID: CI_PROD });
       expect(out.Results[0].Skipped).toBeUndefined();
-      expect(out.Results[0].Message).toMatch(/Entity maps for Company Integration .* failed to load: timeout reading entity maps/);
+      expect(out.Results[0].Message).toMatch(/Could not load the sync maps of ERP connection .*: timeout reading entity maps/);
     } finally {
       logged.mockRestore();
     }
@@ -1726,7 +1726,7 @@ describe('AccountingERPEngine.SyncMasterData — shared master data merges on Co
       const out = await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['dimensions'] }, user, p);
 
       expect(out.Success).toBe(false);
-      expect(out.Results[0].Message).toMatch(/Field maps for entity maps map-dim failed to load: field maps timeout/);
+      expect(out.Results[0].Message).toMatch(/Could not load the key fields of sync maps map-dim: field maps timeout/);
     } finally {
       logged.mockRestore();
     }

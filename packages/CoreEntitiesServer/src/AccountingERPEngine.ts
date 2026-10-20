@@ -193,7 +193,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
         }
         await this.invokeExtensions(extensions, ctx, 'afterSync');
       }
-      return syncResult(ci, objects, { Success: sync.Success, Message: sync.Message ?? (sync.Success ? 'Synced' : 'Sync failed') });
+      return syncResult(ci, objects, { Success: sync.Success, Message: sync.Message ?? (sync.Success ? 'Synced' : 'The ERP sync failed and gave no reason.') });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`AccountingERPEngine.SyncMasterData company ${ci.CompanyID}, connection ${ci.CompanyIntegrationID}: ${msg}`);
@@ -224,7 +224,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
 
     await this.invokeExtensions(extensions, ctx, 'beforePost');
     if (!plugin) {
-      const error = `No ERP provider registered for ${ci.IntegrationName}.`;
+      const error = `Cannot post to ${ci.IntegrationName}: no connector for that ERP is installed on this server.`;
       ctx.ErrorMessage = error;
       await this.invokeExtensions(extensions, ctx, 'afterPostFailure');
       return { success: false, error };
@@ -232,7 +232,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
 
     const posted = await this.sendThroughConnection(plugin, ci, batch, summaryLines, user, provider);
     if (!posted.success) {
-      ctx.ErrorMessage = posted.error ?? 'ERP post failed';
+      ctx.ErrorMessage = posted.error ?? 'The ERP did not accept the batch and gave no reason.';
       await this.invokeExtensions(extensions, ctx, 'afterPostFailure');
       return posted;
     }
@@ -366,12 +366,12 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     const plugin = ci ? this.providerFor(ci.IntegrationName) : null;
     if (!ci || !plugin) return { status: 'Unavailable' };
     if (!batch.JournalEntryBatchNumber) {
-      return { status: 'Error', error: `batch ${batch.ID} has no number to look up in the ERP.` };
+      return { status: 'Error', error: `batch ${batch.ID} has no batch number, so the ERP cannot be searched for it.` };
     }
 
     // The day the post sends: the verb writes EntryDate from the same Date's UTC parts.
     const postingDate = ToCalendarDay(entryDateOf(batch));
-    if (!postingDate) return { status: 'Error', error: `batch ${batch.JournalEntryBatchNumber} has an unreadable posting date.` };
+    if (!postingDate) return { status: 'Error', error: `batch ${batch.JournalEntryBatchNumber} has a posting date that cannot be read.` };
 
     try {
       const expected = await erpLinesFor(batch, summaryLines, target, plugin.RequiresExternalAccountID, user, provider);
@@ -516,7 +516,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
       ExtraFilter: filter.join(' AND '),
       ResultType: 'simple',
     }, user);
-    if (!res.Success) throw new Error(res.ErrorMessage ?? 'Company Integrations load failed.');
+    if (!res.Success) throw new Error(res.ErrorMessage ?? 'Could not load the companies\' ERP connections.');
     const rows = res.Results ?? [];
     const namesById = await this.integrationNamesById(rows, user, provider);
     const out: CredentialedIntegration[] = [];
@@ -594,7 +594,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     // A failed query is an error, not "no maps": no maps is reported as skipped, and a broken map
     // query must fail the run instead of passing as a posting-only connection.
     if (!res.Success) {
-      throw new Error(`Entity maps for Company Integration ${companyIntegrationID} failed to load: ${res.ErrorMessage ?? 'unknown error'}`);
+      throw new Error(`Could not load the sync maps of ERP connection ${companyIntegrationID}: ${res.ErrorMessage ?? 'unknown error'}`);
     }
     const wanted = new Set(objects.map((o) => ERP_SYNC_OBJECT_ENTITY[o]));
     const maps: SyncEntityMap[] = [];
@@ -641,7 +641,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
       ResultType: 'simple',
     }, user);
     if (!res.Success) {
-      throw new Error(`Field maps for entity maps ${maps.map((m) => m.ID).join(', ')} failed to load: ${res.ErrorMessage ?? 'unknown error'}`);
+      throw new Error(`Could not load the key fields of sync maps ${maps.map((m) => m.ID).join(', ')}: ${res.ErrorMessage ?? 'unknown error'}`);
     }
     const keysByMap = new Map<string, string[]>();
     for (const row of res.Results ?? []) {
@@ -871,8 +871,8 @@ function pickPostingConnection(
 ): PostingConnectionChoice {
   if (candidates.length === 0) {
     const error = target
-      ? `No active '${target}' integration for company ${companyId}.`
-      : `No active accounting ERP integration for company ${companyId}.`;
+      ? `Company ${companyId} has no active '${target}' connection, so the batch cannot be sent. Ask an administrator to set one up.`
+      : `Company ${companyId} has no active ERP connection, so the batch cannot be sent. Ask an administrator to set one up.`;
     return { Kind: 'Missing', Error: error };
   }
   if (candidates.length === 1) return { Kind: 'Chosen', Connection: candidates[0] };

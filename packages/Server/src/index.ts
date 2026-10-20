@@ -14,13 +14,13 @@ import { LoadCreateBusinessCentralJournalEntryWithDimensionsAction } from '@mj-b
 // Server-side entity subclasses — must come after accounting-entities so
 // @RegisterClass auto-increment gives these higher priority
 import '@mj-biz-apps/accounting-core-entities-server';
-import { LoadFinanceExceptionEntityServer, LoadFinanceExceptionOperations, LoadJournalEntryBatchOperations, LoadCreateJournalEntriesOperation, LoadCreateJournalEntryOperation, LoadGenerateReversalOperation, LoadGetJournalEntryStatesOperation, LoadRunERPSyncOperation, LoadAccountingERPEngine, LoadAccountingERPProviders } from '@mj-biz-apps/accounting-core-entities-server';
+import { LoadFinanceExceptionEntityServer, LoadFinanceExceptionOperations, LoadJournalEntryBatchOperations, LoadManualJournalEntryOperations, LoadCreateJournalEntriesOperation, LoadCreateJournalEntryOperation, LoadGenerateReversalOperation, LoadGetJournalEntryStatesOperation, LoadRunERPSyncOperation, LoadAccountingERPEngine, LoadAccountingERPProviders } from '@mj-biz-apps/accounting-core-entities-server';
 
 // Import generated GraphQL resolvers
 import './generated/generated.js';
 
 // NO custom hand-written resolvers remain: every custom server action travels the Remote
-// Operations stack (four-surface doctrine, Amith 2026-07-28) — see JournalEntryBatchOperations.ts /
+// Operations stack (four-surface doctrine) — see JournalEntryBatchOperations.ts /
 // GenerateReversalOperation.ts / CreateJournalEntr(y|ies)Operation.ts in core-entities-server.
 // (BatchDispatchResolver, ReadModelsResolver, and JournalEntryResolver were deleted 2026-07-29.)
 
@@ -56,6 +56,7 @@ export function LoadBizAppsAccountingServer(): void {
     LoadCreateJournalEntryOperation(); // tree-shaking anchor for 'Accounting.CreateJournalEntry'
     LoadCreateJournalEntriesOperation(); // tree-shaking anchor for 'Accounting.CreateJournalEntries' (the SET op)
     LoadJournalEntryBatchOperations(); // tree-shaking anchor for the Accounting.BuildJournalEntryBatch/RegenerateJournalEntryBatch/DispatchJournalEntryBatch/RecordBatchDecision/GetBatchApprovalState ops
+    LoadManualJournalEntryOperations(); // tree-shaking anchor for 'Accounting.RecordManualJournalEntryDecision' (golive #353)
     LoadGenerateReversalOperation(); // tree-shaking anchor for 'Accounting.GenerateJournalEntryReversal'
     LoadGetJournalEntryStatesOperation(); // tree-shaking anchor for 'Accounting.GetJournalEntryStates' (read-only)
     LoadRunERPSyncOperation();

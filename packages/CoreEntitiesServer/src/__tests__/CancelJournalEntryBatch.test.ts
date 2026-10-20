@@ -231,6 +231,17 @@ describe('cancelJournalEntryBatch — a Pending cancel (#233, golive #302)', () 
     expect(tx.RollbackTransaction).toHaveBeenCalled();
     expect(tx.CommitTransaction).not.toHaveBeenCalled();
   });
+
+  // A failed read of the approval Task's decisions now throws from isRejected (golive #320 §3);
+  // it used to read as "not rejected". The cancel refuses rather than guessing.
+  it('refuses a Pending cancel, before anything is written, when the rejection check cannot read the decisions', async () => {
+    const w = world('Pending');
+    const g = use(gate({ allowed: true, rejected: false }));
+    g.isRejected.mockRejectedValueOnce(new Error('Could not read the decisions on approval task T1: database unavailable'));
+    await expect(cancelJournalEntryBatch(BATCH_ID, USER, w.provider, { reason: 'Built with the wrong entries' })).rejects.toThrow(/Could not read the decisions/);
+    expect(g.assertMayCancelPending).not.toHaveBeenCalled();
+    expectUntouched(w, 'Pending', g);
+  });
 });
 
 describe('cancelJournalEntryBatch — authorizing a cancel past approval', () => {
@@ -365,7 +376,7 @@ describe('cancelJournalEntryBatch — the ERP check before cancelling a Failed b
       .then(() => null, (e: unknown) => e);
     expect(error).toBeInstanceOf(ErpPostingUnconfirmedError);
     expect((error as ErpPostingUnconfirmedError).Kind).toBe(result.status);
-    expect((error as ErpPostingUnconfirmedError).message).toMatch(/^cancelJournalEntryBatch: /);
+    expect((error as ErpPostingUnconfirmedError).message).toMatch(/^The batch was not cancelled: /);
     expectUntouched(w, 'Failed', g);
   });
 
@@ -574,7 +585,7 @@ describe('cancelJournalEntryBatch — the second ERP check before a Failed cance
     expect(error).toBeInstanceOf(JournalEntryBatchMismatchDuringCancelError);
     expect((error as JournalEntryBatchMismatchDuringCancelError).Detail).toBe('BC holds 3 lines, the batch has 2.');
     expect((error as Error).message).toMatch(
-      /^cancelJournalEntryBatch: the ERP now holds a posting under document JEB-0183 that does not match this batch: BC holds 3 lines.*still Failed.*Investigate that posting in the ERP before cancelling or retrying/);
+      /^The batch was not cancelled: the ERP now holds a posting under document JEB-0183 that does not match this batch: BC holds 3 lines.*still Failed.*Investigate that posting in the ERP before cancelling or retrying/);
     expect(lookup).toHaveBeenCalledTimes(2);
     expect(lookup.mock.invocationCallOrder[1]).toBeGreaterThan(g.recordCancellation.mock.invocationCallOrder[0]);
     const db = w.provider as unknown as { CommitTransaction: Mock; RollbackTransaction: Mock };
@@ -622,7 +633,7 @@ describe('cancelJournalEntryBatch — the second ERP check before a Failed cance
 
     expect(error).toBeInstanceOf(JournalEntryBatchPostedDuringCancelError);
     expect((error as JournalEntryBatchPostedDuringCancelError).Status).toBe('Failed');
-    expect((error as Error).message).toMatch(/recording the batch Posted failed: .*Failed→Sent failed.*Retry it from Dispatch status.*Do not cancel it/);
+    expect((error as Error).message).toMatch(/recording the batch Posted failed: .*saving it as Sent \(from Failed\) failed.*Retry it from Dispatch status.*Do not cancel it/);
     expect(w.batch.Status).toBe('Failed');
     expect(w.batch.CancelledAt).toBeNull();
   });

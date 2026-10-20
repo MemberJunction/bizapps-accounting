@@ -23,8 +23,8 @@
       ── WHY [EditMode] IS GATED ON !record.IsSaved ──
 
       GLAccountEntityServer.LOCKED_IDENTITY_FIELDS = ['CompanyID','Code','AccountType','CurrencyCode'],
-      and ValidateAsync() refuses any change to them once IsSaved is true (Amith 2026-07-29:
-      "immutable from the moment the record is created — immediate + unconditional"). A plainly
+      and ValidateAsync() refuses any change to them once IsSaved is true (immutable
+      from the moment the record is created, immediately and unconditionally). A plainly
       editable control on a saved record therefore offers an edit the server ALWAYS rejects. So these
       fields are editable while creating and read-only afterwards, which is what the server enforces.
 
@@ -46,6 +46,9 @@
     <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="ParentGLAccountID" Type="textbox"
         [EditMode]="EditMode" [FormContext]="formContext" LinkType="Record"></mj-form-field>
     <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="IsActive" Type="checkbox"
+        [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
+    <!-- A manual journal entry with a line on a control account always needs the company's Approval CFO (golive #353). -->
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="IsControlAccount" Type="checkbox"
         [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
     <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="Description" Type="textarea"
         [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>

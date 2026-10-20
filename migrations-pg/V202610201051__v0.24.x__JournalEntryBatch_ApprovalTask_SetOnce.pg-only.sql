@@ -1,11 +1,11 @@
 -- =============================================================================
--- Migration: V202610130001__v0.23.x__JournalEntryBatch_ApprovalTask_SetOnce.pg-only.sql
+-- Migration: V202610201051__v0.24.x__JournalEntryBatch_ApprovalTask_SetOnce.pg-only.sql
 -- Description: #313 — PostgreSQL twin of trg_JournalEntryBatch_ApprovalTaskSetOnce.
 -- =============================================================================
 --
 -- WHY A PG-ONLY FILE
 --
--- V202610130000__v0.23.x__JournalEntryBatch_ApprovalTask_SetOnce creates
+-- V202610201050__v0.24.x__JournalEntryBatch_ApprovalTask_SetOnce creates
 -- trg_JournalEntryBatch_ApprovalTaskSetOnce on SQL Server. The SQL converter
 -- does not convert triggers (its .pg.sql output marks the trigger SKIPPED), so
 -- the PostgreSQL trigger is written here by hand. The converted file carries
@@ -16,7 +16,7 @@
 -- build's stamp) is allowed. ApprovalTaskRaisedAt compares at millisecond
 -- precision, as on SQL Server: the entity writes JavaScript dates.
 --
--- Runs after the converted V202610130000 file, once, in order.
+-- Runs after the converted V202610201050 file, once, in order.
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION __mj_BizAppsAccounting."fn_trg_JournalEntryBatch_ApprovalTaskSetOnce"()

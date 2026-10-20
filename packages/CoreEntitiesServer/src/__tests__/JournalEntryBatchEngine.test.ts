@@ -100,7 +100,8 @@ describe('pendingCandidateFilter', () => {
         const filter = await pendingCandidateFilter({}, mockUser, mockProviders);
         // No cutoff still ends the pool at the posting date — today's business day (golive #315).
         const through = AddDays(BusinessTimeZoneEngine.Instance.Today(), 1);
-        expect(filter).toBe(`Status='Pending' AND EntryTypeID<>'${SUMMARY_ID}' AND EffectiveDate < '${through}'`);
+        // Manual entries awaiting approval stay out of every pool (golive #353).
+        expect(filter).toBe(`Status='Pending' AND EntryTypeID<>'${SUMMARY_ID}' AND EffectiveDate < '${through}' AND (ApprovalLevel IS NULL OR ApprovedAt IS NOT NULL)`);
     });
 
     it('adds NOT IN clause when excludeEntryTypeCodes is provided', async () => {

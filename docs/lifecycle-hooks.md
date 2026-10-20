@@ -271,6 +271,23 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
 - **`Accounting.ClearFinanceException`** locks the row (`UPDLOCK` on SQL Server, `FOR UPDATE` on
   PostgreSQL) in its transaction before reading it, so of two concurrent clears the second finds the
   row no longer Open (`NOT_OPEN`).
+- **Who may clear which exception (golive #320 §4)** is decided per row by
+  `FinanceExceptionClearPolicy.ts`, after the checks that always apply (still Open, not the source
+  record's creator, a note). The first rule that applies names the authorization the reviewer must
+  hold: (1) an unattributed creator — `CreatorUnresolved`, or the MJ system user — needs
+  `FinanceExceptions.ClearUnattributed`; (2) a creator holding the `FinanceExceptions.EscalatedCreator`
+  marker needs `FinanceExceptions.ClearEscalated`; (3) otherwise the type's
+  `FinanceExceptions.ClearType.<CODE>`; (4) otherwise `FinanceExceptions.Clear`. (2) precedes (3) so
+  that when the creator is the only holder of a type's right, their peers in `ClearEscalated` can
+  still clear it: grant `EscalatedCreator` and `ClearEscalated` to the same senior roles. A rule is on only
+  while its authorization is active and granted (Allow, read as MJ reads it: trimmed, any case) to some role; the package grants none of
+  them, so by default (4) decides every row, (1) refuses an unresolved creator as before
+  (`CREATOR_UNRESOLVED`), and a system-created row follows its type. The rule rights are direct
+  grants with no parent, so holding `Clear` never confers them. Before any read the operation still
+  refuses a caller who holds no clearing right at all (`NOT_AUTHORIZED`); a holder of the wrong one
+  gets `UNATTRIBUTED_NOT_AUTHORIZED`, `ESCALATED_NOT_AUTHORIZED` or `TYPE_NOT_AUTHORIZED`, naming the
+  authorization and the roles granted it. Exceptions do not close themselves when their condition is
+  fixed (an open question, §4 rule 2); the `FinanceExceptions.ts` header says where that would go.
 
 ## 3. Related (not `Save()` hooks)
 
@@ -278,7 +295,8 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   company's Pending JEs into ONE single-company batch (D7; netting keys on company × account × dims; the
   ERP receives **account numbers**); `approveJournalEntryBatch` flips Pending→Approved with
   audit stamps; `sendJournalEntryBatch` requires Approved (or Failed, for a retry) + the CFO gate
-  (`TasksAppApprovalGate` — one Task assigned to the batch company's CFO, `ApprovalCFOUserID`) → Sent →
+  (`TasksAppApprovalGate` — one Task assigned to the Person linked to the batch company's CFO, `ApprovalCFOUserID`;
+  a CFO with no active linked Person refuses the build, #387) → Sent →
   **Posted** + JEs→GLPosted. A send the ERP rejects, or whose poster throws, returns normally with the batch `Failed`,
   and so does one the ERP accepted whose `Sent → Posted` save failed: that batch keeps the ERP
   reference and its `ErrorMessage` says the journal posted, so the retry's lookup records it `Posted`;

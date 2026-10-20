@@ -15,11 +15,15 @@
  *          async, issue #24: the code lives on the type row the FK points at).
  *   - W6 (Block 1) GenerateReversal: create a new Pending JE with Dr/Cr swapped.
  *   - W9 (Block 1) attachment validation: a non-null FileID must reference an existing __mj.File.
+ *   - Manual-entry approval (golive #353): a manual entry saved while its company has a
+ *     ManualJournalEntryApprovalThreshold is routed for approval and its Task raised in the same
+ *     transaction; see ManualJournalEntryApproval.ts.
  */
 
 import {
   BaseEntity,
   DatabaseProviderBase,
+  EntityDeleteOptions,
   EntitySaveOptions,
   IMetadataProvider,
   IRunViewProvider,
@@ -28,7 +32,7 @@ import {
   ValidationErrorInfo,
   ValidationResult,
 } from '@memberjunction/core';
-import { RegisterClass } from '@memberjunction/global';
+import { RegisterClass, UUIDsEqual } from '@memberjunction/global';
 import {
   mjBizAppsAccountingJournalEntryEntity,
   JournalEntryEntity,
@@ -41,6 +45,12 @@ import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 import { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
 import { laterBusinessDate, loadTodayBusiness } from './BusinessDay.js';
 import { LookupJournalEntryTypeByID, RequireJournalEntryTypeID } from './JournalEntryTypes.js';
+import {
+  IsManualJournalEntry,
+  ManualJournalEntryApprovalError,
+  ManualJournalEntryApprovalService,
+  type ManualJournalEntrySaveAction,
+} from './ManualJournalEntryApproval.js';
 import { getNextJournalEntryNumber } from './SequenceService.js';
 import { isSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
 
@@ -50,6 +60,22 @@ const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const FILE_ENTITY = 'Files'; // __mj.File
+
+/**
+ * The manual-entry approval columns (golive #353). Every layer of the approval gate — the batch
+ * candidate filter, the explicit-ID refusal, the view drop and CK_JournalEntry_ApprovedBeforeBatch —
+ * reads them, so no ordinary save may write them: only this entity's own approval routing (all five)
+ * and the decision path (`SaveApprovalStamp`, the two stamp columns). trg_JournalEntry_ApprovalIntegrity
+ * is the database floor under this rule.
+ */
+const APPROVAL_FIELDS = ['ApprovalLevel', 'ApprovalRequestedByUserID', 'ApprovalTaskID', 'ApprovedAt', 'ApprovedByUserID'] as const;
+type ApprovalField = (typeof APPROVAL_FIELDS)[number];
+const APPROVAL_STAMP_FIELDS: ReadonlySet<ApprovalField> = new Set<ApprovalField>(['ApprovedAt', 'ApprovedByUserID']);
+const ALL_APPROVAL_FIELDS: ReadonlySet<ApprovalField> = new Set<ApprovalField>(APPROVAL_FIELDS);
+const NO_APPROVAL_FIELDS: ReadonlySet<ApprovalField> = new Set<ApprovalField>();
+
+/** The D25 origin pair. It decides whether an entry is manual, so it is fixed once the entry exists. */
+const ORIGIN_PAIR_FIELDS = ['LinkedEntityID', 'LinkedRecordID'] as const;
 
 /**
  * The legal JE status graph (plan §7 + the DB triggers' sanctioned carve-outs):
@@ -84,6 +110,12 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
   public override get DefaultSkipAsyncValidation(): boolean {
     return false;
   }
+
+  /**
+   * The approval columns the save in progress may write. Empty outside this entity's own approval
+   * routing and `SaveApprovalStamp`, so a client save that types into them is refused by Validate.
+   */
+  private writableApprovalFields: ReadonlySet<ApprovalField> = NO_APPROVAL_FIELDS;
 
   // ─── Line Collection ─────────────────────────────────────────────────────────
 
@@ -167,7 +199,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     // Loud on failure: treating a failed query as "no dimensions" would silently strip tags
     // from everything that reads the hydrated collection (reversals, dispatch, UI).
     if (!res.Success) {
-      throw new Error(`JournalEntryEntityServer.hydrateLineDimensions: failed to load dimension tags for JE ${this.ID}: ${res.ErrorMessage ?? 'unknown error'}`);
+      throw new Error(`Could not load the dimensions on the lines of journal entry ${this.ID}: ${res.ErrorMessage ?? 'unknown error'}`);
     }
     const byLine = new Map<string, mjBizAppsAccountingJournalEntryLineDimensionEntity[]>();
     for (const dim of res.Results ?? []) {
@@ -229,16 +261,40 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       // A JE is born Pending — every sanctioned creation path (manual entry, the engine,
       // reversals, the batch summary) starts there; lifecycle moves happen through the batch process.
       if (this.Status && this.Status !== 'Pending') {
-        fail(`A new journal entry must start at Status='Pending' (got '${this.Status}') — Batched/GLPosted are reached only through the batch process.`);
+        fail(`A new journal entry must start as Pending, not '${this.Status}'; it becomes Batched or GL-posted only through batching.`);
       }
     } else {
       const oldStatus = this.GetFieldByName('Status')?.OldValue as string | undefined;
       if (oldStatus && this.Status !== oldStatus) {
         if (!(JE_LEGAL_TRANSITIONS[oldStatus] ?? []).includes(this.Status)) {
-          fail(`Illegal journal entry status transition '${oldStatus}' → '${this.Status}'. Legal from '${oldStatus}': ${(JE_LEGAL_TRANSITIONS[oldStatus] ?? []).filter(s => s !== oldStatus).join(', ') || '(terminal)'}.`);
+          fail(`A journal entry cannot go from ${oldStatus} to ${this.Status}. From ${oldStatus} it can go to: ${(JE_LEGAL_TRANSITIONS[oldStatus] ?? []).filter(s => s !== oldStatus).join(', ') || 'nothing; it is final'}.`);
         } else if (oldStatus === 'Batched' && this.Status === 'Pending' && this.JournalEntryBatchID) {
-          fail(`Batched→Pending is only the reversible unlock of a Pending or Cancelled batch — JournalEntryBatchID must be cleared in the same save.`);
+          fail(`A batched journal entry returns to Pending only when its batch releases it, and that clears its batch link (JournalEntryBatchID) in the same save.`);
         }
+      }
+    }
+
+    // Manual-entry approval (golive #353, PR #463 review): the approval columns are written only by
+    // this entity's approval routing and the decision path. Typed in by anyone else — e.g. the
+    // entry's author filling in Approved At / Approved By on the form — the gate would read its
+    // answer out of columns the gated person wrote.
+    const forgedApprovalFields = APPROVAL_FIELDS.filter(f =>
+      !this.writableApprovalFields.has(f) &&
+      (this.IsSaved ? this.GetFieldByName(f)?.Dirty === true : this.Get(f) !== null && this.Get(f) !== undefined),
+    );
+    if (forgedApprovalFields.length > 0) {
+      fail(
+        `${forgedApprovalFields.join(', ')} cannot be set directly. A manual journal entry's approval is raised when the entry is saved ` +
+        'and recorded through Approve or Reject (Accounting.RecordManualJournalEntryDecision).',
+      );
+    }
+
+    // The D25 origin pair decides whether the entry is manual and so needs approval; it is set once,
+    // by the booking path that creates the entry, and never changed afterwards (trg 50039 under it).
+    if (this.IsSaved) {
+      const changedPair = ORIGIN_PAIR_FIELDS.filter(f => this.GetFieldByName(f)?.Dirty === true);
+      if (changedPair.length > 0) {
+        fail(`${changedPair.join(' and ')} cannot change once a journal entry exists: they record the booking that created it, and an entry without them is a manual entry.`);
       }
     }
 
@@ -276,7 +332,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
         result.Errors.push(
           new ValidationErrorInfo(
             'JournalEntryEntityServer.ValidateAsync',
-            'JournalEntry typed \'Reversal\' must specify ReversesJournalEntryID.',
+            'A Reversal entry must name the journal entry it reverses (ReversesJournalEntryID).',
             null,
           ),
         );
@@ -286,7 +342,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
         result.Errors.push(
           new ValidationErrorInfo(
             'JournalEntryEntityServer.ValidateAsync',
-            'JournalEntry specifying ReversesJournalEntryID must be typed with JournalEntryType Code=\'Reversal\'.',
+            'An entry that reverses another journal entry must have the Reversal entry type.',
             null,
           ),
         );
@@ -323,6 +379,22 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       );
     }
 
+    // Rule 8 (golive #353, PR #463 review): a new entry's origin pair must name a real source record.
+    // The pair is what marks an entry as booked rather than manual, so a pair pointing at nothing would
+    // switch manual-entry approval off for an entry no booking created.
+    try {
+      const originError = await this.validateOriginPair();
+      if (originError) {
+        result.Success = false;
+        result.Errors.push(new ValidationErrorInfo('JournalEntryEntityServer.ValidateAsync', originError, null));
+      }
+    } catch (e: unknown) {
+      result.Success = false;
+      result.Errors.push(
+        new ValidationErrorInfo('JournalEntryEntityServer.ValidateAsync', e instanceof Error ? e.message : String(e), null),
+      );
+    }
+
     // Rule 6: Single-Company Isolation (Line GLAccounts must match header CompanyID) & Active GL Accounts
     const lines = this.Lines.Items as JournalEntryLineEntityServer[];
     if (lines.length > 0 && this.CompanyID) {
@@ -335,7 +407,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
         result.Errors.push(
           new ValidationErrorInfo(
             'JournalEntryEntityServer.ValidateAsync',
-            `Line GL Account id '${bad}' is not a valid UUID.`,
+            `A line's GL account ID '${bad}' is not a valid ID.`,
             null,
           ),
         );
@@ -363,7 +435,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
               result.Errors.push(
                 new ValidationErrorInfo(
                   'JournalEntryEntityServer.ValidateAsync',
-                  `Line ${line.LineNumber || ''}: GL Account ${line.GLAccountID} not found.`,
+                  `Line ${line.LineNumber || ''}: GL account ${line.GLAccountID} was not found.`,
                   null,
                 ),
               );
@@ -374,7 +446,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
               result.Errors.push(
                 new ValidationErrorInfo(
                   'JournalEntryEntityServer.ValidateAsync',
-                  `Line ${line.LineNumber || ''}: GL Account ${gl.Code || gl.ID} is inactive.`,
+                  `Line ${line.LineNumber || ''}: GL account ${gl.Code || gl.ID} is inactive. Pick an active account.`,
                   null,
                 ),
               );
@@ -384,7 +456,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
               result.Errors.push(
                 new ValidationErrorInfo(
                   'JournalEntryEntityServer.ValidateAsync',
-                  `Line ${line.LineNumber || ''}: GL Account ${gl.Code || gl.ID} belongs to company ${gl.CompanyID}, but Journal Entry belongs to company ${this.CompanyID} (single-company isolation rule D3).`,
+                  `Line ${line.LineNumber || ''}: GL account ${gl.Code || gl.ID} belongs to company ${gl.CompanyID}, but this journal entry belongs to company ${this.CompanyID}. Every line must use an account of the entry's company.`,
                   null,
                 ),
               );
@@ -414,8 +486,21 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       }
     }
 
+    // Manual-entry approval (golive #353): decided BEFORE the transaction, from reads only, so an
+    // entry nobody may approve is refused before anything is written, as numbering is above.
+    const approval = await this.planApproval();
+
+    // This save's own approval routing may write every approval column; a caller's allowance
+    // (SaveApprovalStamp) is kept and restored afterwards.
+    const callerWritableApprovalFields = this.writableApprovalFields;
+    if (approval) this.writableApprovalFields = ALL_APPROVAL_FIELDS;
+
     try {
       await dbProvider.BeginTransaction();
+
+      // The approval Task being replaced: the entry's content changed, or it no longer needs approval.
+      const supersededTaskId = approval ? this.ApprovalTaskID : null;
+      if (approval) this.applyApprovalAction(approval);
 
       // THE HEADER AND ITS LINES, AS ONE GRAPH.
       //
@@ -436,11 +521,26 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       // OrderEntityServer prices and books its lines itself and must keep ownership of when they
       // are written. A journal entry has no such walk: the lines are complete when they arrive, so
       // letting the graph persist them is the whole point.
-      const saved = await super.Save(options);
+      const saved = await this.withLinesSavedThroughEntry(() => super.Save(options));
       if (!saved) {
         throw new Error(
-          `Failed to save JournalEntry: ${this.LatestResult?.CompleteMessage ?? 'unknown error'}`,
+          `The journal entry could not be saved: ${this.LatestResult?.CompleteMessage ?? 'unknown error'}`,
         );
+      }
+
+      if (approval) {
+        const service = new ManualJournalEntryApprovalService(this.ProviderToUse as unknown as IMetadataProvider);
+        if (supersededTaskId) await service.CloseSupersededTask(supersededTaskId, this.ContextCurrentUser);
+        if (approval.Action === 'Raise') {
+          // The Task links to the entry, so it is raised after the insert; its ID is stamped in the
+          // same transaction, because the approval is read from this column, never from a Task Link.
+          this.ApprovalTaskID = await service.RaiseApprovalTask(this, approval.Plan, this.ContextCurrentUser);
+          if (!(await this.withLinesSavedThroughEntry(() => super.Save(options)))) {
+            throw new Error(
+              `The journal entry could not be linked to its approval task: ${this.LatestResult?.CompleteMessage ?? 'unknown error'}`,
+            );
+          }
+        }
       }
 
       await dbProvider.CommitTransaction();
@@ -453,17 +553,104 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
         LogError(`Failed to rollback transaction during JournalEntryEntityServer.Save(): ${rollbackErr}`);
       }
       return false;
+    } finally {
+      this.writableApprovalFields = callerWritableApprovalFields;
     }
+  }
+
+  /**
+   * Record an approval on this entry: the ONLY save that may set ApprovedAt / ApprovedByUserID.
+   * Called by `ManualJournalEntryApprovalService.RecordDecision` after it has checked the decider
+   * (never the requester; the role or the Approval CFO, read at decision time). Server-only: no
+   * client save reaches it, and Validate refuses the same columns on every other save.
+   */
+  public async SaveApprovalStamp(approvedByUserID: string, approvedAt: Date): Promise<boolean> {
+    if (!approvedByUserID) throw new Error('An approval must name the user who approved it.');
+    this.ApprovedAt = approvedAt;
+    this.ApprovedByUserID = approvedByUserID;
+    const previous = this.writableApprovalFields;
+    this.writableApprovalFields = APPROVAL_STAMP_FIELDS;
+    try {
+      return await this.Save();
+    } finally {
+      this.writableApprovalFields = previous;
+    }
+  }
+
+  /** The lines are deleted with the entry, so the standalone-line approval guard lets them go. */
+  public override async Delete(options?: EntityDeleteOptions): Promise<boolean> {
+    return this.withLinesSavedThroughEntry(() => super.Delete(options));
+  }
+
+  // ─── Manual-entry approval (golive #353) ──────────────────────────────────
+
+  /**
+   * Run a write with every line (kept and removed) marked as going through this entry, so the
+   * line-level approval guard defers to this entry's own approval routing.
+   */
+  private async withLinesSavedThroughEntry<T>(write: () => Promise<T>): Promise<T> {
+    const lines = [...this.Lines.Items, ...this.Lines.Removed] as JournalEntryLineEntityServer[];
+    for (const line of lines) line.SavingThroughJournalEntry = true;
+    try {
+      return await write();
+    } finally {
+      for (const line of lines) line.SavingThroughJournalEntry = false;
+    }
+  }
+
+  /**
+   * True when this save changes what an approval covers: a new entry, or a change to the company,
+   * the effective date, the entry type, or any line's account, amounts or dimension tags (a line
+   * added, removed or edited). Description and the batch/posting columns are not covered.
+   */
+  public HasApprovalRelevantChanges(): boolean {
+    if (!this.IsSaved) return true;
+    if (['CompanyID', 'EffectiveDate', 'EntryTypeID'].some(f => this.GetFieldByName(f)?.Dirty)) return true;
+    if (this.Lines.Removed.length > 0) return true;
+    return (this.Lines.Items as JournalEntryLineEntityServer[]).some(line =>
+      !line.IsSaved ||
+      ['GLAccountID', 'DebitAmount', 'CreditAmount'].some(f => line.GetFieldByName(f)?.Dirty) ||
+      line.Dimensions.Dirty,
+    );
+  }
+
+  /** Ask the approval service what this save must do; refuse the save when nobody may approve it. */
+  private async planApproval(): Promise<ManualJournalEntrySaveAction | null> {
+    // A booking-path entry (D25 origin pair set), a non-Pending one, or a save that changes nothing an
+    // approval covers (a batch lock or release, a description) never needs routing: no query at all.
+    if (!IsManualJournalEntry(this) || this.Status !== 'Pending' || !this.HasApprovalRelevantChanges()) return null;
+    if (!this.ContextCurrentUser) {
+      throw new Error('A manual journal entry cannot be saved without a signed-in user: its approval needs to know who raised it.');
+    }
+    const service = new ManualJournalEntryApprovalService(this.ProviderToUse as unknown as IMetadataProvider);
+    try {
+      return await service.PlanForSave(this, this.ContextCurrentUser);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      LogError(`JournalEntryEntityServer.Save: manual-entry approval routing failed: ${msg}`);
+      throw err instanceof ManualJournalEntryApprovalError ? err : new Error(`Cannot route the journal entry's approval: ${msg}`);
+    }
+  }
+
+  /** Stamp the approval routing onto the header (inside Save's transaction, before the write). */
+  private applyApprovalAction(action: ManualJournalEntrySaveAction): void {
+    const raise = action.Action === 'Raise';
+    this.ApprovalLevel = raise ? action.Plan.Level : null;
+    this.ApprovalRequestedByUserID = raise ? this.ContextCurrentUser.ID : null;
+    // A changed entry's earlier approval does not cover the new content; RaiseApprovalTask stamps the new Task.
+    this.ApprovalTaskID = null;
+    this.ApprovedAt = null;
+    this.ApprovedByUserID = null;
   }
 
   // ─── W2: numbering (plan D19) ─────────────────────────────────────────────
 
   private async assignEntryNumber(): Promise<void> {
     if (!this.ContextCurrentUser) {
-      throw new Error('JournalEntryEntityServer.assignEntryNumber: ContextCurrentUser is required');
+      throw new Error('A journal entry number cannot be assigned without a signed-in user.');
     }
     if (!this.CompanyID) {
-      throw new Error('JournalEntryEntityServer.assignEntryNumber: CompanyID must be set before save (journal entries are single-company, plan D3)');
+      throw new Error('Choose a company before saving the journal entry.');
     }
     const fiscalYear = await this.deriveFiscalYear();
     this.EntryNumber = await getNextJournalEntryNumber(
@@ -483,17 +670,17 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
   private async deriveFiscalYear(): Promise<number> {
     const effectiveDate = this.EffectiveDate;
     if (!effectiveDate) {
-      throw new Error('JournalEntryEntityServer.deriveFiscalYear: EffectiveDate must be set before save (NOT NULL constraint)');
+      throw new Error('Enter an effective date before saving the journal entry.');
     }
     // Defensive: a raw-loaded value can arrive as an ISO string at runtime despite the Date type.
     const d = effectiveDate instanceof Date ? effectiveDate : new Date(effectiveDate);
     if (Number.isNaN(d.getTime())) {
-      throw new Error(`JournalEntryEntityServer.deriveFiscalYear: invalid EffectiveDate value: ${String(effectiveDate)}`);
+      throw new Error(`The effective date '${String(effectiveDate)}' is not a valid date.`);
     }
     await AccountingEngineBase.Instance.ConfigEx({ contextUser: this.ContextCurrentUser, provider: this.ProviderToUse as unknown as IMetadataProvider });
     const day = ToCalendarDay(d);
     if (day === null) {
-      throw new Error(`JournalEntryEntityServer.deriveFiscalYear: EffectiveDate has no calendar day: ${String(effectiveDate)}`);
+      throw new Error(`The effective date '${String(effectiveDate)}' cannot be read as a calendar day.`);
     }
     return FiscalYearOf(day, AccountingEngineBase.Instance.FiscalYearStartFor(this.CompanyID));
   }
@@ -514,7 +701,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
 
     const batchId = this.JournalEntryBatchID;
     if (!batchId) {
-      return 'A journal entry can only transition to GLPosted as a member of a dispatched batch, but JournalEntryBatchID is not set.';
+      return 'A journal entry can be marked GL-posted only as part of a sent batch, and this entry is in no batch.';
     }
     const provider = this.ProviderToUse as unknown as IRunViewProvider;
     const res = await provider.RunView<{ Status: string }>(
@@ -530,14 +717,67 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     );
     // Loud on failure: silently skipping would reopen the forged-posting hole this check closes.
     if (!res.Success) {
-      throw new Error(`JournalEntryEntityServer.validateGLPostedTransition: could not read owning batch ${batchId}: ${res.ErrorMessage ?? 'unknown error'}`);
+      throw new Error(`Could not check batch ${batchId}, which holds this journal entry: ${res.ErrorMessage ?? 'unknown error'}`);
     }
     const batchStatus = res.Results?.[0]?.Status;
     if (!batchStatus) {
-      return `Cannot transition to GLPosted: owning batch ${batchId} was not found.`;
+      return `This journal entry cannot be marked GL-posted: its batch ${batchId} was not found.`;
     }
     if (batchStatus !== 'Sent' && batchStatus !== 'Posted') {
-      return `Cannot transition to GLPosted: owning batch ${batchId} is '${batchStatus}' — only the batch dispatch flow (batch Sent/Posted) may mark a journal entry GL-posted.`;
+      return `This journal entry cannot be marked GL-posted: its batch ${batchId} is ${batchStatus}, and only a Sent or Posted batch can mark its entries GL-posted.`;
+    }
+    return null;
+  }
+
+  // ─── Origin pair (D25) ─────────────────────────────────────────────────────
+
+  /**
+   * On a NEW entry with an origin pair: the entity must exist and the record must exist in it. Returns
+   * the problem, or null. A saved entry's pair cannot change (Validate), so it is checked only here.
+   */
+  private async validateOriginPair(): Promise<string | null> {
+    if (this.IsSaved) return null;
+    const entityId = this.LinkedEntityID;
+    const recordId = this.LinkedRecordID;
+    if (!entityId && !recordId) return null;
+    if (!entityId || !recordId) {
+      return 'LinkedEntityID and LinkedRecordID are set together or not at all.';
+    }
+    const provider = this.ProviderToUse as unknown as IMetadataProvider;
+    const entity = provider.Entities.find(e => UUIDsEqual(e.ID, entityId));
+    if (!entity) return `LinkedEntityID ${entityId} is not an entity.`;
+    const keys = entity.PrimaryKeys;
+    if (keys.length !== 1) {
+      return `The source entity ${entity.Name} has a composite key, which a journal entry's origin pair cannot name.`;
+    }
+    const key = keys[0];
+    let literal: string;
+    if (key.NeedsQuotes) {
+      if (key.Type.toLowerCase() === 'uniqueidentifier' && !isSqlGuid(recordId)) {
+        return `LinkedRecordID '${recordId}' is not a valid ${entity.Name} ID.`;
+      }
+      literal = `'${recordId.replace(/'/g, "''")}'`;
+    } else {
+      if (!/^-?\d+$/.test(recordId)) return `LinkedRecordID '${recordId}' is not a valid ${entity.Name} ID.`;
+      literal = recordId;
+    }
+    const res = await (this.ProviderToUse as unknown as IRunViewProvider).RunView<Record<string, unknown>>(
+      {
+        EntityName: entity.Name,
+        ExtraFilter: `${key.Name}=${literal}`,
+        Fields: [key.Name],
+        MaxRows: 1,
+        ResultType: 'simple',
+        BypassCache: true,
+      },
+      this.ContextCurrentUser,
+    );
+    // Loud: treating a failed read as "the source exists" would let a made-up pair skip approval.
+    if (!res.Success) {
+      throw new Error(`Could not check the journal entry's source record (${entity.Name} ${recordId}): ${res.ErrorMessage ?? 'unknown error'}`);
+    }
+    if ((res.Results ?? []).length === 0) {
+      return `The journal entry's source record (${entity.Name} ${recordId}) does not exist. An entry created by hand is a manual entry and leaves LinkedEntityID and LinkedRecordID empty.`;
     }
     return null;
   }
@@ -556,7 +796,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       this.ContextCurrentUser,
     );
     if (res.Success && res.Results.length === 0) {
-      throw new Error(`JournalEntry.FileID ${fileId} does not reference an existing file (W9).`);
+      throw new Error(`The attached file (${fileId}) does not exist. Remove the attachment or attach the file again.`);
     }
   }
 
@@ -575,7 +815,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     contextUser?: UserInfo,
   ): Promise<mjBizAppsAccountingJournalEntryEntity> {
     if (!this.IsSaved) {
-      throw new Error('GenerateReversal: the JournalEntry must be saved before it can be reversed.');
+      throw new Error('The journal entry must be saved before it can be reversed.');
     }
     const user = contextUser ?? this.ContextCurrentUser;
     const provider = this.ProviderToUse as unknown as IMetadataProvider;
@@ -585,10 +825,10 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     // be reversed again (double-reversing would orphan the back-pointer).
     const reversalTypeId = await RequireJournalEntryTypeID('Reversal', user, provider);
     if (this.EntryTypeID?.toLowerCase() === reversalTypeId.toLowerCase() || this.ReversesJournalEntryID) {
-      throw new Error('GenerateReversal: a reversal entry cannot itself be reversed.');
+      throw new Error('A reversal entry cannot itself be reversed.');
     }
     if (this.ReversedByJournalEntryID) {
-      throw new Error(`GenerateReversal: ${this.EntryNumber} has already been reversed (by JE ${this.ReversedByJournalEntryID}).`);
+      throw new Error(`Journal entry ${this.EntryNumber} has already been reversed (by journal entry ${this.ReversedByJournalEntryID}).`);
     }
 
     // Make sure this JE's own lines (+ dimension tags) are hydrated to copy from.
@@ -619,7 +859,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     }
 
     if (!(await reversal.Save())) {
-      throw new Error(`GenerateReversal: failed to save reversal: ${reversal.LatestResult?.CompleteMessage ?? 'unknown'}`);
+      throw new Error(`The reversal could not be saved: ${reversal.LatestResult?.CompleteMessage ?? 'unknown error'}`);
     }
     await this.BackReferenceReversal(reversal.ID);
     return reversal;

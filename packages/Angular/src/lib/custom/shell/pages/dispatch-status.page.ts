@@ -41,8 +41,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /**
  * Dispatch status (UI plan §8.2) — the ERP-facing view of a batch: **did it land, and if not, why.**
  *
- * **How this earns its existence next to All batches** (Marcelo's core note — "if dispatch status is
- * gonna look the same as all batches, make sure this is adding some value"):
+ * **How this earns its existence next to All batches** (a page that looks the same as All batches
+ * adds nothing):
  *
  * 1. **It defaults to what is actually in flight** — Sent + Failed (see IN_FLIGHT), not the whole
  *    batch history. All batches is the archive; this is the wire.
@@ -218,10 +218,10 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   }
 
   /**
-   * **The value-add sort** (Marcelo: "maybe it's automatically sorting the ones that are waiting on
-   * the top"). A lifecycle CASE puts the broken first, then the waiting, then everything settled;
-   * inside each band the most recent dispatch leads. SQL Server sorts NULL `SentAt` last under DESC,
-   * so a never-sent batch can't jump the queue.
+   * **The value-add sort**: batches that need attention sort to the top. A lifecycle CASE puts the
+   * broken first, then the waiting, then everything settled; inside each band the most recent
+   * dispatch leads. SQL Server sorts NULL `SentAt` last under DESC, so a never-sent batch can't
+   * jump the queue.
    */
   private dispatchOrderBy(): string {
     return (
@@ -319,8 +319,8 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
 
       // Both failures are reported; neither overwrites the other.
       const errors: string[] = [];
-      if (!failed?.Success) errors.push(failed?.ErrorMessage ?? 'Could not load failed dispatches.');
-      if (!stranded.Success) errors.push(`Could not count stranded journal entries: ${stranded.ErrorMessage ?? 'unknown error'}`);
+      if (!failed?.Success) errors.push(failed?.ErrorMessage ?? 'Could not load failed dispatches. Refresh the page to try again.');
+      if (!stranded.Success) errors.push(`Could not count the journal entries held by failed or partly posted batches. ${stranded.ErrorMessage ?? 'Refresh the page to try again.'}`);
       this.LoadError = errors.length > 0 ? errors.join(' ') : null;
     } catch (e) {
       if (token !== this.loadToken) return;
@@ -575,7 +575,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
         this.SelectedBatch = null;
         this.Refresh();
       } else {
-        this.setError(res.ErrorMessage ?? 'Dispatch failed.');
+        this.setError(res.ErrorMessage ?? `Batch ${batch.JournalEntryBatchNumber} was not sent to the ERP. Try again.`);
       }
     } catch (e) {
       this.setError(e instanceof Error ? e.message : String(e));
@@ -668,7 +668,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
       this.Refresh(); // refetch-on-mutating-action (§8)
     } else {
       // Includes the ERP holding the batch: that refusal has no override, and points to Retry.
-      this.setError(res.ErrorMessage ?? 'Cancel failed.');
+      this.setError(res.ErrorMessage ?? `Batch ${batch.JournalEntryBatchNumber} was not cancelled. Try again.`);
       // A cancel whose response timed out may still have gone through: show what the server holds.
       this.Refresh();
     }
@@ -709,7 +709,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
         this.SelectedBatch = null;
         this.Refresh();
       } else {
-        this.setError(res.ErrorMessage ?? 'Resume failed.');
+        this.setError(res.ErrorMessage ?? `GL posting for batch ${batchNumber ?? batchId} did not finish. Try again.`);
       }
     } catch (e) {
       this.setError(e instanceof Error ? e.message : String(e));

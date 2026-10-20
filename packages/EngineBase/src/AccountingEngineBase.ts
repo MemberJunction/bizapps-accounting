@@ -371,7 +371,7 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
    * arbitrary account. A guessed bank still balances — the same invisibility BA-D27/D28 exist
    * to prevent. Callers that need the set use `ResolveLinkedAccounts`.
    *
-   * `forCompanyID` (optional — Amith 2026-07-28/29): scope resolution to links whose GL account
+   * `forCompanyID` (optional): scope resolution to links whose GL account
    * belongs to that company. A record (e.g. a shared product) can carry one link per company for
    * the same role; a multi-company caller passes the booking company to get ITS account. The
    * company is derived through the link's GLAccount FK (both tables live in this engine's cache,
@@ -384,7 +384,7 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
     if (roleRow.Cardinality === 'Many') {
       throw new AccountingResolutionError(
         'ROLE_NOT_SINGULAR',
-        `Role '${roleRow.Name}' has Cardinality=Many. ResolveLinkedAccount refuses it rather than returning an arbitrary account. Use ResolveLinkedAccounts.`,
+        `The account role '${roleRow.Name}' can link to several accounts, so no single account can be picked for it. The calling code must use ResolveLinkedAccounts.`,
       );
     }
     const candidates = this.linkCandidates(entityId, recordId, roleRow.ID, forCompanyID);

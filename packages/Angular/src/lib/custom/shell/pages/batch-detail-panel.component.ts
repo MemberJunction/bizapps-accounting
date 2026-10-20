@@ -200,7 +200,7 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
       );
 
       if (!headerRes.Success) {
-        this.LoadError = headerRes.ErrorMessage ?? 'This journal entry batch could not be loaded.';
+        this.LoadError = headerRes.ErrorMessage ?? 'This journal entry batch could not be loaded. Refresh the page to try again.';
         return;
       }
       const header = (headerRes.Results?.[0] ?? null) as BatchDetailHeader | null;

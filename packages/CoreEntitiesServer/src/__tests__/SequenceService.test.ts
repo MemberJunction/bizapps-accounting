@@ -43,7 +43,7 @@ describe('getNextJournalEntryNumber', () => {
 
   it('throws when the routine returns no number', async () => {
     const { provider } = fakeProvider('postgresql', { EntryNumber: null });
-    await expect(getNextJournalEntryNumber(COMPANY_ID, 2026, USER, provider)).rejects.toThrow(/returned no value/);
+    await expect(getNextJournalEntryNumber(COMPANY_ID, 2026, USER, provider)).rejects.toThrow(/returned nothing/);
   });
 });
 
@@ -62,11 +62,11 @@ describe('getNextJournalEntryBatchNumber', () => {
 describe('provider guard', () => {
   it('refuses a platform it has no SQL for, before running anything', async () => {
     const { provider, executeSQL } = fakeProvider('mysql', { JournalEntryBatchNumber: 'BATCH-000001' });
-    await expect(getNextJournalEntryBatchNumber(USER, provider)).rejects.toThrow(/no SQL for database platform 'mysql'/);
+    await expect(getNextJournalEntryBatchNumber(USER, provider)).rejects.toThrow(/does not support the 'mysql' database platform/);
     expect(executeSQL).not.toHaveBeenCalled();
   });
 
   it('refuses a missing provider', async () => {
-    await expect(getNextJournalEntryBatchNumber(USER, undefined as unknown as IMetadataProvider)).rejects.toThrow(/must be injected/);
+    await expect(getNextJournalEntryBatchNumber(USER, undefined as unknown as IMetadataProvider)).rejects.toThrow(/without a database provider/);
   });
 });

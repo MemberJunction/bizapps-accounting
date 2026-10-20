@@ -1,8 +1,8 @@
 /**
  * CreateJournalEntriesOperation — the SET form of the accounting engine's callable surface.
  *
- * Amith's transaction rule ("Journal Entry / Journal Entry Line Items are created through a
- * singular call ... so that we have a proper transaction wrapper") extended to a MULTI-JE unit
+ * The transaction rule (a Journal Entry and its Line Items are created through one call, so the
+ * write has a proper transaction wrapper) extended to a MULTI-JE unit
  * of work: an order Confirm that books ONE JE PER ORDER LINE submits ALL of its drafts here,
  * and every header + line + dimension across every draft writes inside ONE provider
  * transaction (the encapsulated entity Saves nest as savepoints) — all entries or none.

@@ -29,7 +29,7 @@ import { CompanyApprovers, LoadCompanyApprovers, MayCancelApprovedBatch, MayCanc
 
 /**
  * The batch fields this page reads, PICKED from the generated entity class rather than
- * re-declared (Amith, PR #148 review: a hand-written interface mirroring an entity is an
+ * re-declared (a hand-written interface mirroring an entity is an
  * MJ anti-pattern). The compiler now checks every field name and type against the schema,
  * so `Status` carries the real CHECK-constraint union — widening it is a CodeGen concern,
  * never a hand edit here.
@@ -1286,7 +1286,7 @@ export class AccountingBatchesPageComponent implements OnInit {
             this.ActionMessageIsError = !res.Success;
             this.ActionMessage = res.Success
                 ? `Archived batch ${batch.JournalEntryBatchNumber} — no ERP call; its journal entries stay locked to it.`
-                : (res.ErrorMessage ?? 'Archive failed.');
+                : (res.ErrorMessage ?? `Batch ${batch.JournalEntryBatchNumber} was not archived. Try again.`);
             if (res.Success) {
                 this.ArchiveModalVisible = false;
                 this.ArchiveTarget = null;
@@ -1406,7 +1406,7 @@ export class AccountingBatchesPageComponent implements OnInit {
             this.ActionMessageIsError = !res.Success;
             this.ActionMessage = res.Success
                 ? `Cancelled batch ${batch.JournalEntryBatchNumber} — its journal entries return to the next build.`
-                : (res.ErrorMessage ?? 'Cancel failed.');
+                : (res.ErrorMessage ?? `Batch ${batch.JournalEntryBatchNumber} was not cancelled. Try again.`);
             // Close on a refusal too: the message is on the page, and the modal would hide it. The one
             // that matters most, "the ERP holds this batch — retry it instead", has nothing to redo here.
             this.resetCancelDialog();
@@ -1623,7 +1623,7 @@ export class AccountingBatchesPageComponent implements OnInit {
         if (this.PostingDateWarning && !this.PostingDateConfirmed) return `Confirm posting this batch in ${this.PostingMonth}.`;
         if (this.PreviewCandidateCount === 0) return 'Nothing matches these criteria.';
         if (this.IncludedCount === 0) return 'Every entry is excluded — nothing to build.';
-        if (!this.IsBalanced) return 'The selection does not balance (Dr ≠ Cr) — the ledger would reject it.';
+        if (!this.IsBalanced) return 'The selected entries do not balance: total debits must equal total credits. Include or exclude entries until they match.';
         return null;
     }
 
@@ -1688,7 +1688,7 @@ export class AccountingBatchesPageComponent implements OnInit {
                 this.PreviewBeforePostingStartCount = previewRes.BeforePostingStartCount;
                 this.setCoveredDateRange(this.PreviewEntries);
             } else {
-                this.ModalErrorMessage = previewRes.ErrorMessage ?? 'Failed to load candidate preview.';
+                this.ModalErrorMessage = previewRes.ErrorMessage ?? 'Could not load the entries that match these criteria. Try again.';
                 this.clearPreview();
             }
         } catch (e) {
@@ -1748,7 +1748,7 @@ export class AccountingBatchesPageComponent implements OnInit {
 
             if (buildRes.Success) {
                 if (buildRes.NothingToBatch) {
-                    this.ActionMessage = 'No candidate journal entries found to batch.';
+                    this.ActionMessage = 'There are no pending journal entries to batch.';
                     this.ActionMessageIsError = false;
                 } else {
                     this.ActionMessage = `Successfully built ${buildRes.CompanyCount} batch(es) for ${buildRes.JECount} journal entr${buildRes.JECount === 1 ? 'y' : 'ies'} (${buildRes.SummaryLineCount} consolidated GL lines, Dr ${buildRes.TotalDebits.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}).`;
@@ -1758,7 +1758,7 @@ export class AccountingBatchesPageComponent implements OnInit {
                 this.SelectedStage = 'All';
                 await this.LoadBatches();
             } else {
-                this.ModalErrorMessage = buildRes.ErrorMessage ?? 'Failed to build batch.';
+                this.ModalErrorMessage = buildRes.ErrorMessage ?? 'The journal entry batch was not built. Try again.';
             }
         } catch (e) {
             this.ModalErrorMessage = e instanceof Error ? e.message : String(e);

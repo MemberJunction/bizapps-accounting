@@ -36,7 +36,7 @@ export class JournalEntryTypeEntityServer extends mjBizAppsAccountingJournalEntr
             result.Errors.push(
               new ValidationErrorInfo(
                 'JournalEntryTypeEntityServer.Validate',
-                `JournalEntryType '${String(field.OldValue ?? this.Code)}' is a system row (IsSystem=1): ${name} is immutable — accounting's triggers and batch pipeline key on it (issue #24).`,
+                `Journal entry type '${String(field.OldValue ?? this.Code)}' is a system type: its ${name} cannot change, because Accounting's database rules and batching depend on it.`,
                 null,
               ),
             );
@@ -47,7 +47,7 @@ export class JournalEntryTypeEntityServer extends mjBizAppsAccountingJournalEntr
         result.Errors.push(
           new ValidationErrorInfo(
             'JournalEntryTypeEntityServer.Validate',
-            'A JournalEntryType cannot be promoted to IsSystem=1 after creation — system rows are seeded by accounting, never promoted.',
+            'A journal entry type cannot be promoted to a system type after it is created; system types are set up only by Accounting.',
             null,
           ),
         );
@@ -62,7 +62,7 @@ export class JournalEntryTypeEntityServer extends mjBizAppsAccountingJournalEntr
     if (isSystem) {
       const code = this.Fields.find(f => f.Name === 'Code')?.Value ?? this.ID;
       throw new Error(
-        `JournalEntryType '${String(code)}' is a system row (IsSystem=1) and cannot be deleted — accounting's triggers and batch pipeline key on it (issue #24).`,
+        `Journal entry type '${String(code)}' is a system type and cannot be deleted, because Accounting's database rules and batching depend on it.`,
       );
     }
     return super.Delete(options);

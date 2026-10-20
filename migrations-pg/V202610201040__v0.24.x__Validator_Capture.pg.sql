@@ -298,7 +298,7 @@ WHERE e."Name" = 'MJ_BizApps_Accounting: Finance Exceptions';
 -- ===================== Other =====================
 
 -- =============================================================================
--- Migration: V202610122100__v0.23.x__Validator_Capture.sql
+-- Migration: V202610201040__v0.24.x__Validator_Capture.sql
 -- Description: stores the CodeGen validator code for eight CHECK constraints
 --              whose generated validators no migration carried (#314).
 -- =============================================================================
