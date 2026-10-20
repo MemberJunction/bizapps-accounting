@@ -1,0 +1,5 @@
+---
+"@mj-biz-apps/accounting-ng": minor
+---
+
+The Overview, Journal Entries and Batches dashboards carry common's company and period filter bar. The company picker is the app-wide company scope, so the rail chip and the bar always show the same selection, and the dashboards now re-read when the scope changes from either. The period (this, last or next quarter, this or last year, all time, a custom range) is shared by the three dashboards, saved per user, and counts quarters from the fiscal year start of the companies in view. Figures with a date are bounded by it: journal entries on `EffectiveDate`, batches on `PostingDate`. Work queues (Pending entries, awaiting approval, failed dispatches, oldest unposted) count every date, and their tooltips say so. The Batches dashboard is now company-scoped throughout, and its dispatch breakdown includes Archived. The Overview reads its figures with filtered server reads instead of a capped sample, its chart follows the period, and a failed read shows the reason and dashes instead of placeholder numbers. Requires `@mj-biz-apps/common-ng` 5.55.0.

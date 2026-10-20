@@ -21,6 +21,7 @@ import {
   MJAlertComponent, MJDropdownComponent, MJDialogComponent, MJDialogActionsComponent } from '@memberjunction/ng-ui-components';
 
 import { CompanyScopeChipComponent } from '../shared/company-scope-chip.component';
+import { AccountingDashboardFiltersComponent } from '../shared/dashboard-filters.component';
 import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
 import { GlResolutionPreviewComponent } from '../shared/gl-resolution-preview.component';
 import { WorkspaceTabStripComponent } from '../../transfer-pending/workspace-tabs/workspace-tab-strip.component';
@@ -136,6 +137,7 @@ import { DimensionsResourceComponent } from '../resources/dimensions-resource.co
     MJDialogComponent,
     MJDialogActionsComponent,
     CompanyScopeChipComponent,
+    AccountingDashboardFiltersComponent, // standalone — common's filter bar bound to the scope + period services
     GlResolutionPreviewComponent,
     WorkspaceTabStripComponent,
     WorkspaceCardComponent,

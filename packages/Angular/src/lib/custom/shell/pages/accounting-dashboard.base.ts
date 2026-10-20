@@ -1,7 +1,11 @@
-import { Directive, ChangeDetectorRef, EventEmitter, Output, inject } from '@angular/core';
+import { Directive, ChangeDetectorRef, DestroyRef, inject } from '@angular/core';
+import { combineLatest } from 'rxjs';
+import { distinctUntilChanged, skip } from 'rxjs/operators';
 import { RunView, RunViewParams } from '@memberjunction/core';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
-import { BusinessTimeZoneEngine, FirstDayOfMonth } from '@mj-biz-apps/common-entities';
+import { FormatWindow, PeriodPhrase, PeriodSqlFilter, SameIDs, type PeriodWindow } from '@mj-biz-apps/common-ng';
+import { CompanyScopeService } from '../../shared/company-scope.service';
+import { DashboardPeriodService } from '../../shared/dashboard-period.service';
 
 /** One stat card. `Value` is null while loading so the card can show a placeholder, not a wrong 0. */
 export interface DashboardStat {
@@ -75,6 +79,12 @@ export const DASHBOARD_LIST_ROWS = 5;
 @Directive()
 export abstract class AccountingDashboardBase extends BaseAngularComponent {
   protected cdr = inject(ChangeDetectorRef);
+  private destroyRef = inject(DestroyRef);
+  /** App-wide company scope: the rail chip and the filter bar's company picker. */
+  public Scope = inject(CompanyScopeService);
+  /** The filter bar's period, shared by every accounting dashboard. */
+  public Periods = inject(DashboardPeriodService);
+  private loadSeq = 0;
 
   public Stats: DashboardStat[] = [];
   /** The list cards rendered under the stats. Empty while loading. */
@@ -97,9 +107,51 @@ export abstract class AccountingDashboardBase extends BaseAngularComponent {
     return res.TotalRowCount ?? 0;
   }
 
-  /** First day of the current month in the BUSINESS zone, as `YYYY-MM-DD`. */
-  protected monthStartBusiness(): string {
-    return FirstDayOfMonth(BusinessTimeZoneEngine.Instance.Today());
+  /** The selected period's bounds for the companies in scope. Arithmetic, so recomputed per read. */
+  protected get window(): PeriodWindow {
+    return this.Periods.WindowFor(this.Scope.SelectedIDs);
+  }
+
+  /** The period in a sentence for a tooltip or caption: "this quarter", "all time", or the dates. */
+  protected get periodPhrase(): string {
+    return PeriodPhrase(this.window);
+  }
+
+  /** "Jul 1, 2026 – Sep 30, 2026", or "all time": the bounds a period tooltip states. */
+  protected get windowText(): string {
+    return FormatWindow(this.window);
+  }
+
+  /** The period's clause over a DATE column, or null for all time. Inclusive, ISO dates. */
+  protected periodFilter(column: string): string | null {
+    return PeriodSqlFilter(column, this.window);
+  }
+
+  /** The clauses that are present, ANDed (each parenthesised when there are two or more). Null when none. */
+  protected allOf(...clauses: (string | null | undefined)[]): string | null {
+    const parts = clauses.filter((c): c is string => !!c && c.trim().length > 0);
+    if (parts.length <= 1) return parts[0] ?? null;
+    return parts.map((c) => `(${c})`).join(' AND ');
+  }
+
+  /**
+   * Calls `reload` whenever the company scope or the period changes after the page opened, from the
+   * filter bar or from the rail chip. The first emission is the state the page already loaded with.
+   */
+  protected reloadOnFilterChange(reload: () => void): void {
+    const sub = combineLatest([this.Scope.SelectedIDs$.pipe(distinctUntilChanged(SameIDs)), this.Periods.State$])
+      .pipe(skip(1))
+      .subscribe(() => reload());
+    this.destroyRef.onDestroy(() => sub.unsubscribe());
+  }
+
+  /**
+   * Starts a load and returns a check that is true only while it is the latest one, so a slow read
+   * from before a filter change cannot overwrite the figures for the new filters.
+   */
+  protected beginLoad(): () => boolean {
+    const seq = ++this.loadSeq;
+    return () => seq === this.loadSeq;
   }
 
   public StatValue(s: DashboardStat): string {
