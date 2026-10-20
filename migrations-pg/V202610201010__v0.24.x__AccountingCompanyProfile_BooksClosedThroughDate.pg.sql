@@ -79,6 +79,8 @@ CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ParentAcco
 
 CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ApprovalCFOUserID" ON __mj_BizAppsAccounting."AccountingCompanyProfile" ("ApprovalCFOUserID");
 
+CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ManualJourna_ac02941c" ON __mj_BizAppsAccounting."AccountingCompanyProfile" ("ManualJournalEntryApproverRoleID");
+
 
 -- ===================== Helper Functions (fn*) =====================
 
@@ -279,6 +281,7 @@ AS SELECT
     "mjBizAppsAccountingCurrency_FunctionalCurrencyCode"."Name" AS "FunctionalCurrencyCode_Virtual",
     "mjBizAppsAccountingCurrency_ReportingCurrencyCode"."Name" AS "ReportingCurrencyCode_Virtual",
     "MJUser_ApprovalCFOUserID"."Name" AS "ApprovalCFOUser",
+    "MJRole_ManualJournalEntryApproverRoleID"."Name" AS "ManualJournalEntryApproverRole",
     ${mjSchema}_rgc."Latitude" AS "${mjSchema}_Latitude",
     ${mjSchema}_rgc."Longitude" AS "${mjSchema}_Longitude",
     "hier_ParentAccountingCompanyID"."RootID" AS "RootParentAccountingCompanyID",
@@ -304,6 +307,10 @@ LEFT OUTER JOIN
     ${mjSchema}."User" AS "MJUser_ApprovalCFOUserID"
   ON
     a."ApprovalCFOUserID" = "MJUser_ApprovalCFOUserID"."ID"
+LEFT OUTER JOIN
+    ${mjSchema}."Role" AS "MJRole_ManualJournalEntryApproverRoleID"
+  ON
+    a."ManualJournalEntryApproverRoleID" = "MJRole_ManualJournalEntryApproverRoleID"."ID"
 LEFT OUTER JOIN
     ${mjSchema}."vwRecordGeoCodes" AS ${mjSchema}_rgc
   ON
@@ -413,7 +420,7 @@ BEGIN
 DO $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM ${mjSchema}."EntityField" WHERE "ID" = '351acc4c-e5be-4939-a4f1-d3e031d36a61' OR ("EntityID" = '3E551198-AB66-478E-BEB6-C34EDBE242EC' AND "Name" = 'BooksClosedThroughDate')
+        SELECT 1 FROM ${mjSchema}."EntityField" WHERE "ID" = '7db17bfa-5d46-44c5-b162-565731e35b5d' OR ("EntityID" = '3E551198-AB66-478E-BEB6-C34EDBE242EC' AND "Name" = 'BooksClosedThroughDate')
     ) THEN
         INSERT INTO ${mjSchema}."EntityField"
         (
@@ -447,7 +454,7 @@ BEGIN
         )
         VALUES
         (
-        '351acc4c-e5be-4939-a4f1-d3e031d36a61',
+        '7db17bfa-5d46-44c5-b162-565731e35b5d',
         '3E551198-AB66-478E-BEB6-C34EDBE242EC', -- "Entity": "MJ_BizApps_Accounting": "Accounting" "Company" "Profiles"
         (SELECT COALESCE(MAX("Sequence"), 0) + 1 FROM ${mjSchema}."EntityField" WHERE "EntityID" = '3E551198-AB66-478E-BEB6-C34EDBE242EC'),
         'BooksClosedThroughDate',

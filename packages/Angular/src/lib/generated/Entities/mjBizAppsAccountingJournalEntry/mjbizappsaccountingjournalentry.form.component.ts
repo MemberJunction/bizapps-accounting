@@ -23,6 +23,7 @@ export class mjBizAppsAccountingJournalEntryFormComponent extends BaseFormCompon
             { sectionKey: 'gLIntegration', sectionName: 'GL Integration', isExpanded: true },
             { sectionKey: 'attachments', sectionName: 'Attachments', isExpanded: true },
             { sectionKey: 'anomalyDetection', sectionName: 'Anomaly Detection', isExpanded: true },
+            { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingJournalEntryLines', sectionName: 'Journal Entry Lines', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingJournalEntryBatches', sectionName: 'Journal Entry Batches', isExpanded: false },

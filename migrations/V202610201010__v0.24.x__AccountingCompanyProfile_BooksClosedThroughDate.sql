@@ -95,7 +95,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
 
 /* SQL text to insert 1 new entity field(s) */
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '351acc4c-e5be-4939-a4f1-d3e031d36a61' OR (EntityID = '3E551198-AB66-478E-BEB6-C34EDBE242EC' AND Name = 'BooksClosedThroughDate')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '7db17bfa-5d46-44c5-b162-565731e35b5d' OR (EntityID = '3E551198-AB66-478E-BEB6-C34EDBE242EC' AND Name = 'BooksClosedThroughDate')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -128,7 +128,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
          VALUES
          (
-            '351acc4c-e5be-4939-a4f1-d3e031d36a61',
+            '7db17bfa-5d46-44c5-b162-565731e35b5d',
             '3E551198-AB66-478E-BEB6-C34EDBE242EC', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
             (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '3E551198-AB66-478E-BEB6-C34EDBE242EC'),
             'BooksClosedThroughDate',
@@ -211,6 +211,15 @@ IF NOT EXISTS (
     AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[AccountingCompanyProfile]')
 )
 CREATE INDEX IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ApprovalCFOUserID ON [${flyway:defaultSchema}].[AccountingCompanyProfile] ([ApprovalCFOUserID]);
+
+-- Index for foreign key ManualJournalEntryApproverRoleID in table AccountingCompanyProfile
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ManualJournalEntryApproverRoleID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[AccountingCompanyProfile]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ManualJournalEntryApproverRoleID ON [${flyway:defaultSchema}].[AccountingCompanyProfile] ([ManualJournalEntryApproverRoleID]);
 
 /* Hierarchy Metadata Function SQL for MJ_BizApps_Accounting: Accounting Company Profiles.ParentAccountingCompanyID */
 -----------------------------------------------------------------
@@ -490,6 +499,7 @@ SELECT
     mjBizAppsAccountingCurrency_FunctionalCurrencyCode.[Name] AS [FunctionalCurrencyCode_Virtual],
     mjBizAppsAccountingCurrency_ReportingCurrencyCode.[Name] AS [ReportingCurrencyCode_Virtual],
     MJUser_ApprovalCFOUserID.[Name] AS [ApprovalCFOUser],
+    MJRole_ManualJournalEntryApproverRoleID.[Name] AS [ManualJournalEntryApproverRole],
     ${mjSchema}_rgc.[Latitude] AS [${mjSchema}_Latitude],
     ${mjSchema}_rgc.[Longitude] AS [${mjSchema}_Longitude],
     hier_ParentAccountingCompanyID.RootID AS [RootParentAccountingCompanyID],
@@ -515,6 +525,10 @@ LEFT OUTER JOIN
     [${mjSchema}].[User] AS MJUser_ApprovalCFOUserID
   ON
     [a].[ApprovalCFOUserID] = MJUser_ApprovalCFOUserID.[ID]
+LEFT OUTER JOIN
+    [${mjSchema}].[Role] AS MJRole_ManualJournalEntryApproverRoleID
+  ON
+    [a].[ManualJournalEntryApproverRoleID] = MJRole_ManualJournalEntryApproverRoleID.[ID]
 LEFT OUTER JOIN
     [${mjSchema}].[vwRecordGeoCodes] AS ${mjSchema}_rgc
   ON
@@ -589,6 +603,10 @@ CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateAccountingCompanyProfile]
     @IsActive bit = NULL,
     @PostingStartDate_Clear bit = 0,
     @PostingStartDate date = NULL,
+    @ManualJournalEntryApprovalThreshold_Clear bit = 0,
+    @ManualJournalEntryApprovalThreshold decimal(19, 4) = NULL,
+    @ManualJournalEntryApproverRoleID_Clear bit = 0,
+    @ManualJournalEntryApproverRoleID uniqueidentifier = NULL,
     @BooksClosedThroughDate_Clear bit = 0,
     @BooksClosedThroughDate date = NULL
 AS
@@ -614,6 +632,8 @@ BEGIN
                 [ApprovalCFOUserID],
                 [IsActive],
                 [PostingStartDate],
+                [ManualJournalEntryApprovalThreshold],
+                [ManualJournalEntryApproverRoleID],
                 [BooksClosedThroughDate],
                 [ID]
         )
@@ -635,6 +655,8 @@ BEGIN
                 CASE WHEN @ApprovalCFOUserID_Clear = 1 THEN NULL ELSE ISNULL(@ApprovalCFOUserID, NULL) END,
                 ISNULL(@IsActive, 1),
                 CASE WHEN @PostingStartDate_Clear = 1 THEN NULL ELSE ISNULL(@PostingStartDate, NULL) END,
+                CASE WHEN @ManualJournalEntryApprovalThreshold_Clear = 1 THEN NULL ELSE ISNULL(@ManualJournalEntryApprovalThreshold, NULL) END,
+                CASE WHEN @ManualJournalEntryApproverRoleID_Clear = 1 THEN NULL ELSE ISNULL(@ManualJournalEntryApproverRoleID, NULL) END,
                 CASE WHEN @BooksClosedThroughDate_Clear = 1 THEN NULL ELSE ISNULL(@BooksClosedThroughDate, NULL) END,
                 @ActualID
         )
@@ -697,6 +719,10 @@ CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateAccountingCompanyProfile]
     @IsActive bit = NULL,
     @PostingStartDate_Clear bit = 0,
     @PostingStartDate date = NULL,
+    @ManualJournalEntryApprovalThreshold_Clear bit = 0,
+    @ManualJournalEntryApprovalThreshold decimal(19, 4) = NULL,
+    @ManualJournalEntryApproverRoleID_Clear bit = 0,
+    @ManualJournalEntryApproverRoleID uniqueidentifier = NULL,
     @BooksClosedThroughDate_Clear bit = 0,
     @BooksClosedThroughDate date = NULL
 AS
@@ -721,6 +747,8 @@ BEGIN
         [ApprovalCFOUserID] = CASE WHEN @ApprovalCFOUserID_Clear = 1 THEN NULL ELSE ISNULL(@ApprovalCFOUserID, [ApprovalCFOUserID]) END,
         [IsActive] = ISNULL(@IsActive, [IsActive]),
         [PostingStartDate] = CASE WHEN @PostingStartDate_Clear = 1 THEN NULL ELSE ISNULL(@PostingStartDate, [PostingStartDate]) END,
+        [ManualJournalEntryApprovalThreshold] = CASE WHEN @ManualJournalEntryApprovalThreshold_Clear = 1 THEN NULL ELSE ISNULL(@ManualJournalEntryApprovalThreshold, [ManualJournalEntryApprovalThreshold]) END,
+        [ManualJournalEntryApproverRoleID] = CASE WHEN @ManualJournalEntryApproverRoleID_Clear = 1 THEN NULL ELSE ISNULL(@ManualJournalEntryApproverRoleID, [ManualJournalEntryApproverRoleID]) END,
         [BooksClosedThroughDate] = CASE WHEN @BooksClosedThroughDate_Clear = 1 THEN NULL ELSE ISNULL(@BooksClosedThroughDate, [BooksClosedThroughDate]) END
     WHERE
         [ID] = @ID
