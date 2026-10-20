@@ -1071,11 +1071,13 @@ erDiagram
 The month-end review list. Detectors in consuming apps raise rows through
 `Accounting.RaiseFinanceExceptions` (idempotent on type + `DedupeKey`; a repeat refreshes an Open
 row's creator fields and summary), and accounting raises `ERP_POSTING_NOT_READ_BACK` itself when a
-batch the ERP accepted cannot be read back; a holder of
-`MJ.BizApps.Accounting.FinanceExceptions.Clear` (the Finance role) who did not create the source
-record clears them through `Accounting.ClearFinanceException`. `Open → Reviewed | Corrected`, both
+batch the ERP accepted cannot be read back; a reviewer who did not create the source record clears
+them through `Accounting.ClearFinanceException`, holding `MJ.BizApps.Accounting.FinanceExceptions.Clear`
+(the Finance role) or, where a host has granted them, the per-type, unattributed-creator or
+escalated-creator right (golive #320 §4; `docs/lifecycle-hooks.md` §2c). `Open → Reviewed | Corrected`, both
 terminal; `FinanceExceptionEntityServer` refuses any other status change and any delete. A company's
-month is ready to close when it has no Open rows (saved query "Finance Exceptions Ready To Close").
+month is ready to close when it has no Open rows (saved query "Finance Exceptions Ready To Close");
+saved query "Finance Exceptions Cleared" lists every clearing decision by month.
 The six types and their thresholds are seeded by `metadata/finance-exception-types`.
 
 ```mermaid

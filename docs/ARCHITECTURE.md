@@ -221,6 +221,9 @@ refuses a draft that spans companies, checks balance, and writes atomically. Hoo
   (`FinanceExceptionOperations.ts`, over the CodeGen-emitted bases in `accounting-entities`);
   `FinanceExceptionEntityServer.ts` makes the clear operation the only way a status changes. Orders
   and sales resolve the operations by key through the ClassFactory, with no build-time dependency.
+  `FinanceExceptionClearPolicy.ts` decides who may clear each exception (golive #320 §4): per-type,
+  unattributed-creator and escalated-creator authorizations the package ships ungranted and a host
+  turns on by granting them to its roles.
 
 ## 6. Connection map
 Hand-written, cross-layer files carry a top-of-file `CONNECTS TO:` block (CALLED BY / CALLS /

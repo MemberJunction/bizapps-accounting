@@ -221,10 +221,31 @@ export {
 } from './FinanceExceptionOperations.js';
 export {
   FINANCE_EXCEPTION_TYPE_ENTITY,
-  FINANCE_EXCEPTIONS_CLEAR_AUTH,
+  FinanceExceptionClearContextFor,
   UserCanClearFinanceExceptions,
   ParseFinanceExceptionConfiguration,
 } from './FinanceExceptions.js';
+// Who may clear which finance exception (golive #320 §4): per-type, unattributed-creator and
+// escalated-creator rights a host turns on by granting them to its roles.
+export {
+  FINANCE_EXCEPTIONS_CLEAR_AUTH,
+  FINANCE_EXCEPTIONS_CLEAR_TYPE_AUTH_PREFIX,
+  FINANCE_EXCEPTIONS_CLEAR_UNATTRIBUTED_AUTH,
+  FINANCE_EXCEPTIONS_ESCALATED_CREATOR_AUTH,
+  FINANCE_EXCEPTIONS_CLEAR_ESCALATED_AUTH,
+  FinanceExceptionClearTypeAuthName,
+  IsFinanceExceptionRuleGranted,
+  HoldsAnyFinanceExceptionClearRight,
+  ResolveFinanceExceptionClearRule,
+  HoldsFinanceExceptionClearRule,
+  FinanceExceptionClearRuleRefusal,
+  type FinanceExceptionClearRuleKind,
+  type FinanceExceptionClearRule,
+  type FinanceExceptionClearRefusal,
+  type FinanceExceptionClearSubject,
+  type FinanceExceptionClearContext,
+  type FinanceExceptionClearResolution,
+} from './FinanceExceptionClearPolicy.js';
 export { FINANCE_EXCEPTION_ENTITY } from './FinanceExceptionEntityServer.js';
 
 // Manual journal entry approval (golive #353, #320 §3): a manual entry saved while its company has a
