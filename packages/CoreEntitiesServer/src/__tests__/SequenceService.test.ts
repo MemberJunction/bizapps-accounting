@@ -36,7 +36,7 @@ describe('getNextJournalEntryNumber', () => {
     const { provider, executeSQL } = fakeProvider('postgresql', { EntryNumber: 'JE-ACME-2026-000002' });
     await expect(getNextJournalEntryNumber(COMPANY_ID, 2026, USER, provider)).resolves.toBe('JE-ACME-2026-000002');
     const sql = sentSQL(executeSQL);
-    expect(sql).toBe('SELECT __mj_bizappsaccounting."spAssignNextJournalEntryNumber"($1::uuid, $2::integer) AS EntryNumber');
+    expect(sql).toBe('SELECT "__mj_BizAppsAccounting"."spAssignNextJournalEntryNumber"($1::uuid, $2::integer) AS EntryNumber');
     expect(sql).not.toMatch(/DECLARE|EXEC|OUTPUT|@/);
     expect(executeSQL.mock.calls[0][1]).toEqual([COMPANY_ID, 2026]);
   });
@@ -50,7 +50,7 @@ describe('getNextJournalEntryNumber', () => {
 describe('getNextJournalEntryBatchNumber', () => {
   it.each<[DatabasePlatform, RegExp]>([
     ['sqlserver', /EXEC __mj_BizAppsAccounting\.spAssignNextJournalEntryBatchNumber\s+@JournalEntryBatchNumber = @batchNumber OUTPUT/],
-    ['postgresql', /^SELECT __mj_bizappsaccounting\."spAssignNextJournalEntryBatchNumber"\(\) AS JournalEntryBatchNumber$/],
+    ['postgresql', /^SELECT "__mj_BizAppsAccounting"\."spAssignNextJournalEntryBatchNumber"\(\) AS JournalEntryBatchNumber$/],
   ])('on %s sends that platform\'s SQL with no parameters', async (platform, expected) => {
     const { provider, executeSQL } = fakeProvider(platform, { JournalEntryBatchNumber: 'BATCH-000001' });
     await expect(getNextJournalEntryBatchNumber(USER, provider)).resolves.toBe('BATCH-000001');

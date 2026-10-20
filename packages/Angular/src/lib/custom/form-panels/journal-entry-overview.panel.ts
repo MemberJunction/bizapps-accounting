@@ -1,9 +1,10 @@
 import { Component, inject } from '@angular/core';
-import { CompositeKey } from '@memberjunction/core';
+import { CompositeKey, Metadata } from '@memberjunction/core';
 import { RegisterClassEx } from '@memberjunction/global';
 import { BaseFormPanel } from '@memberjunction/ng-base-forms';
 import { NavigationService } from '@memberjunction/ng-shared';
 import type { mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
+import { UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
 import { awaitsApproval } from '../shared/je-rules';
 import {
     formatJournalTimestamp,
@@ -85,6 +86,14 @@ export class JournalEntryOverviewPanel extends BaseFormPanel<mjBizAppsAccounting
     }
 
     /**
+     * Whether the signed-in user holds the batch-operator Authorization (the Finance role) that a
+     * build requires on the server (#448). Without it the Posting card offers no "Build a batch…" link.
+     */
+    public get MayBuild(): boolean {
+        return UserCanOperateJournalEntryBatches(Metadata.Provider?.CurrentUser, Metadata.Provider?.Authorizations);
+    }
+
+    /**
      * Take the operator to where batches are actually built (golive #193).
      *
      * The unbatched state used to be a dead sentence — "Assigned when the next batch is built" —
@@ -93,7 +102,7 @@ export class JournalEntryOverviewPanel extends BaseFormPanel<mjBizAppsAccounting
      * so this follows a nav rename without a code change (and no-ops if the item is absent).
      */
     public async OpenBatchBuilder(): Promise<void> {
-        if (!this.navService) return;
+        if (!this.navService || !this.MayBuild) return;
         await this.navService.OpenNavItemByName(BATCHES_NAV_ITEM);
     }
 

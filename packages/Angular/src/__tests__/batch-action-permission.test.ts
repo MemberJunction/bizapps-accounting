@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { NormalizeUUID } from '@memberjunction/global';
 import {
   CompanyApprovers,
+  MayArchiveBatch,
   MayCancelApprovedBatch,
   MayCancelPendingBatch,
   MayDecideBatch,
@@ -86,5 +87,30 @@ describe('MayCancelPendingBatch (Cancel on a Pending batch)', () => {
     expect(MayCancelPendingBatch(batch, APPROVER, APPROVERS)).toBe(true);
     expect(MayCancelPendingBatch(batch, BUILDER, APPROVERS)).toBe(true);
     expect(MayCancelPendingBatch(batch, OTHER, APPROVERS)).toBe(false);
+  });
+});
+
+describe('MayArchiveBatch (Archive, #448)', () => {
+  const batch = { CompanyID: COMPANY_ID, BatchedByUserID: BUILDER, ApprovedByUserID: APPROVED_BY };
+
+  it("lets only the company's approver archive a Pending batch — not the builder, who may cancel it", () => {
+    const pending = { ...batch, Status: 'Pending' as const };
+    expect(MayArchiveBatch(pending, APPROVER, APPROVERS)).toBe(true);
+    expect(MayArchiveBatch(pending, BUILDER, APPROVERS)).toBe(false);
+    expect(MayCancelPendingBatch(pending, BUILDER, APPROVERS)).toBe(true);
+    expect(MayArchiveBatch(pending, APPROVED_BY, APPROVERS)).toBe(false);
+    expect(MayArchiveBatch(pending, OTHER, APPROVERS)).toBe(false);
+  });
+
+  it.each(['Approved', 'Failed'] as const)("lets the company's approver and the batch's approver archive a %s batch, not the builder", (status) => {
+    const past = { ...batch, Status: status };
+    expect(MayArchiveBatch(past, APPROVER, APPROVERS)).toBe(true);
+    expect(MayArchiveBatch(past, APPROVED_BY, APPROVERS)).toBe(true);
+    expect(MayArchiveBatch(past, BUILDER, APPROVERS)).toBe(false);
+    expect(MayArchiveBatch(past, OTHER, APPROVERS)).toBe(false);
+  });
+
+  it('shows nothing to a user with no ID', () => {
+    expect(MayArchiveBatch({ ...batch, Status: 'Pending' }, undefined, NO_APPROVERS)).toBe(false);
   });
 });

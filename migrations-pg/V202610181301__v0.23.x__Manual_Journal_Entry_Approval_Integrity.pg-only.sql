@@ -27,7 +27,7 @@
 -- Runs after the converted V202610181300 file, once, in order.
 -- =============================================================================
 
-CREATE OR REPLACE FUNCTION __mj_BizAppsAccounting."fn_trg_JournalEntry_ApprovalIntegrity"()
+CREATE OR REPLACE FUNCTION "__mj_BizAppsAccounting"."fn_trg_JournalEntry_ApprovalIntegrity"()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
@@ -44,7 +44,7 @@ BEGIN
 
     SELECT acp."ApprovalCFOUserID", acp."ManualJournalEntryApproverRoleID", acp."ManualJournalEntryApprovalThreshold"
       INTO v_cfo_user_id, v_approver_role_id, v_threshold
-      FROM __mj_BizAppsAccounting."AccountingCompanyProfile" acp
+      FROM "__mj_BizAppsAccounting"."AccountingCompanyProfile" acp
      WHERE acp."ID" = NEW."CompanyID";
 
     IF NEW."ApprovedAt" IS NULL THEN
@@ -100,6 +100,6 @@ END;
 $$;
 
 CREATE TRIGGER "trg_JournalEntry_ApprovalIntegrity"
-AFTER INSERT OR UPDATE ON __mj_BizAppsAccounting."JournalEntry"
+AFTER INSERT OR UPDATE ON "__mj_BizAppsAccounting"."JournalEntry"
 FOR EACH ROW
-EXECUTE FUNCTION __mj_BizAppsAccounting."fn_trg_JournalEntry_ApprovalIntegrity"();
+EXECUTE FUNCTION "__mj_BizAppsAccounting"."fn_trg_JournalEntry_ApprovalIntegrity"();

@@ -9,20 +9,12 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Schema
 --
--- The schema name is emitted UNQUOTED, so PostgreSQL folds it to lowercase. That is deliberate and
--- self-consistent: everything downstream in a converted migration refers to it unquoted too, so
--- both definition and lookup land on the same folded name.
---
--- DOWNSTREAM NOTE for the build engineer: a PostgreSQL database that was populated by an EARLIER
--- converter — one that emitted a quoted, case-preserved name — already holds that mixed-case
--- schema: for a target named MySchema_Name, the quoted "MySchema_Name". Re-converting against
--- that database creates a SECOND, empty schema myschema_name rather than reusing the existing
--- one, because IF NOT EXISTS compares the folded name and finds no match. The repo's own committed
--- migrations-pg files are unaffected (the only quoted CREATE SCHEMAs there are the four pg_dump
--- baselines, which this path does not produce), so this is an open-app / downstream concern, not
--- one for this repo's Flyway history.
-CREATE SCHEMA IF NOT EXISTS __mj_BizAppsAccounting;
-SET search_path TO __mj_BizAppsAccounting, public;
+-- The schema name is quoted so it keeps its case. `mj migrate --schema` (Skyway) and the Open App
+-- installer create the schema quoted, and MJ quotes it in runtime SQL. Unquoted, PostgreSQL folds it
+-- to __mj_bizappsaccounting, a different and empty schema. The converter emits it unquoted, so the
+-- quotes are added after conversion (see migrations-pg/README.md).
+CREATE SCHEMA IF NOT EXISTS "__mj_BizAppsAccounting";
+SET search_path TO "__mj_BizAppsAccounting", public;
 
 -- Ensure backslashes in string literals are treated literally (not as escape sequences)
 SET standard_conforming_strings = on;
@@ -42,7 +34,7 @@ SET standard_conforming_strings = on;
 -- 2. One batch per approval Task
 -- -----------------------------------------------------------------------------
 CREATE UNIQUE  INDEX IF NOT EXISTS UQ_JournalEntryBatch_ApprovalTaskID
-    ON __mj_BizAppsAccounting."JournalEntryBatch" ("ApprovalTaskID")
+    ON "__mj_BizAppsAccounting"."JournalEntryBatch" ("ApprovalTaskID")
     WHERE "ApprovalTaskID" IS NOT NULL;
 
 

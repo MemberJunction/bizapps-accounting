@@ -6,6 +6,7 @@ import { Metadata, CompositeKey } from '@memberjunction/core';
 import { ResourceData } from '@memberjunction/core-entities';
 import { mjBizAppsAccountingGLAccountEntity } from '@mj-biz-apps/accounting-entities';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import { SaveErrorMessage } from '../shared/save-error-message';
 
 const GL_ACCOUNT_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 
@@ -400,7 +401,8 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
       this.savedModel = { ...this.Model };
       this.DialogMode = 'view';
     } catch (e) {
-      this.DialogError = e instanceof Error ? e.message : String(e);
+      // The save's CompleteMessage arrives here as the thrown message; it can hold database text (#383).
+      this.DialogError = SaveErrorMessage(e instanceof Error ? e.message : String(e), 'The account was not saved. Try again; if it keeps failing, ask an administrator.');
     } finally {
       this.Saving = false;
       this.cdr.markForCheck();

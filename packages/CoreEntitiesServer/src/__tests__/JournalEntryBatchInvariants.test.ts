@@ -51,6 +51,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       'CancelReason', 'CancelledAt', 'CancelledByUserID', 'ApprovedContentHash',
       'ERPNotPostedConfirmedAt', 'ERPNotPostedConfirmedByUserID', 'ERPNotPostedBasis',
       'SentAt', 'SentByUserID', 'SendAttemptCount', 'ErrorMessage', 'ApprovalTaskID', 'ApprovalTaskRaisedAt',
+      'ExternalJournalEntryBatchRef',
     ]);
     Metadata.Provider = {
       Entities: [batchInfo],
@@ -386,6 +387,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       isRejected: vi.fn(async () => true),
       assertMayCancelPending: vi.fn(async () => undefined),
       assertMayCancelApproved: vi.fn(async () => undefined),
+      assertMayArchive: vi.fn(async () => undefined),
       recordCancellation: vi.fn(async () => undefined),
       recordArchive: vi.fn(async () => undefined),
     } satisfies JournalEntryBatchCancelGate;
@@ -398,6 +400,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     beforeEach(() => {
       cancelGate.recordCancellation.mockReset().mockResolvedValue(undefined);
       cancelGate.recordArchive.mockReset().mockResolvedValue(undefined);
+      cancelGate.assertMayArchive.mockReset().mockResolvedValue(undefined);
       transaction = [];
       save = vi.spyOn(BaseEntity.prototype, 'Save').mockResolvedValue(true);
       teardown = vi.fn<JournalEntryBatchEntityServer['ReleaseMembersAndDeleteSummary']>().mockResolvedValue(undefined);
@@ -441,6 +444,14 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       asSaved('Sent');
       await expect(batch.Archive('too late', USER)).rejects.toThrow(/is Sent/);
       expect(teardown).not.toHaveBeenCalled();
+    });
+
+    it('Archive() refuses a Failed batch the ERP accepted, pointing to Retry (#413)', async () => {
+      asSaved('Failed', { ExternalJournalEntryBatchRef: 'G00042' });
+      await expect(batch.Archive('the ERP has it', USER)).rejects.toThrow(/the ERP accepted batch .* as G00042.*Retry it from Dispatch status/);
+      expect(save).not.toHaveBeenCalled();
+      expect(transaction).toEqual([]);
+      expect(batch.Status).toBe('Failed');
     });
 
     it('Archive() refuses a blank reason', async () => {
@@ -593,16 +604,173 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       expect(teardown).not.toHaveBeenCalled();
     });
 
-    it('the → Archived transition auto-stamps ArchivedAt / ArchivedByUserID from the context user', async () => {
-      batch.ContextCurrentUser = { ID: 'U-ARCHIVER' } as never;
-      asSaved('Pending');
-      batch.SetMany({ ArchiveReason: 'Duplicate of JEB-000004' }, true);
-      batch.Status = 'Archived';
-      await batch.Save();
+    it('Archive() stamps ArchivedAt / ArchivedByUserID from the user it acts as (#451)', async () => {
+      asSaved('Pending', { SummaryJournalEntryID: 'SUM1' });
+      await batch.Archive('Duplicate of JEB-000004', USER);
 
-      expect(batch.ArchivedByUserID).toBe('U-ARCHIVER');
+      expect(batch.ArchivedByUserID).toBe('U-CANCELLER');
       expect(batch.ArchivedAt).toBeInstanceOf(Date);
     });
+
+    // ─── who may archive (#448) ───────────────────────────────────────────────
+
+    it('Archive() asks the gate who may archive before writing anything', async () => {
+      asSaved('Approved', { SummaryJournalEntryID: 'SUM1' });
+      await batch.Archive('Posted in the legacy system', USER);
+      expect(cancelGate.assertMayArchive).toHaveBeenCalledWith('B1', USER);
+    });
+
+    it('Archive() writes nothing when the gate refuses the user', async () => {
+      cancelGate.assertMayArchive.mockRejectedValue(new Error('may archive it before approval'));
+      asSaved('Pending', { SummaryJournalEntryID: 'SUM1' });
+
+      await expect(batch.Archive('Posted in the legacy system', USER)).rejects.toThrow('may archive it before approval');
+      expect(transaction).toEqual([]);
+      expect(save).not.toHaveBeenCalled();
+      expect(batch.Status).toBe('Pending');
+    });
+
+    // The state checks name the ERP's reference, so an unauthorized caller must be refused first.
+    it('Archive() refuses an unauthorized user before saying the ERP accepted the batch', async () => {
+      cancelGate.assertMayArchive.mockRejectedValue(new Error('may archive it before approval'));
+      asSaved('Failed', { ExternalJournalEntryBatchRef: 'G00042' });
+
+      const refusal = batch.Archive('the ERP has it', USER);
+
+      await expect(refusal).rejects.toThrow('may archive it before approval');
+      await expect(refusal).rejects.not.toThrow(/G00042/);
+    });
+  });
+
+  // ─── only the verbs approve and archive (#447, #448) ──────────────────────
+
+  it('a plain save of Pending → Approved is refused, even carrying the audit pair (#447)', () => {
+    asSaved('Pending');
+    batch.SetMany({ ApprovedAt: new Date(), ApprovedByUserID: 'U-SOMEONE' }, true);
+    batch.Status = 'Approved';
+    const result = batch.Validate();
+    expect(result.Success).toBe(false);
+    expect(result.Errors.some(e => getErrorText(e).includes('approved only through the approval decision'))).toBe(true);
+  });
+
+  it.each(['Pending', 'Approved', 'Failed'])('a plain save of %s → Archived is refused — only Archive() takes that edge', (from) => {
+    asSaved(from);
+    batch.SetMany(archiveAudit, true);
+    batch.Status = 'Archived';
+    const result = batch.Validate();
+    expect(result.Success).toBe(false);
+    expect(result.Errors.some(e => getErrorText(e).includes('archived only through Archive'))).toBe(true);
+  });
+
+  describe('Approve() is the one way to Approved (#447)', () => {
+    let save: ReturnType<typeof vi.spyOn>;
+    const approver = { ID: 'U-APPROVER' } as UserInfo;
+
+    beforeEach(() => {
+      save = vi.spyOn(BaseEntity.prototype, 'Save').mockImplementation(function (this: BaseEntity) {
+        return Promise.resolve(this.Validate().Success);
+      });
+    });
+
+    afterEach(() => save.mockRestore());
+
+    it('approves a Pending batch and records the user it acts as', async () => {
+      asSaved('Pending');
+      batch.ContextCurrentUser = approver;
+      expect(await batch.Approve(approver)).toBe(true);
+      expect(batch.Status).toBe('Approved');
+      expect(batch.ApprovedByUserID).toBe('U-APPROVER');
+      expect(batch.ApprovedAt).toBeInstanceOf(Date);
+    });
+
+    it('records the user it acts as over an approver someone set on the instance', async () => {
+      asSaved('Pending');
+      batch.ApprovedByUserID = 'U-CHOSEN-BY-CALLER';
+      await batch.Approve(approver);
+      expect(batch.ApprovedByUserID).toBe('U-APPROVER');
+    });
+
+    it('refuses to record a user other than the one signed in (golive #320 §3)', async () => {
+      asSaved('Pending');
+      batch.ContextCurrentUser = { ID: 'U-SIGNED-IN' } as UserInfo;
+      expect(await batch.Approve(approver)).toBe(false);
+    });
+
+    it('lowers its flag once the save returns, so a later plain save is refused again', async () => {
+      asSaved('Pending');
+      await batch.Approve(approver);
+      asSaved('Pending');
+      batch.SetMany({ ApprovedAt: new Date(), ApprovedByUserID: 'U-APPROVER' }, true);
+      batch.Status = 'Approved';
+      expect(batch.Validate().Success).toBe(false);
+    });
+
+    it.each(['Approved', 'Failed', 'Cancelled'])('refuses a %s batch', async (from) => {
+      asSaved(from);
+      await expect(batch.Approve(approver)).rejects.toThrow(/only a Pending batch can be approved/);
+      expect(save).not.toHaveBeenCalled();
+    });
+
+    it('refuses without a context user — the approval is recorded as someone', async () => {
+      asSaved('Pending');
+      await expect(batch.Approve()).rejects.toThrow(/context user is required/);
+      expect(save).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── the audit fields are the server's (#451) ─────────────────────────────
+
+  describe('a plain save cannot set the audit fields (#451)', () => {
+    const BUILDER = 'b0b1b2b3-0000-4000-8000-00000000b17d';
+    const builtAt = new Date('2026-10-01T15:00:00Z');
+    const auditErrors = (r: { Errors: unknown[] }) => r.Errors.filter(e => getErrorText(e).includes('cannot be set directly'));
+    /** A loaded Pending batch: built, and every other audit field loaded empty, as a real Load leaves it. */
+    const loadedPending = () => asSaved('Pending', {
+      BatchedAt: builtAt, BatchedByUserID: BUILDER, ApprovedAt: null, ApprovedByUserID: null, ArchivedAt: null, ArchivedByUserID: null,
+      CancelledAt: null, CancelledByUserID: null, SentAt: null, SentByUserID: null, ERPNotPostedConfirmedAt: null, ERPNotPostedConfirmedByUserID: null,
+    });
+
+    it.each([
+      ['BatchedByUserID', 'a1a1a1a1-0000-4000-8000-0000000000a1'],
+      ['BatchedAt', new Date('2026-10-02T15:00:00Z')],
+      ['ApprovedByUserID', 'a1a1a1a1-0000-4000-8000-0000000000a1'],
+      ['CancelledByUserID', 'a1a1a1a1-0000-4000-8000-0000000000a1'],
+      ['ArchivedAt', new Date()],
+      ['SentByUserID', 'a1a1a1a1-0000-4000-8000-0000000000a1'],
+      ['ERPNotPostedConfirmedByUserID', 'a1a1a1a1-0000-4000-8000-0000000000a1'],
+    ])('refuses a change to %s on a saved batch', (field, value) => {
+      loadedPending();
+      batch.Set(field, value);
+      const errors = auditErrors(batch.Validate());
+      expect(errors.length).toBe(1);
+      expect(getErrorText(errors[0])).toContain(field);
+    });
+
+    it('treats the same values in another form as unchanged: an ID in other letter case, an instant as a string', () => {
+      loadedPending();
+      batch.Set('BatchedByUserID', BUILDER.toUpperCase());
+      batch.Set('BatchedAt', builtAt.toISOString());
+      expect(auditErrors(batch.Validate())).toEqual([]);
+    });
+
+    it('lets a new batch carry them — the build stamps who built it', () => {
+      batch.SetMany({ Status: 'Pending', BatchedAt: builtAt, BatchedByUserID: BUILDER });
+      expect(auditErrors(batch.Validate())).toEqual([]);
+    });
+  });
+
+  it('CancelAfterTeardown() stamps CancelledAt / CancelledByUserID from the context user', async () => {
+    const save = vi.spyOn(BaseEntity.prototype, 'Save').mockResolvedValue(true);
+    try {
+      batch.ContextCurrentUser = { ID: 'U-REGENERATOR' } as never;
+      asSaved('Pending', { SummaryJournalEntryID: null });
+      await batch.CancelAfterTeardown();
+      expect(batch.Status).toBe('Cancelled');
+      expect(batch.CancelledByUserID).toBe('U-REGENERATOR');
+      expect(batch.CancelledAt).toBeInstanceOf(Date);
+    } finally {
+      save.mockRestore();
+    }
   });
 
   // ─── the send audit (#184) ────────────────────────────────────────────────

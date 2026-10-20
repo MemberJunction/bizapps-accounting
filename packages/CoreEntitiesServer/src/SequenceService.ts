@@ -24,11 +24,10 @@ import { DatabasePlatform, DatabaseProviderBase, IMetadataProvider, UserInfo } f
 const ACCOUNTING_SCHEMA = '__mj_BizAppsAccounting';
 
 /**
- * PostgreSQL folds the migrations' unquoted schema to lowercase, while the function names are
- * created quoted. The provider auto-quotes mixed-case identifiers, so the schema is written in
- * lowercase and the function name quoted, or the call names a schema or function that does not exist.
+ * The migrations-pg files create the schema and the functions quoted, so both keep their case
+ * (migrations-pg/README.md). Unquoted, PostgreSQL would fold the schema to a different, empty one.
  */
-const ACCOUNTING_SCHEMA_PG = '__mj_bizappsaccounting';
+const ACCOUNTING_SCHEMA_PG = `"${ACCOUNTING_SCHEMA}"`;
 
 /** The SQL that returns the next number in one column, per platform. */
 type NumberingSQL = Record<DatabasePlatform, string>;

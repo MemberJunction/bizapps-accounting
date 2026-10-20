@@ -9,20 +9,12 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Schema
 --
--- The schema name is emitted UNQUOTED, so PostgreSQL folds it to lowercase. That is deliberate and
--- self-consistent: everything downstream in a converted migration refers to it unquoted too, so
--- both definition and lookup land on the same folded name.
---
--- DOWNSTREAM NOTE for the build engineer: a PostgreSQL database that was populated by an EARLIER
--- converter — one that emitted a quoted, case-preserved name — already holds that mixed-case
--- schema: for a target named MySchema_Name, the quoted "MySchema_Name". Re-converting against
--- that database creates a SECOND, empty schema myschema_name rather than reusing the existing
--- one, because IF NOT EXISTS compares the folded name and finds no match. The repo's own committed
--- migrations-pg files are unaffected (the only quoted CREATE SCHEMAs there are the four pg_dump
--- baselines, which this path does not produce), so this is an open-app / downstream concern, not
--- one for this repo's Flyway history.
-CREATE SCHEMA IF NOT EXISTS __mj_BizAppsAccounting;
-SET search_path TO __mj_BizAppsAccounting, public;
+-- The schema name is quoted so it keeps its case. `mj migrate --schema` (Skyway) and the Open App
+-- installer create the schema quoted, and MJ quotes it in runtime SQL. Unquoted, PostgreSQL folds it
+-- to __mj_bizappsaccounting, a different and empty schema. The converter emits it unquoted, so the
+-- quotes are added after conversion (see migrations-pg/README.md).
+CREATE SCHEMA IF NOT EXISTS "__mj_BizAppsAccounting";
+SET search_path TO "__mj_BizAppsAccounting", public;
 
 -- Ensure backslashes in string literals are treated literally (not as escape sequences)
 SET standard_conforming_strings = on;
@@ -68,23 +60,23 @@ SET standard_conforming_strings = on;
 -- that has the prior migrations.
 -- =============================================================================
 
-ALTER TABLE __mj_BizAppsAccounting."AccountingCompanyProfile"
+ALTER TABLE "__mj_BizAppsAccounting"."AccountingCompanyProfile"
  ADD COLUMN IF NOT EXISTS "BooksClosedThroughDate" DATE NULL;
 
-CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_FunctionalCu_98e9c0ae" ON __mj_BizAppsAccounting."AccountingCompanyProfile" ("FunctionalCurrencyCode");
+CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_FunctionalCu_98e9c0ae" ON "__mj_BizAppsAccounting"."AccountingCompanyProfile" ("FunctionalCurrencyCode");
 
-CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ReportingCurrencyCode" ON __mj_BizAppsAccounting."AccountingCompanyProfile" ("ReportingCurrencyCode");
+CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ReportingCurrencyCode" ON "__mj_BizAppsAccounting"."AccountingCompanyProfile" ("ReportingCurrencyCode");
 
-CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ParentAccoun_010bb056" ON __mj_BizAppsAccounting."AccountingCompanyProfile" ("ParentAccountingCompanyID");
+CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ParentAccoun_010bb056" ON "__mj_BizAppsAccounting"."AccountingCompanyProfile" ("ParentAccountingCompanyID");
 
-CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ApprovalCFOUserID" ON __mj_BizAppsAccounting."AccountingCompanyProfile" ("ApprovalCFOUserID");
+CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ApprovalCFOUserID" ON "__mj_BizAppsAccounting"."AccountingCompanyProfile" ("ApprovalCFOUserID");
 
-CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ManualJourna_ac02941c" ON __mj_BizAppsAccounting."AccountingCompanyProfile" ("ManualJournalEntryApproverRoleID");
+CREATE INDEX IF NOT EXISTS "IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ManualJourna_ac02941c" ON "__mj_BizAppsAccounting"."AccountingCompanyProfile" ("ManualJournalEntryApproverRoleID");
 
 
 -- ===================== Helper Functions (fn*) =====================
 
-CREATE FUNCTION __mj_BizAppsAccounting."fnAccountingCompanyProfileParentAccountingCompanyID_GetHierarchyMeta"
+CREATE FUNCTION "__mj_BizAppsAccounting"."fnAccountingCompanyProfileParentAccountingCompanyID_GetHierarchyMeta"
 (
     p_RecordID UUID,
     p_ParentID UUID
@@ -100,7 +92,7 @@ RETURN
             0 AS "Depth",
             CAST('/' || CAST("ID" AS VARCHAR(36)) || '/' AS TEXT) AS "Path"
         FROM
-            __mj_BizAppsAccounting."AccountingCompanyProfile"
+            "__mj_BizAppsAccounting"."AccountingCompanyProfile"
         WHERE
             "ID" = p_RecordID
 
@@ -112,7 +104,7 @@ RETURN
             c."Depth" + 1 AS "Depth",
             CAST('/' || CAST(p."ID" AS VARCHAR(36)) || c."Path" AS TEXT) AS "Path"
         FROM
-            __mj_BizAppsAccounting."AccountingCompanyProfile" p
+            "__mj_BizAppsAccounting"."AccountingCompanyProfile" p
         INNER JOIN
             CTE_Ancestors c ON p."ID" = c."ParentAccountingCompanyID"
         WHERE
@@ -122,8 +114,8 @@ RETURN
         (SELECT MAX("Depth") FROM CTE_Ancestors) AS "Depth",
         (SELECT "Path" FROM CTE_Ancestors ORDER BY "Depth" DESC
 LIMIT 1) AS "Path",
-        CAST(CASE WHEN EXISTS (SELECT 1 FROM __mj_BizAppsAccounting."AccountingCompanyProfile" WHERE "ParentAccountingCompanyID" = p_RecordID) THEN 0 ELSE 1 END AS BOOLEAN) AS "IsLeaf",
-        (SELECT COUNT(1) FROM __mj_BizAppsAccounting."AccountingCompanyProfile" WHERE "ParentAccountingCompanyID" = p_RecordID) AS "ChildCount"
+        CAST(CASE WHEN EXISTS (SELECT 1 FROM "__mj_BizAppsAccounting"."AccountingCompanyProfile" WHERE "ParentAccountingCompanyID" = p_RecordID) THEN 0 ELSE 1 END AS BOOLEAN) AS "IsLeaf",
+        (SELECT COUNT(1) FROM "__mj_BizAppsAccounting"."AccountingCompanyProfile" WHERE "ParentAccountingCompanyID" = p_RecordID) AS "ChildCount"
     FROM
         CTE_Ancestors a
     WHERE
@@ -133,7 +125,7 @@ LIMIT 1) AS "Path",
 
 LIMIT 1);
 
-CREATE FUNCTION __mj_BizAppsAccounting."fnAccountingCompanyProfileParentAccountingCompanyID_GetDescendants"
+CREATE FUNCTION "__mj_BizAppsAccounting"."fnAccountingCompanyProfileParentAccountingCompanyID_GetDescendants"
 (
     p_RootID UUID,
     p_MaxDepth INTEGER = NULL
@@ -149,7 +141,7 @@ RETURN
             0 AS "RelativeDepth",
             CAST('/' || CAST("ID" AS VARCHAR(36)) || '/' AS TEXT) AS "Path"
         FROM
-            __mj_BizAppsAccounting."AccountingCompanyProfile"
+            "__mj_BizAppsAccounting"."AccountingCompanyProfile"
         WHERE
             "ID" = p_RootID
 
@@ -161,7 +153,7 @@ RETURN
             p."RelativeDepth" || 1 AS "RelativeDepth",
             CAST(p."Path" || CAST(c."ID" AS VARCHAR(36)) || '/' AS TEXT) AS "Path"
         FROM
-            __mj_BizAppsAccounting."AccountingCompanyProfile" c
+            "__mj_BizAppsAccounting"."AccountingCompanyProfile" c
         INNER JOIN
             CTE_Descendants p ON c."ParentAccountingCompanyID" = p."ID"
         WHERE
@@ -172,13 +164,13 @@ RETURN
         d."ID" AS "ID",
         d."RelativeDepth" AS "Depth",
         d."Path",
-        CAST(CASE WHEN EXISTS (SELECT 1 FROM __mj_BizAppsAccounting."AccountingCompanyProfile" WHERE "ParentAccountingCompanyID" = d."ID") THEN 0 ELSE 1 END AS BOOLEAN) AS "IsLeaf",
-        (SELECT COUNT(1) FROM __mj_BizAppsAccounting."AccountingCompanyProfile" WHERE "ParentAccountingCompanyID" = d."ID") AS "ChildCount"
+        CAST(CASE WHEN EXISTS (SELECT 1 FROM "__mj_BizAppsAccounting"."AccountingCompanyProfile" WHERE "ParentAccountingCompanyID" = d."ID") THEN 0 ELSE 1 END AS BOOLEAN) AS "IsLeaf",
+        (SELECT COUNT(1) FROM "__mj_BizAppsAccounting"."AccountingCompanyProfile" WHERE "ParentAccountingCompanyID" = d."ID") AS "ChildCount"
     FROM
         CTE_Descendants d
 );
 
-CREATE FUNCTION __mj_BizAppsAccounting."fnAccountingCompanyProfileParentAccountingCompanyID_GetAncestors"
+CREATE FUNCTION "__mj_BizAppsAccounting"."fnAccountingCompanyProfileParentAccountingCompanyID_GetAncestors"
 (
     p_RecordID UUID
 )
@@ -193,7 +185,7 @@ RETURN
             0 AS "LevelUp",
             CAST('/' || CAST("ID" AS VARCHAR(36)) || '/' AS TEXT) AS "Path"
         FROM
-            __mj_BizAppsAccounting."AccountingCompanyProfile"
+            "__mj_BizAppsAccounting"."AccountingCompanyProfile"
         WHERE
             "ID" = p_RecordID
 
@@ -205,7 +197,7 @@ RETURN
             c."LevelUp" + 1 AS "LevelUp",
             CAST('/' || CAST(p."ID" AS VARCHAR(36)) || c."Path" AS TEXT) AS "Path"
         FROM
-            __mj_BizAppsAccounting."AccountingCompanyProfile" p
+            "__mj_BizAppsAccounting"."AccountingCompanyProfile" p
         INNER JOIN
             CTE_Ancestors c ON p."ID" = c."ParentAccountingCompanyID"
         WHERE
@@ -219,7 +211,7 @@ RETURN
         CTE_Ancestors a
 );
 
-CREATE FUNCTION __mj_BizAppsAccounting."fnAccountingCompanyProfileParentAccountingCompanyID_GetRootID"
+CREATE FUNCTION "__mj_BizAppsAccounting"."fnAccountingCompanyProfileParentAccountingCompanyID_GetRootID"
 (
     p_RecordID UUID,
     p_ParentID UUID
@@ -235,7 +227,7 @@ RETURN
             "ID" AS "RootParentID",
             0 AS "Depth"
         FROM
-            __mj_BizAppsAccounting."AccountingCompanyProfile"
+            "__mj_BizAppsAccounting"."AccountingCompanyProfile"
         WHERE
             "ID" = COALESCE(p_ParentID, p_RecordID)
 
@@ -247,7 +239,7 @@ RETURN
             c."ID" AS "RootParentID",
             p."Depth" + 1 AS "Depth"
         FROM
-            __mj_BizAppsAccounting."AccountingCompanyProfile" c
+            "__mj_BizAppsAccounting"."AccountingCompanyProfile" c
         INNER JOIN
             CTE_RootParent p ON c."ID" = p."ParentAccountingCompanyID"
         WHERE
@@ -270,7 +262,7 @@ DO $do$
 DECLARE
   v_target_schema CONSTANT TEXT := '__mj_BizAppsAccounting';
   v_target_name CONSTANT TEXT := 'vwAccountingCompanyProfiles';
-  vsql CONSTANT TEXT := $vsql$CREATE OR REPLACE VIEW __mj_BizAppsAccounting."vwAccountingCompanyProfiles"
+  vsql CONSTANT TEXT := $vsql$CREATE OR REPLACE VIEW "__mj_BizAppsAccounting"."vwAccountingCompanyProfiles"
 AS SELECT
     a.*,
     ${mjSchema}_isa_p1."Name",
@@ -290,17 +282,17 @@ AS SELECT
     "hier_ParentAccountingCompanyID"."IsLeaf" AS "ParentAccountingCompanyIDIsLeaf",
     "hier_ParentAccountingCompanyID"."ChildCount" AS "ParentAccountingCompanyIDChildCount"
 FROM
-    __mj_BizAppsAccounting."AccountingCompanyProfile" AS a
+    "__mj_BizAppsAccounting"."AccountingCompanyProfile" AS a
 INNER JOIN
     ${mjSchema}."Company" AS ${mjSchema}_isa_p1
   ON
     a."ID" = ${mjSchema}_isa_p1."ID"
 INNER JOIN
-    __mj_BizAppsAccounting."Currency" AS "mjBizAppsAccountingCurrency_FunctionalCurrencyCode"
+    "__mj_BizAppsAccounting"."Currency" AS "mjBizAppsAccountingCurrency_FunctionalCurrencyCode"
   ON
     a."FunctionalCurrencyCode" = "mjBizAppsAccountingCurrency_FunctionalCurrencyCode"."Code"
 LEFT OUTER JOIN
-    __mj_BizAppsAccounting."Currency" AS "mjBizAppsAccountingCurrency_ReportingCurrencyCode"
+    "__mj_BizAppsAccounting"."Currency" AS "mjBizAppsAccountingCurrency_ReportingCurrencyCode"
   ON
     a."ReportingCurrencyCode" = "mjBizAppsAccountingCurrency_ReportingCurrencyCode"."Code"
 LEFT OUTER JOIN
@@ -317,7 +309,7 @@ LEFT OUTER JOIN
     ${mjSchema}_rgc."EntityID" = '3E551198-AB66-478E-BEB6-C34EDBE242EC'
     AND ${mjSchema}_rgc."RecordID" = CAST(a."ID" AS VARCHAR(450))
     AND ${mjSchema}_rgc."LocationType" = 'Primary'
-LEFT JOIN LATERAL (SELECT * FROM __mj_BizAppsAccounting."fnAccountingCompanyProfileParentAccountingCompanyID_GetHierarchyMeta"(a."ID", a."ParentAccountingCompanyID")) AS "hier_ParentAccountingCompanyID"
+LEFT JOIN LATERAL (SELECT * FROM "__mj_BizAppsAccounting"."fnAccountingCompanyProfileParentAccountingCompanyID_GetHierarchyMeta"(a."ID", a."ParentAccountingCompanyID")) AS "hier_ParentAccountingCompanyID"
     ON TRUE$vsql$;
   v_target_oid OID;
   v_dep RECORD;
@@ -488,10 +480,10 @@ END $$;
 
 -- ===================== Grants =====================
 
-DO $$ BEGIN REVOKE SELECT ON __mj_BizAppsAccounting."vwAccountingCompanyProfiles" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE SELECT ON __mj_BizAppsAccounting."vwAccountingCompanyProfiles" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE SELECT ON __mj_BizAppsAccounting."vwAccountingCompanyProfiles" FROM "cdp_UI"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN GRANT SELECT ON __mj_BizAppsAccounting."vwAccountingCompanyProfiles" TO "cdp_UI", "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwAccountingCompanyProfiles" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwAccountingCompanyProfiles" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwAccountingCompanyProfiles" FROM "cdp_UI"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT SELECT ON "__mj_BizAppsAccounting"."vwAccountingCompanyProfiles" TO "cdp_UI", "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
 /* Base View Permissions SQL for MJ_BizApps_Accounting: Accounting Company Profiles */
 -----------------------------------------------------------------
 -- SQL Code Generation
@@ -502,10 +494,10 @@ DO $$ BEGIN GRANT SELECT ON __mj_BizAppsAccounting."vwAccountingCompanyProfiles"
 -- This file should NOT be edited by hand.
 -----------------------------------------------------------------;
 
-DO $$ BEGIN REVOKE SELECT ON __mj_BizAppsAccounting."vwAccountingCompanyProfiles" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE SELECT ON __mj_BizAppsAccounting."vwAccountingCompanyProfiles" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE SELECT ON __mj_BizAppsAccounting."vwAccountingCompanyProfiles" FROM "cdp_UI"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN GRANT SELECT ON __mj_BizAppsAccounting."vwAccountingCompanyProfiles" TO "cdp_UI", "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwAccountingCompanyProfiles" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwAccountingCompanyProfiles" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwAccountingCompanyProfiles" FROM "cdp_UI"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT SELECT ON "__mj_BizAppsAccounting"."vwAccountingCompanyProfiles" TO "cdp_UI", "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
 /* spCreate SQL for MJ_BizApps_Accounting: Accounting Company Profiles */
 -----------------------------------------------------------------
 -- SQL Code Generation
@@ -520,14 +512,14 @@ DO $$ BEGIN GRANT SELECT ON __mj_BizAppsAccounting."vwAccountingCompanyProfiles"
 ----- CREATE PROCEDURE FOR AccountingCompanyProfile
 ------------------------------------------------------------;
 
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spCreateAccountingCompanyProfile" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spCreateAccountingCompanyProfile" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spCreateAccountingCompanyProfile" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateAccountingCompanyProfile" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateAccountingCompanyProfile" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateAccountingCompanyProfile" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
 /* spCreate Permissions for MJ_BizApps_Accounting: Accounting Company Profiles */
 
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spCreateAccountingCompanyProfile" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spCreateAccountingCompanyProfile" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spCreateAccountingCompanyProfile" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateAccountingCompanyProfile" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateAccountingCompanyProfile" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateAccountingCompanyProfile" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
 /* spUpdate SQL for MJ_BizApps_Accounting: Accounting Company Profiles */
 -----------------------------------------------------------------
 -- SQL Code Generation
@@ -542,12 +534,12 @@ DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spCreateAccounting
 ----- UPDATE PROCEDURE FOR AccountingCompanyProfile
 ------------------------------------------------------------;
 
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spUpdateAccountingCompanyProfile" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spUpdateAccountingCompanyProfile" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spUpdateAccountingCompanyProfile" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spUpdateAccountingCompanyProfile" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spUpdateAccountingCompanyProfile" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spUpdateAccountingCompanyProfile" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateAccountingCompanyProfile" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateAccountingCompanyProfile" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateAccountingCompanyProfile" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateAccountingCompanyProfile" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateAccountingCompanyProfile" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateAccountingCompanyProfile" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
 /* spDelete SQL for MJ_BizApps_Accounting: Accounting Company Profiles */
 -----------------------------------------------------------------
 -- SQL Code Generation
@@ -562,20 +554,20 @@ DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spUpdateAccounting
 ----- DELETE PROCEDURE FOR AccountingCompanyProfile
 ------------------------------------------------------------;
 
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spDeleteAccountingCompanyProfile" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spDeleteAccountingCompanyProfile" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spDeleteAccountingCompanyProfile" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteAccountingCompanyProfile" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteAccountingCompanyProfile" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteAccountingCompanyProfile" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
 /* spDelete Permissions for MJ_BizApps_Accounting: Accounting Company Profiles */
 
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spDeleteAccountingCompanyProfile" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN REVOKE EXECUTE ON FUNCTION __mj_BizAppsAccounting."spDeleteAccountingCompanyProfile" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spDeleteAccountingCompanyProfile" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteAccountingCompanyProfile" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteAccountingCompanyProfile" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteAccountingCompanyProfile" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
 /* SQL text to update existing entity fields from schema (1 scoped entities) */
 
 
 -- ===================== Comments =====================
 
-COMMENT ON COLUMN __mj_BizAppsAccounting."AccountingCompanyProfile"."BooksClosedThroughDate" IS 'The last day of the latest month finance has closed for this company. A journal entry batch, progress measurement or correction dated on or before it is in a closed month. NULL means nothing is closed. Set by finance when a close finishes; moving it back reopens a month.';
+COMMENT ON COLUMN "__mj_BizAppsAccounting"."AccountingCompanyProfile"."BooksClosedThroughDate" IS 'The last day of the latest month finance has closed for this company. A journal entry batch, progress measurement or correction dated on or before it is in a closed month. NULL means nothing is closed. Set by finance when a close finishes; moving it back reopens a month.';
 
 
 -- ===================== Other =====================

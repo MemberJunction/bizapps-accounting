@@ -18,6 +18,8 @@
  *     build the batch (golive #320 §3; a decision saved straight into the tasks app by anyone else does
  *     not count); otherwise THROW (blocks the send). Fails closed when ApprovalTaskID is empty.
  *     The Task records the batch's builder as its creator (CreatedByPersonID).
+ *     It also requires the batch's recorded approver (written only by the approval, #447), not its
+ *     builder (#446).
  *   recordDecision(batchId, outcome, decidedByPersonId, notes): record the decision on the batch's
  *     stamped approval Task via TaskOrchestrationService (#313). The shared entry point for BOTH the in-app approve
  *     control and the Tasks inbox. It refuses first, writing nothing, when the batch is no longer
@@ -32,6 +34,8 @@
  *     written to the approval Task as a comment, so the approver's record shows what became of it.
  *     The comment needs the canceller's linked Person, so the authorization refuses a cancel
  *     without one before any work starts (#212).
+ *   assertMayArchive(batchId) (#448): who may archive: before approval only the company's CFO; past
+ *     approval the CFO or the batch's approver, as for a cancel.
  *   recordArchive(batchId, archive) (golive #325): an archive is recorded on the approval Task the
  *     same way as a cancel, so archiving no longer leaves the Task open.
  *
@@ -143,7 +147,10 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
       Name: `Approve Journal Entry Batch #${batch.JournalEntryBatchNumber} (posting date ${postingDay})`,
       TypeID: typeId,
       Description: `CFO approval required to dispatch Journal Entry Batch #${batch.JournalEntryBatchNumber} to ${batch.TargetSystem}, ` +
-        `posting date ${postingDay} — the journal date ${batch.TargetSystem} receives.`,
+        `posting date ${postingDay} — the journal date ${batch.TargetSystem} receives. ` +
+        // A decision recorded on this Task alone does not move the batch (#466): only the
+        // Accounting app's decision approves or cancels it, so the approver is sent there.
+        'Approve or reject it in the Accounting app, under Batches. A decision recorded on this task does not change the batch.',
       Priority: 'High',
       CreatedByPersonID: builderPersonId,
       LinkEntityID: batchEntityId,
@@ -163,7 +170,14 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     return task.ID;
   }
 
-  /** Block the send unless the batch's Task carries a terminal Approved/ApprovedWithConditions decision. */
+  /**
+   * Block the send unless the batch was approved through the approval decision (#446).
+   *
+   * The batch's stamped approval Task must carry a terminal approval made by an allowed decider
+   * (approvalRefusal). The batch must also record an approver, which only the approval writes
+   * (JournalEntryBatchEntityServer.Approve, after recordDecision checked the approver; #447, #451),
+   * and that approver must not have built the batch.
+   */
   async assertApproved(batchId: string, contextUser: UserInfo): Promise<void> {
     // SECURITY: resolve the approval Task from the batch's STAMPED ApprovalTaskID column, not
     // from the newest Task Link. Task Links are writable through the ordinary tasks-app surface,
@@ -181,6 +195,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     }
     const refusal = await this.approvalRefusal(batch, approvals, contextUser);
     if (refusal) throw new Error(`Batch ${batch.JournalEntryBatchNumber ?? batchId} cannot be sent: ${refusal}`);
+    this.assertRecordedApprover(batch);
   }
 
   /**
@@ -227,6 +242,22 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     }
     return `its approval task has an Approved decision, but not one made by the company's configured approver ` +
       `(the Approval CFO on its Accounting Company Profile, user ${cfoUserId}). A decision recorded by anyone else does not count.`;
+  }
+
+  /**
+   * Throws when the batch records no approver, or records its builder (#446, #447). Only the approval
+   * writes ApprovedByUserID, so a batch without one was not approved through the approval decision.
+   */
+  private assertRecordedApprover(batch: mjBizAppsAccountingJournalEntryBatchEntity): void {
+    const label = batch.JournalEntryBatchNumber ?? batch.ID;
+    if (!batch.ApprovedByUserID) {
+      throw new Error(`Batch ${label} cannot be sent: it records no approver, so it was never approved through the approval decision.`);
+    }
+    if (UUIDsEqual(batch.ApprovedByUserID, batch.BatchedByUserID)) {
+      throw new Error(
+        `Batch ${label} cannot be sent: its recorded approver is the user who built it, and the user who built a batch may not approve it.`,
+      );
+    }
   }
 
   /**
@@ -347,18 +378,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
    * them back. Authorization is checked first, so a user who may not cancel learns only that.
    */
   async assertMayCancelApproved(batchId: string, contextUser: UserInfo): Promise<void> {
-    const batch = await this.loadBatch(batchId, contextUser);
-    const cfoUserId = await this.readCFOUserIdForCompany(batch.CompanyID, contextUser);
-    const allowed = [cfoUserId, batch.ApprovedByUserID].filter((id): id is string => !!id);
-    if (!allowed.some(id => UUIDsEqual(id, contextUser.ID))) {
-      throw new Error(
-        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the company's configured approver ` +
-        `(the Approval CFO on its Accounting Company Profile) or the user who approved this batch may cancel it after approval.`,
-      );
-    }
-    // Same condition recordCancellation uses (#223): the stamped ApprovalTaskID, not a Task Link.
-    if (!batch.ApprovalTaskID) return;
-    if (!(await this.resolvePersonIdForUser(contextUser))) throw this.noLinkedPersonError(batch, contextUser);
+    await this.assertMayCloseApproved(await this.loadBatch(batchId, contextUser), 'cancel', contextUser);
   }
 
   /**
@@ -370,13 +390,57 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
    * Task is record enough, and recordCancellation skips the comment it cannot sign.
    */
   async assertMayCancelPending(batchId: string, contextUser: UserInfo): Promise<void> {
+    await this.assertMayClosePending(await this.loadBatch(batchId, contextUser), 'cancel', contextUser);
+  }
+
+  /**
+   * Who may archive a batch (#448). Before approval only the company's configured CFO: an archive
+   * keeps the batch's entries out of every future batch for good, so the builder, who may cancel a
+   * Pending batch, may not archive one. Past approval the cancel's rule: the CFO or the batch's
+   * approver, who must then have a linked Person for recordArchive's comment.
+   */
+  async assertMayArchive(batchId: string, contextUser: UserInfo): Promise<void> {
     const batch = await this.loadBatch(batchId, contextUser);
+    if (batch.Status !== 'Pending') {
+      await this.assertMayCloseApproved(batch, 'archive', contextUser);
+      return;
+    }
+    const cfoUserId = await this.readCFOUserIdForCompany(batch.CompanyID, contextUser);
+    if (!cfoUserId || !UUIDsEqual(cfoUserId, contextUser.ID)) {
+      throw new Error(
+        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the company's configured approver ` +
+        `(the Approval CFO on its Accounting Company Profile) may archive it before approval; its builder may cancel it instead.`,
+      );
+    }
+  }
+
+  /** The past-approval rule behind assertMayCancelApproved and assertMayArchive. */
+  private async assertMayCloseApproved(
+    batch: mjBizAppsAccountingJournalEntryBatchEntity, action: BatchCloseAction, contextUser: UserInfo,
+  ): Promise<void> {
+    const cfoUserId = await this.readCFOUserIdForCompany(batch.CompanyID, contextUser);
+    const allowed = [cfoUserId, batch.ApprovedByUserID].filter((id): id is string => !!id);
+    if (!allowed.some(id => UUIDsEqual(id, contextUser.ID))) {
+      throw new Error(
+        `Batch ${batch.JournalEntryBatchNumber ?? batch.ID}: only the company's configured approver ` +
+        `(the Approval CFO on its Accounting Company Profile) or the user who approved this batch may ${action} it after approval.`,
+      );
+    }
+    // Same condition recordCancellation uses (#223): the stamped ApprovalTaskID, not a Task Link.
+    if (!batch.ApprovalTaskID) return;
+    if (!(await this.resolvePersonIdForUser(contextUser))) throw this.noLinkedPersonError(batch, contextUser, action);
+  }
+
+  /** The before-approval cancel rule behind assertMayCancelPending. */
+  private async assertMayClosePending(
+    batch: mjBizAppsAccountingJournalEntryBatchEntity, action: BatchCloseAction, contextUser: UserInfo,
+  ): Promise<void> {
     const cfoUserId = await this.readCFOUserIdForCompany(batch.CompanyID, contextUser);
     const allowed = [cfoUserId, batch.BatchedByUserID].filter((id): id is string => !!id);
     if (!allowed.some(id => UUIDsEqual(id, contextUser.ID))) {
       throw new Error(
-        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the company's configured approver ` +
-        `(the Approval CFO on its Accounting Company Profile) or the user who built this batch may cancel it before approval.`,
+        `Batch ${batch.JournalEntryBatchNumber ?? batch.ID}: only the company's configured approver ` +
+        `(the Approval CFO on its Accounting Company Profile) or the user who built this batch may ${action} it before approval.`,
       );
     }
   }

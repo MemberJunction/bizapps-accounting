@@ -22,5 +22,15 @@
     "primaryKey": {
       "ID": "A9EBD6CF-6EF5-4B12-A4D0-1014C4F4689A"
     }
+  },
+  {
+    "fields": {
+      "AuthorizationID": "@lookup:MJ: Authorizations.Name=MJ.BizApps.Accounting.JournalEntryBatches.Operate",
+      "RoleID": "@lookup:MJ: Roles.Name=Finance",
+      "Type": "Allow"
+    },
+    "primaryKey": {
+      "ID": "CEA898E5-DF81-413B-A46F-FAA50FCB1059"
+    }
   }
 ]

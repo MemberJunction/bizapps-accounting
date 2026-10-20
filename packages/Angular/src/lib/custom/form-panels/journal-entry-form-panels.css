@@ -74,7 +74,7 @@
 }
 
 .mja-je-hero--collapsed .mja-je-hero__title {
-    font-size: var(--mj-text-md);
+    font-size: var(--mj-text-base);
 }
 
 .mja-je-hero__meta {
@@ -132,7 +132,7 @@
 }
 
 .mja-je-stat__value {
-    font-size: var(--mj-text-md);
+    font-size: var(--mj-text-base);
     font-weight: 650;
     color: var(--mj-text-primary);
     overflow: hidden;
@@ -647,7 +647,7 @@
 
 .mja-je-tf-total {
     font-weight: var(--mj-font-bold, 700);
-    font-size: var(--mj-text-md);
+    font-size: var(--mj-text-base);
     color: var(--mj-text-primary);
 }
 

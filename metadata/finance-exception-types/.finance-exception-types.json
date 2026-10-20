@@ -152,5 +152,18 @@
     "primaryKey": {
       "ID": "A578E7B7-1790-4978-8772-79582CDB45C5"
     }
+  },
+  {
+    "fields": {
+      "Code": "SUBSCRIPTION_TERM_LENGTH",
+      "Name": "Subscription Length Other Than Its Term",
+      "Description": "A subscription order line whose stated service period gives it a length other than its subscription type's term, with what the length and the price come to at the list rate. Raised by orders at booking, in the same transaction as the confirm; it refuses nothing.",
+      "OwningApp": "orders",
+      "IsActive": true,
+      "Configuration": "{}"
+    },
+    "primaryKey": {
+      "ID": "80CE39DE-352D-4F31-BAD2-54A367DA2294"
+    }
   }
 ]

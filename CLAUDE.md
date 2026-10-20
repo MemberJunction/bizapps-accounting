@@ -358,7 +358,8 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 ### SQL Server is the source of truth; PostgreSQL is converted
 - Write all migrations as **T-SQL** in `migrations/` (`V<TS>__v<X.Y.x>__<description>.sql`).
 - The PostgreSQL counterparts in `migrations-pg/` are produced by the MJ converter (`@memberjunction/sql-converter`) via `pnpm exec mj sql-convert <file> --from tsql --to postgres --output migrations-pg/<file>.pg.sql --schema __mj_BizAppsAccounting`. PG-only patches use the `.pg-only.sql` extension.
-- **Never hand-edit `migrations-pg/*.pg.sql`** — fix the converter rule and re-convert. PG-only patches are the exception, and live next to the converted files.
+- **Never hand-edit `migrations-pg/*.pg.sql`** — fix the converter rule and re-convert. PG-only patches are the exception, and live next to the converted files. The other exception: quote the schema name (`"__mj_BizAppsAccounting"`) after converting, because the converter emits it unquoted and PostgreSQL folds that to a different, lowercase schema (`migrations-pg/README.md`, "Quote the schema name").
+- `pnpm run mj:migrate` passes no `--dir`, so `mj migrate` swaps `migrations` → `migrations-pg` when `DB_PLATFORM=postgresql` (`migrationsLocation` in `mj.config.cjs`). An explicit `--dir` turns the swap off.
 - `.github/workflows/pg-migrations.yml` validates PG parity on `workflow_dispatch` (manual trigger) rather than gating PRs, per MJ cross-repo policy.
 - The counterpart gate is `.github/scripts/check-pg-counterpart.sh`: on PRs into `next` it only warns when a new migration has no `.pg.sql`; on the release PR (`rr: pg counterparts`) it fails for any migration added since the last release that has none.
 - See `migrations-pg/README.md` for the conversion workflow and the MJ repo's `/pg-migrate` slash command for the deeper toolchain.

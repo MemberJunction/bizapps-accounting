@@ -81,10 +81,17 @@
                                                 {{ cell.TermLabel }}
                                             </span>
                                         }
-                                        @if (cell.RecognizedAmount > 0) {
-                                            <span class="mja-chip mja-chip--released"><i class="fa-solid fa-check"></i> Released</span>
-                                        } @else if (cell.Amount > 0) {
-                                            <span class="mja-chip mja-chip--scheduled">Scheduled</span>
+                                        @switch (ReleaseStateOf(cell)) {
+                                            @case ('Released') {
+                                                <span class="mja-chip mja-chip--released"><i class="fa-solid fa-check"></i> Released</span>
+                                            }
+                                            @case ('PartlyReleased') {
+                                                <span class="mja-chip mja-chip--partial"
+                                                      [title]="FormatMoney(cell.RecognizedAmount) + ' of ' + FormatMoney(cell.Amount) + ' released'">Partly released</span>
+                                            }
+                                            @case ('Scheduled') {
+                                                <span class="mja-chip mja-chip--scheduled">Scheduled</span>
+                                            }
                                         }
                                     </div>
                                 </div>

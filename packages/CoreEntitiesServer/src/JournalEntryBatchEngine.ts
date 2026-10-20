@@ -1057,6 +1057,11 @@ export interface JournalEntryBatchCancelGate {
   /** Throw unless the user may cancel a Pending batch nobody rejected: the company's CFO or the batch's builder (golive #302). */
   assertMayCancelPending(batchId: string, contextUser: UserInfo): Promise<void>;
   assertMayCancelApproved(batchId: string, contextUser: UserInfo): Promise<void>;
+  /**
+   * Throw unless the user may archive the batch (#448): before approval only the company's CFO; past
+   * approval the CFO or the batch's approver, as for a cancel.
+   */
+  assertMayArchive(batchId: string, contextUser: UserInfo): Promise<void>;
   recordCancellation(batchId: string, cancellation: RecordedCancellation, contextUser: UserInfo): Promise<void>;
   /** Record an archive on the approval Task, closing it when the batch was never approved (golive #325). */
   recordArchive(batchId: string, archive: RecordedArchive, contextUser: UserInfo): Promise<void>;
@@ -1321,14 +1326,16 @@ export async function regenerateJournalEntryBatch(
 export async function approveJournalEntryBatch(
   batchId: string, approvedByUserId: string, contextUser: UserInfo, provider: IMetadataProvider,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
+  // The batch records its approver from the context user (#447); a different ID here would be a
+  // caller choosing whose approval is recorded.
+  if (!UUIDsEqual(approvedByUserId, contextUser.ID)) {
+    throw new Error(`approveJournalEntryBatch: the approver is recorded as the context user; approvedByUserId ${approvedByUserId} is not the context user ${contextUser.ID}.`);
+  }
   const p = resolveProviders(provider);
-  const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  const batch = await p.md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, contextUser);
   if (!(await batch.Load(batchId))) throw new Error(`The batch was not approved: batch ${batchId} was not found.`);
   if (batch.Status !== 'Pending') throw new Error(`The batch was not approved: it is ${batch.Status}, and only a Pending batch can be approved.`);
-  batch.Status = 'Approved';
-  batch.ApprovedAt = new Date();
-  batch.ApprovedByUserID = approvedByUserId;
-  if (!(await batch.Save())) throw new Error(`The batch was not approved: saving the approval failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown error'}`);
+  if (!(await batch.Approve(contextUser))) throw new Error(`The batch was not approved: saving the approval failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown error'}`);
   return batch;
 }
 

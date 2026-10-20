@@ -19,7 +19,7 @@
 -- Runs after the converted V202610201050 file, once, in order.
 -- =============================================================================
 
-CREATE OR REPLACE FUNCTION __mj_BizAppsAccounting."fn_trg_JournalEntryBatch_ApprovalTaskSetOnce"()
+CREATE OR REPLACE FUNCTION "__mj_BizAppsAccounting"."fn_trg_JournalEntryBatch_ApprovalTaskSetOnce"()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
@@ -41,6 +41,6 @@ END;
 $$;
 
 CREATE TRIGGER "trg_JournalEntryBatch_ApprovalTaskSetOnce"
-AFTER UPDATE ON __mj_BizAppsAccounting."JournalEntryBatch"
+AFTER UPDATE ON "__mj_BizAppsAccounting"."JournalEntryBatch"
 FOR EACH ROW
-EXECUTE FUNCTION __mj_BizAppsAccounting."fn_trg_JournalEntryBatch_ApprovalTaskSetOnce"();
+EXECUTE FUNCTION "__mj_BizAppsAccounting"."fn_trg_JournalEntryBatch_ApprovalTaskSetOnce"();

@@ -13,6 +13,9 @@ export type DecisionBatch = Pick<mjBizAppsAccountingJournalEntryBatchEntity, 'Co
 /** The batch fields the post-approval cancel rule reads. */
 export type ApprovedCancelBatch = Pick<mjBizAppsAccountingJournalEntryBatchEntity, 'CompanyID' | 'ApprovedByUserID'>;
 
+/** The batch fields the archive rule reads. */
+export type ArchiveBatch = PendingCancelBatch & ApprovedCancelBatch;
+
 /** Each company's configured approver (`AccountingCompanyProfile.ApprovalCFOUserID`), keyed by normalized company ID. */
 export type CompanyApprovers = ReadonlyMap<string, string>;
 
@@ -71,4 +74,28 @@ export function MayDecideBatch(batch: DecisionBatch, userId: string | undefined,
  */
 export function MayCancelApprovedBatch(batch: ApprovedCancelBatch, userId: string | undefined, approvers: CompanyApprovers): boolean {
   return isOneOf(userId, [approverOf(batch.CompanyID, approvers), batch.ApprovedByUserID]);
+}
+
+/** The batch fields the ERP-accepted rule reads. */
+export type ErpAcceptedBatch = Pick<mjBizAppsAccountingJournalEntryBatchEntity, 'Status' | 'ExternalJournalEntryBatchRef'>;
+
+/**
+ * Whether a Failed batch carries the ERP's reference (#412, #413): the ERP accepted it and only
+ * recording it Posted failed. The server refuses Cancel and Archive on it, since both would leave
+ * the books disagreeing with the ERP; a retry records it Posted. Screens hide both for it.
+ */
+export function IsErpAcceptedFailedBatch(batch: ErpAcceptedBatch): boolean {
+  return batch.Status === 'Failed' && !!batch.ExternalJournalEntryBatchRef;
+}
+
+/**
+ * Whether the server would let this user archive the batch (#448): on a Pending batch only the
+ * company's approver (the builder may cancel it, not archive it); past approval the company's approver
+ * or the user who approved it. The batch-operator Authorization is checked separately. The server check
+ * stays the authority; this only decides whether the Archive button shows.
+ */
+export function MayArchiveBatch(batch: ArchiveBatch, userId: string | undefined, approvers: CompanyApprovers): boolean {
+  return batch.Status === 'Pending'
+    ? isOneOf(userId, [approverOf(batch.CompanyID, approvers)])
+    : MayCancelApprovedBatch(batch, userId, approvers);
 }

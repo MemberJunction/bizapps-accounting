@@ -21,10 +21,24 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 type BatchStatus = NonNullable<mjBizAppsAccountingJournalEntryBatchEntityType['Status']>;
 
 /**
- * The dispatch lifecycle, in journey order — chips read left-to-right as a batch's life. Typed as
- * `BatchStatus[]` so a widened CHECK constraint fails compilation instead of silently missing here.
+ * Each status's place in the dispatch lifecycle — chips read left-to-right as a batch's life. A
+ * `Record` over the union must name every member, so a status added to the CHECK constraint fails
+ * compilation here until it is placed; a plain `BatchStatus[]` accepts a subset, which is how
+ * Archived went missing from this page (#407).
  */
-const STATUSES: readonly BatchStatus[] = ['Pending', 'Approved', 'Sent', 'Posted', 'Failed', 'Cancelled'] as const;
+const JOURNEY_ORDER: Readonly<Record<BatchStatus, number>> = {
+  Pending: 0,
+  Approved: 1,
+  Sent: 2,
+  Posted: 3,
+  Failed: 4,
+  Cancelled: 5,
+  Archived: 6,
+};
+
+/** The statuses in journey order. */
+const STATUSES: readonly BatchStatus[] = (Object.keys(JOURNEY_ORDER) as BatchStatus[])
+  .sort((a, b) => JOURNEY_ORDER[a] - JOURNEY_ORDER[b]);
 
 type WindowChoice = TimeWindowId | 'custom';
 
