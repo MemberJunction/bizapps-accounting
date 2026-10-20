@@ -1231,7 +1231,7 @@ export class AccountingBatchesPageComponent implements OnInit {
             this.ActionMessageIsError = !res.Success;
             this.ActionMessage = res.Success
                 ? `Approved batch ${batch.JournalEntryBatchNumber}. It can now be dispatched to ${batch.TargetSystem}.`
-                : (res.ErrorMessage ?? 'The approval was not recorded.');
+                : (res.ErrorMessage ?? `Your approval of batch ${batch.JournalEntryBatchNumber} was not recorded. Try again.`);
             await this.LoadBatches();
         } finally {
             this.DecidingBatchID = null;
@@ -1287,7 +1287,7 @@ export class AccountingBatchesPageComponent implements OnInit {
             } else if (res.Success) {
                 this.ActionMessage = `Batch ${batch.JournalEntryBatchNumber} did not post; it is ${res.Status ?? 'unknown'}. Open the batch for the ERP's error, then retry it.`;
             } else {
-                this.ActionMessage = res.ErrorMessage ?? 'Dispatch failed.';
+                this.ActionMessage = res.ErrorMessage ?? `Batch ${batch.JournalEntryBatchNumber} was not sent to the ERP. Try again.`;
             }
             // Every outcome reloads: a server error can land after the batch has already moved.
             await this.LoadBatches();
@@ -1417,7 +1417,7 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.ActionMessageIsError = !res.Success;
         this.ActionMessage = res.Success
             ? `Rejected batch ${batch.JournalEntryBatchNumber}. It is cancelled, and its journal entries return to the next build.`
-            : (res.ErrorMessage ?? 'The rejection was not recorded.');
+            : (res.ErrorMessage ?? `Your rejection of batch ${batch.JournalEntryBatchNumber} was not recorded. Try again.`);
         return false;
     }
 
