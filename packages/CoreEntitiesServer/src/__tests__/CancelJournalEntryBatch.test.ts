@@ -108,6 +108,7 @@ type FakeGate = JournalEntryBatchCancelGate & {
   assertMayCancelPending: ReturnType<typeof vi.fn>;
   assertMayCancelApproved: ReturnType<typeof vi.fn>;
   recordCancellation: ReturnType<typeof vi.fn>;
+  recordArchive: ReturnType<typeof vi.fn>;
 };
 
 function gate(opts: { allowed: boolean; rejected?: boolean }): FakeGate {
@@ -120,6 +121,7 @@ function gate(opts: { allowed: boolean; rejected?: boolean }): FakeGate {
       if (!opts.allowed) throw new Error('only the company\'s configured approver or the user who approved this batch may cancel it');
     }),
     recordCancellation: vi.fn(async () => undefined),
+    recordArchive: vi.fn(async () => undefined),
   };
 }
 

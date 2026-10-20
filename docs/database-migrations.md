@@ -87,17 +87,14 @@ pnpm run mj:codegen      # entity metadata, base views, CRUD procs, TypeScript
 ## What must NOT happen any more
 
 **Do not edit the baseline** (`migrations/B202605281200__v0.1.x__Schema_and_Tables.sql`), above or
-below the CodeGen banner. Its generated half is still replaced wholesale by `append-codegen.sh` when
-CodeGen runs against a bare database — that is why a hand edit below the banner disappears — but the
-hand-authored half above it is now equally off limits, because it has already been applied
-everywhere.
+below the CodeGen banner. Both halves have already been applied everywhere. The banner's own comment
+still lists the old regenerate loop (`append-codegen.sh`, since removed); it stays as it is because
+the file is not edited.
 
 **Do not run `scripts/rebuild-db.sh` as part of feature work.** It stays in the repo for the one case
 it is still correct for — standing up a brand-new empty database from nothing. It is not a
-development loop. The script itself still follows the old practice (#348): its header
-describes editing the baseline in place, it trims the generated half of the baseline file in your
-working tree before applying it, and the next steps it prints end with `scripts/append-codegen.sh`,
-which rewrites that half. Do not commit the baseline changes it leaves behind.
+development loop. It applies every migration as committed, the baseline in full, and edits no file
+in the repo. CodeGen run afterwards should find nothing to change.
 
 **A migration that depends on CodeGen metadata cannot assume it exists.** Entity and field rows are
 created by CodeGen, which runs *after* migrations. A migration that reads `__mj.Entity` must skip
@@ -124,6 +121,15 @@ Two properties of that step, both of which fail silently:
 - **No gate catches a pending metadata change with no migration behind it.** CI does not look, and
   the app installs cleanly either way. A `metadata/` edit a host needs is therefore not finished when
   it merges — only when a release carries it.
+
+**`metadata/` holds only what every host should receive.** A full `mj sync push --dir metadata` on
+a database built from migrations must create nothing the release `Metadata_Sync` would not carry.
+Records that only make sense for one dataset go in `demo-data/`, which is pushed on request
+(`pnpm run demo:load`) and never ships. The predictive-scoring bench (training pipelines, models,
+the scoring record process and its binding) lives there for that reason (issue #372): the models'
+fitted statistics come from one dataset and they carry no trained artifact, and a scheduled record
+process against a model with no artifact marks every record it touches `Failed`
+(MemberJunction/MJ#4829).
 
 The practical consequence for anything an external caller depends on (a Remote Operation, an
 Application row, a seeded lookup): it does not exist for that caller until a release ships the

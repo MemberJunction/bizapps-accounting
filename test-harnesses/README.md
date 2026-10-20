@@ -91,14 +91,16 @@ MJAPI or a browser, so they run locally.
 Tiers 2, 3 (`api/`), 4 and 5 expect this repo checked out inside an mjdev (MJ Dev Manager)
 instance, at `packages/dev-apps/bizapps-accounting` under the instance's MJ worktree root; mjdev
 bugs go to `MemberJunction/MJDev`. That root holds the instance `.env` and the hoisted
-`node_modules`; `bin/mjdev` sits above it. The code depends on this layout:
+`node_modules`; `bin/mjdev` sits above it.
 
-- the `api/` harnesses run `node_modules/.bin/tsx` and
-  `packages/dev-apps/bizapps-accounting/test-harnesses/playwright/lib/batching-fixture.ts`,
-  both relative to the working directory;
-- `server/live-bootstrap.ts` reads the `.env` five directories above `server/`, and the Playwright
-  specs run `tsx` from five directories above `playwright/`;
-- `playwright/lib/env.ts` walks up from the harness to find `bin/mjdev`.
+The harnesses don't depend on the working directory. [`harness-paths.mts`](harness-paths.mts)
+resolves files in this repo from its own location and searches upward from the repo root for the
+rest, so the same command works from the repo root of a clone or inside an instance:
+
+- `.env`: the working directory's first, then the nearest one from the repo root upward (the repo's
+  own in a clone, the instance root's inside an instance);
+- `tsx`: the nearest `node_modules/.bin/tsx` above the repo;
+- the mjdev launcher: `MJDEV_BIN`, else the nearest `bin/mjdev` above the repo, else `mjdev` on `PATH`.
 
 In a plain clone the harness imports (`mssql`, `@memberjunction/sqlserver-dataprovider`,
 `@memberjunction/server-bootstrap-lite`, `@playwright/test` and others) are not root dependencies,
@@ -139,17 +141,11 @@ cd packages/Angular && pnpm run test:dom      # the component DOM suite on its o
 
 ### Tier 2: server (live DB)
 
-From the instance's MJ worktree root, where the instance `.env` is:
-
-```bash
-npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block0-runtime.ts   # likewise block1-runtime.ts, engine-runtime.ts
-```
-
 From the repo root:
 
 ```bash
-npx tsx test-harnesses/server/intercompany-runtime.ts            # reads the .env in the repo root
-npx vitest run --config test-harnesses/server/vitest.config.ts   # phase2-encapsulation.live.test.ts; reads the instance .env
+npx tsx test-harnesses/server/block0-runtime.ts                  # likewise block1-runtime.ts, engine-runtime.ts, intercompany-runtime.ts
+npx vitest run --config test-harnesses/server/vitest.config.ts   # the *.live.test.ts suites
 ```
 
 Exit code of the `tsx` scripts: `0` all passed · `1` test failures · `2` bootstrap error. Each
@@ -161,15 +157,14 @@ time against an instance DB ([`harness-notes.md`](harness-notes.md) lesson 2). P
 
 ### Tier 3: API (GraphQL to MJAPI)
 
-`api/` harnesses, from the instance's MJ worktree root with MJAPI running:
+`api/` harnesses, from the repo root with MJAPI running:
 
 ```bash
-export MJ_API_KEY=<user key>    # `mjdev key <slug>` prints one (the mj_sk_ line)
-npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/batch-ops-api.ts   # likewise engine-op-api.ts, full-flow-api.ts
+export MJ_API_KEY=<user key>    # optional: without it the harness runs `mjdev key <slug>`
+npx tsx test-harnesses/api/batch-ops-api.ts   # likewise engine-op-api.ts, full-flow-api.ts
 ```
 
-`MJ_API_URL` defaults to `http://localhost:4180`. Set `MJ_API_KEY`: without it a harness mints a
-key through an mjdev launcher path fixed in its code. Exit codes as in tier 2. Details:
+`MJ_API_URL` defaults to `http://localhost:4180`. Exit codes as in tier 2. Details:
 [`api/README.md`](api/README.md).
 
 `packages/IntegrationTests`, from the repo root with MJAPI running:

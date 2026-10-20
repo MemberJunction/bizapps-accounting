@@ -152,6 +152,11 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Roles (vwRoles.ID)
         * * Description: The role whose holders approve a manual journal entry at or below ManualJournalEntryApprovalThreshold, never the entry's creator. NULL sends every manual entry to the Approval CFO while the threshold is set.`),
+    BooksClosedThroughDate: z.date().nullable().describe(`
+        * * Field Name: BooksClosedThroughDate
+        * * Display Name: Books Closed Through Date
+        * * SQL Data Type: date
+        * * Description: The last day of the latest month finance has closed for this company. A journal entry batch, progress measurement or correction dated on or before it is in a closed month. NULL means nothing is closed. Set by finance when a close finishes; moving it back reopens a month.`),
     Name: z.string().describe(`
         * * Field Name: Name
         * * Display Name: Company Name
@@ -743,7 +748,7 @@ export const mjBizAppsAccountingFinanceExceptionSchema = z.object({
         * * Field Name: DedupeKey
         * * Display Name: Dedupe Key
         * * SQL Data Type: nvarchar(400)
-        * * Description: The detector's identity for this occurrence (e.g. the source record ID, or record ID and month). Unique per type: raising the same key again returns the existing row unchanged.`),
+        * * Description: The detector's identity for this occurrence (e.g. the source record ID, or record ID and month). Unique per type: raising the same key again returns the existing row. If that row is still Open and the repeat raise carries a different creator, its SourceCreatedByUserID, CreatorUnresolved and Summary are updated to match; nothing else changes, and Reviewed or Corrected rows are never touched.`),
     SourceCreatedByUserID: z.string().nullable().describe(`
         * * Field Name: SourceCreatedByUserID
         * * Display Name: Source Created By User ID
@@ -1076,7 +1081,7 @@ export const mjBizAppsAccountingGLAccountSchema = z.object({
         * * Display Name: Is System Seeded
         * * SQL Data Type: bit
         * * Default Value: 0
-        * * Description: TRUE if the account was created by spSeedDefaultChartOfAccounts. Lets reports distinguish platform-shipped accounts from deployment customizations.`),
+        * * Description: TRUE if the account was created by the starter-chart seed, AccountingCompanyProfileEntityServer.SeedDefaultChartOfAccounts(). Lets reports distinguish platform-shipped accounts from deployment customizations.`),
     Description: z.string().nullable().describe(`
         * * Field Name: Description
         * * Display Name: Description
@@ -1561,7 +1566,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Field Name: JournalEntryBatchNumber
         * * Display Name: Batch Number
         * * SQL Data Type: nvarchar(40)
-        * * Description: Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format 'BATCH-{CompanyCode}-{seq:000000}'.`),
+        * * Description: Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format 'BATCH-{seq:000000}': one global sequence shared by every company, with no company segment.`),
     CompanyID: z.string().describe(`
         * * Field Name: CompanyID
         * * Display Name: Company ID
@@ -1708,7 +1713,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
     CancelReason: z.string().nullable().describe(`
         * * Field Name: CancelReason
         * * Display Name: Cancel Reason
-        * * SQL Data Type: nvarchar(500)
+        * * SQL Data Type: nvarchar(1000)
         * * Description: Why this batch was cancelled. Required when an approved batch is cancelled (CK_JournalEntryBatch_CancelAudit); optional when a Pending batch is. Frozen once Cancelled.`),
     CancelledAt: z.date().nullable().describe(`
         * * Field Name: CancelledAt
@@ -2795,6 +2800,19 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     }
     set ManualJournalEntryApproverRoleID(value: string | null) {
         this.Set('ManualJournalEntryApproverRoleID', value);
+    }
+
+    /**
+    * * Field Name: BooksClosedThroughDate
+    * * Display Name: Books Closed Through Date
+    * * SQL Data Type: date
+    * * Description: The last day of the latest month finance has closed for this company. A journal entry batch, progress measurement or correction dated on or before it is in a closed month. NULL means nothing is closed. Set by finance when a close finishes; moving it back reopens a month.
+    */
+    get BooksClosedThroughDate(): Date | null {
+        return this.Get('BooksClosedThroughDate');
+    }
+    set BooksClosedThroughDate(value: Date | null) {
+        this.Set('BooksClosedThroughDate', value);
     }
 
     /**
@@ -4684,7 +4702,7 @@ export class mjBizAppsAccountingFinanceExceptionEntity extends BaseEntity<mjBizA
     * * Field Name: DedupeKey
     * * Display Name: Dedupe Key
     * * SQL Data Type: nvarchar(400)
-    * * Description: The detector's identity for this occurrence (e.g. the source record ID, or record ID and month). Unique per type: raising the same key again returns the existing row unchanged.
+    * * Description: The detector's identity for this occurrence (e.g. the source record ID, or record ID and month). Unique per type: raising the same key again returns the existing row. If that row is still Open and the repeat raise carries a different creator, its SourceCreatedByUserID, CreatorUnresolved and Summary are updated to match; nothing else changes, and Reviewed or Corrected rows are never touched.
     */
     get DedupeKey(): string {
         return this.Get('DedupeKey');
@@ -5554,7 +5572,7 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
     * * Display Name: Is System Seeded
     * * SQL Data Type: bit
     * * Default Value: 0
-    * * Description: TRUE if the account was created by spSeedDefaultChartOfAccounts. Lets reports distinguish platform-shipped accounts from deployment customizations.
+    * * Description: TRUE if the account was created by the starter-chart seed, AccountingCompanyProfileEntityServer.SeedDefaultChartOfAccounts(). Lets reports distinguish platform-shipped accounts from deployment customizations.
     */
     get IsSystemSeeded(): boolean {
         return this.Get('IsSystemSeeded');
@@ -7170,7 +7188,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     * * Field Name: JournalEntryBatchNumber
     * * Display Name: Batch Number
     * * SQL Data Type: nvarchar(40)
-    * * Description: Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format 'BATCH-{CompanyCode}-{seq:000000}'.
+    * * Description: Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format 'BATCH-{seq:000000}': one global sequence shared by every company, with no company segment.
     */
     get JournalEntryBatchNumber(): string {
         return this.Get('JournalEntryBatchNumber');
@@ -7503,7 +7521,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     /**
     * * Field Name: CancelReason
     * * Display Name: Cancel Reason
-    * * SQL Data Type: nvarchar(500)
+    * * SQL Data Type: nvarchar(1000)
     * * Description: Why this batch was cancelled. Required when an approved batch is cancelled (CK_JournalEntryBatch_CancelAudit); optional when a Pending batch is. Frozen once Cancelled.
     */
     get CancelReason(): string | null {

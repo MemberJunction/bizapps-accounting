@@ -21,7 +21,10 @@
  * CONCURRENCY. Both writes read under an update lock inside their transaction, so two callers on
  * the same row run one after the other: a second raise of an item finds the first one's row instead
  * of failing on UQ_FinanceException_Type_DedupeKey, and a second clear of a row finds it no longer
- * Open instead of overwriting the first reviewer.
+ * Open instead of overwriting the first reviewer. The lock SQL differs per platform: SQL Server
+ * takes UPDLOCK hints (HOLDLOCK adds key-range locks, so an absent key is locked too); PostgreSQL's
+ * FOR UPDATE locks only rows that exist, so a raise there first takes a transaction-scoped advisory
+ * lock per (type, DedupeKey).
  *
  * FAILURE MODEL. Logical failures come back inside the output as `Success: false` with coded
  * `Errors`; the operations never throw for them.
@@ -37,6 +40,8 @@
  * rights here govern decisions to accept or waive.
  */
 import {
+  DatabasePlatform,
+  DatabaseProviderBase,
   EntityInfo,
   IMetadataProvider,
   IRunViewProvider,
@@ -45,7 +50,6 @@ import {
 } from '@memberjunction/core';
 import { UUIDsEqual } from '@memberjunction/global';
 import { UserCache } from '@memberjunction/generic-database-provider';
-import type { SQLServerDataProvider } from '@memberjunction/sqlserver-dataprovider';
 import { FromCalendarDay, IsCalendarDay } from '@mj-biz-apps/common-entities';
 import type {
   AccountingClearFinanceExceptionInput,
@@ -120,9 +124,22 @@ function runViewProvider(provider: IMetadataProvider): IRunViewProvider {
   return provider as unknown as IRunViewProvider;
 }
 
-/** The server provider: transactions, and ExecuteSQL with named parameters (see SequenceService). */
-function database(provider: IMetadataProvider): SQLServerDataProvider {
-  return provider as unknown as SQLServerDataProvider;
+/** A parameter placeholder per platform, by 1-based position: `?` binds as @p0.. on SQL Server. */
+const PLACEHOLDER: Record<DatabasePlatform, (position: number) => string> = {
+  sqlserver: () => '?',
+  postgresql: position => `$${position}`,
+};
+
+/**
+ * The server provider: transactions, PlatformKey and ExecuteSQL with positional parameters. An
+ * unknown platform fails here, before any SQL runs, rather than sending another dialect's SQL.
+ */
+function database(provider: IMetadataProvider): DatabaseProviderBase {
+  const db = provider as unknown as DatabaseProviderBase;
+  if (!(db.PlatformKey in PLACEHOLDER)) {
+    throw new Error(`Finance exceptions have no locking SQL for database platform '${db.PlatformKey}'.`);
+  }
+  return db;
 }
 
 /**
@@ -255,41 +272,83 @@ function dedupeIdentity(typeID: string, dedupeKey: string): string {
   return `${typeID.toLowerCase()}|${dedupeKey.toLowerCase()}`;
 }
 
-function sqlNString(value: string): string {
-  return `N'${value.replace(/'/g, "''")}'`;
+/** SQL text and its positional parameters. */
+interface BoundSQL {
+  SQL: string;
+  Parameters: string[];
 }
 
-/**
- * The locking existence read for one chunk. UPDLOCK + HOLDLOCK take key-range locks on
- * UQ_FinanceException_Type_DedupeKey, found or not, until the transaction ends, so a concurrent
- * raise of the same item waits and then reads this one's row.
- */
-function existingLookupSql(chunk: ResolvedRaise[]): string {
+/** The (type, DedupeKeys) predicate for one chunk, with its parameters in placeholder order. */
+function existingPredicate(chunk: ResolvedRaise[], platform: DatabasePlatform): BoundSQL {
   const byType = new Map<string, string[]>();
   for (const r of chunk) {
     byType.set(r.Type.ID, [...(byType.get(r.Type.ID) ?? []), r.Input.DedupeKey]);
   }
-  // Type IDs come from the database and DedupeKeys are quoted string literals, so neither can
-  // change the shape of the predicate.
+  const placeholder = PLACEHOLDER[platform];
+  const Parameters: string[] = [];
+  const bind = (value: string): string => {
+    Parameters.push(value);
+    return placeholder(Parameters.length);
+  };
   const clauses = [...byType.entries()].map(
-    ([typeID, keys]) => `(FinanceExceptionTypeID = '${typeID}' AND DedupeKey IN (${keys.map(sqlNString).join(', ')}))`,
+    ([typeID, keys]) => `(FinanceExceptionTypeID = ${bind(typeID)} AND DedupeKey IN (${keys.map(bind).join(', ')}))`,
   );
-  return `SELECT ID, FinanceExceptionTypeID, DedupeKey, Status, SourceCreatedByUserID, CreatorUnresolved
-    FROM ${FINANCE_EXCEPTION_TABLE} WITH (UPDLOCK, HOLDLOCK)
-    WHERE ${clauses.join(' OR ')}`;
+  return { SQL: clauses.join(' OR '), Parameters };
+}
+
+/**
+ * The locking existence read for one chunk. On SQL Server, UPDLOCK + HOLDLOCK take key-range locks
+ * on UQ_FinanceException_Type_DedupeKey, found or not, until the transaction ends, so a concurrent
+ * raise of the same item waits and then reads this one's row. On PostgreSQL, FOR UPDATE locks the
+ * rows found; the absent keys are covered by keyLockSql, which runs first.
+ */
+function existingLookupSql(chunk: ResolvedRaise[], platform: DatabasePlatform): BoundSQL {
+  const predicate = existingPredicate(chunk, platform);
+  const columns = 'ID, FinanceExceptionTypeID, DedupeKey, Status, SourceCreatedByUserID, CreatorUnresolved';
+  const SQL =
+    platform === 'postgresql'
+      ? `SELECT ${columns} FROM ${FINANCE_EXCEPTION_TABLE} WHERE ${predicate.SQL} FOR UPDATE`
+      : `SELECT ${columns} FROM ${FINANCE_EXCEPTION_TABLE} WITH (UPDLOCK, HOLDLOCK) WHERE ${predicate.SQL}`;
+  return { SQL, Parameters: predicate.Parameters };
+}
+
+/**
+ * PostgreSQL only: a transaction-scoped advisory lock per (type, DedupeKey) in the chunk, the
+ * stand-in for HOLDLOCK's lock on an absent key. A concurrent raise of the same item waits here
+ * until this transaction ends, then finds this one's row. The key is case-folded like
+ * dedupeIdentity, and the locks are taken in key order so two overlapping raises cannot deadlock.
+ * Two different keys that hash alike only wait for each other.
+ */
+function keyLockSql(chunk: ResolvedRaise[]): BoundSQL {
+  const Parameters = [...new Set(chunk.map(r => `FinanceException|${dedupeIdentity(r.Type.ID, r.Input.DedupeKey)}`))];
+  const values = Parameters.map((_, i) => `($${i + 1}::text)`).join(', ');
+  const SQL = `SELECT pg_advisory_xact_lock(k) FROM (SELECT DISTINCT hashtextextended(v.lock_key, 0) AS k FROM (VALUES ${values}) AS v(lock_key)) AS keys ORDER BY k`;
+  return { SQL, Parameters };
+}
+
+/** Existing rows for one chunk, locked. Call inside the raise's transaction. */
+async function loadExistingChunk(chunk: ResolvedRaise[], db: DatabaseProviderBase, ledger: UserInfo): Promise<ExistingExceptionRow[]> {
+  if (db.PlatformKey === 'postgresql') {
+    const lock = keyLockSql(chunk);
+    await db.ExecuteSQL(lock.SQL, lock.Parameters, { description: 'Accounting.RaiseFinanceExceptions: lock the dedupe keys' }, ledger);
+  }
+  const lookup = existingLookupSql(chunk, db.PlatformKey);
+  const rows = await db.ExecuteSQL<ExistingExceptionRow>(
+    lookup.SQL,
+    lookup.Parameters,
+    { description: 'Accounting.RaiseFinanceExceptions: existing rows (locking read)' },
+    ledger,
+  );
+  return rows ?? [];
 }
 
 /** Existing rows for the raises, keyed by dedupeIdentity. Call inside the raise's transaction. */
 async function loadExisting(raises: ResolvedRaise[], provider: IMetadataProvider, ledger: UserInfo): Promise<Map<string, ExistingExceptionRow>> {
+  const db = database(provider);
   const existing = new Map<string, ExistingExceptionRow>();
   for (let i = 0; i < raises.length; i += EXISTING_LOOKUP_CHUNK) {
-    const rows: ExistingExceptionRow[] = await database(provider).ExecuteSQL(
-      existingLookupSql(raises.slice(i, i + EXISTING_LOOKUP_CHUNK)),
-      null,
-      { description: 'Accounting.RaiseFinanceExceptions: existing rows (locking read)' },
-      ledger,
-    );
-    for (const row of rows ?? []) existing.set(dedupeIdentity(row.FinanceExceptionTypeID, row.DedupeKey), row);
+    const rows = await loadExistingChunk(raises.slice(i, i + EXISTING_LOOKUP_CHUNK), db, ledger);
+    for (const row of rows) existing.set(dedupeIdentity(row.FinanceExceptionTypeID, row.DedupeKey), row);
   }
   return existing;
 }
@@ -508,6 +567,12 @@ export async function ClearFinanceException(
   }
 }
 
+/** The row lock a clear takes before reading the row, per platform. */
+const CLEAR_LOCK_SQL: Record<DatabasePlatform, string> = {
+  sqlserver: `SELECT ID FROM ${FINANCE_EXCEPTION_TABLE} WITH (UPDLOCK, ROWLOCK) WHERE ID = ?`,
+  postgresql: `SELECT ID FROM ${FINANCE_EXCEPTION_TABLE} WHERE ID = $1 FOR UPDATE`,
+};
+
 /**
  * Locks the row, then reads, checks and saves it. The lock makes a concurrent clear of the same
  * row wait and then see it no longer Open (NOT_OPEN), rather than both saves succeeding and the
@@ -519,12 +584,8 @@ async function clearLocked(
   reviewer: UserInfo,
 ): Promise<AccountingClearFinanceExceptionOutput> {
   const ledger = FinanceLedgerUser();
-  await database(provider).ExecuteSQL(
-    `SELECT ID FROM ${FINANCE_EXCEPTION_TABLE} WITH (UPDLOCK, ROWLOCK) WHERE ID = @ID`,
-    { ID: input.FinanceExceptionID },
-    { description: 'Accounting.ClearFinanceException: lock the row' },
-    ledger,
-  );
+  const db = database(provider);
+  await db.ExecuteSQL(CLEAR_LOCK_SQL[db.PlatformKey], [input.FinanceExceptionID], { description: 'Accounting.ClearFinanceException: lock the row' }, ledger);
   const record = await provider.GetEntityObject<FinanceExceptionEntityServer>(FINANCE_EXCEPTION_ENTITY, ledger);
   if (!(await record.Load(input.FinanceExceptionID))) {
     return { Success: false, Errors: [{ Code: 'NOT_FOUND', Message: `No finance exception has the ID ${input.FinanceExceptionID}.` }] };

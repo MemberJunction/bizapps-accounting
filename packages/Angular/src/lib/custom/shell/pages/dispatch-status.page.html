@@ -119,20 +119,22 @@
                 <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Retry dispatch
               }
             </button>
-            <button
-              type="button"
-              mjButton
-              variant="secondary"
-              size="sm"
-              [disabled]="!CanCancelBatch(b)"
-              title="Cancel this batch and return its journal entries to the next build, when its content is what needs correcting"
-              (click)="CancelBatch(b)">
-              @if (CancellingJournalEntryBatchID === b.ID) {
-                <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Cancelling…
-              } @else {
-                <i class="fa-solid fa-ban" aria-hidden="true"></i> Cancel batch
-              }
-            </button>
+            @if (MayCancelBatch(b)) {
+              <button
+                type="button"
+                mjButton
+                variant="secondary"
+                size="sm"
+                [disabled]="!CanCancelBatch(b)"
+                title="Cancel this batch and return its journal entries to the next build, when its content is what needs correcting"
+                (click)="CancelBatch(b)">
+                @if (CancellingJournalEntryBatchID === b.ID) {
+                  <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Cancelling…
+                } @else {
+                  <i class="fa-solid fa-ban" aria-hidden="true"></i> Cancel batch
+                }
+              </button>
+            }
           </div>
           <p class="ds-fail__error">{{ b.ErrorMessage || 'The ERP rejected this batch without giving a reason. Check the batch in the ERP before you retry.' }}</p>
         </article>
@@ -190,10 +192,12 @@
           <button type="button" mjButton variant="primary" size="sm" [disabled]="!CanRetry(SelectedBatch)" (click)="Retry(SelectedBatch)">
             <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Retry dispatch
           </button>
-          <button type="button" mjButton variant="secondary" size="sm" [disabled]="!CanCancelBatch(SelectedBatch)" (click)="CancelBatch(SelectedBatch)"
-            title="Cancel this batch and return its journal entries to the next build, when its content is what needs correcting">
-            <i class="fa-solid fa-ban" aria-hidden="true"></i> Cancel batch
-          </button>
+          @if (MayCancelBatch(SelectedBatch)) {
+            <button type="button" mjButton variant="secondary" size="sm" [disabled]="!CanCancelBatch(SelectedBatch)" (click)="CancelBatch(SelectedBatch)"
+              title="Cancel this batch and return its journal entries to the next build, when its content is what needs correcting">
+              <i class="fa-solid fa-ban" aria-hidden="true"></i> Cancel batch
+            </button>
+          }
         }
         @if (SelectedBatch.Status === 'Posted' && IsIncompletePosting(SelectedBatch.ID)) {
           <button type="button" mjButton variant="primary" size="sm" [disabled]="!CanResume(SelectedBatch.ID)"

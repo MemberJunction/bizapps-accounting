@@ -5,9 +5,9 @@
  * asserts each renders + its shell mounts an <mj-left-nav>, with the URL-aware keystone (fail on
  * any console.error/pageerror; static-asset 404s + the 2 known-benign patterns suppressed).
  *
- * Standalone tsx (same pattern as lib/batching-fixture.ts) — run from the INSTANCE WORKTREE ROOT
+ * Standalone tsx (same pattern as lib/batching-fixture.ts) — run from the repo root
  * with a magic-link URL:
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/playwright/shell-smoke.ts \
+ *   npx tsx test-harnesses/playwright/shell-smoke.ts \
  *     "$(~/MJDev/bin/mjdev explorer-url accounting-revamp | grep -oE 'http://[^ ]+' | tail -1)"
  * Exit: 0 all passed · 1 failures. The deeper per-page behavior specs are the *-newnav Playwright
  * specs (rides the per-category UI hardening pass).

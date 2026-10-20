@@ -9,6 +9,8 @@ import {
   mjBizAppsAccountingJournalEntryBatchEntity,
 } from '@mj-biz-apps/accounting-entities';
 import { DispatchConfirmationKind, JournalEntryBatchDispatchClient, JournalEntryBatchDecision } from './journal-entry-batch-dispatch.client';
+import { cancelReasonMaxLength } from './cancel-reason';
+import { CompanyApprovers, LoadCompanyApprovers, MayCancelApprovedBatch, MayCancelPendingBatch, MayDecideBatch } from './batch-action-permission';
 
 /** The generated batch Status union (rule 2c: derived, never hand-copied). */
 type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
@@ -27,6 +29,7 @@ type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
 type BatchRow = Pick<
   mjBizAppsAccountingJournalEntryBatchEntity,
   'ID' | 'JournalEntryBatchNumber' | 'Status' | 'TargetSystem' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'ExternalJournalEntryBatchRef' | 'ErrorMessage' | 'ArchiveReason' | 'CancelReason'
+  | 'CompanyID' | 'BatchedByUserID' | 'ApprovedByUserID'
 > & {
   /** undefined = not yet checked; null = unknown/error; true/false = gate result. */
   Approved?: boolean | null;
@@ -59,6 +62,8 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
   public IsLoading = false;
   public LoadError: string | null = null;
+  /** Each company's configured approver, read with the batches; decides who sees Approve, Reject and Cancel (#308, #339). */
+  private companyApprovers: CompanyApprovers = new Map();
 
   public Batches: BatchRow[] = [];
 
@@ -117,7 +122,9 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
    */
   public async OnRecordDecision(row: BatchRow, decision: JournalEntryBatchDecision): Promise<void> {
     if (row.Busy) return;
-    const notes = decision === 'Rejected' ? this.PromptForRejectReason(row)?.trim() : undefined;
+    const notes = decision === 'Rejected'
+      ? (this.askForCancelReason((draft, tooLong) => this.PromptForRejectReason(row, draft, tooLong)) ?? undefined)
+      : undefined;
     if (decision === 'Rejected' && !notes) return;
     row.Busy = true;
     this.clearActionMessage();
@@ -208,6 +215,10 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
    * Archive a batch that must never post to the ERP (#214): terminal, no ERP call, and the batch's
    * journal entries STAY locked — the opposite of Reject, which returns them to the candidate pool.
    * A cancelled or blank prompt aborts silently; the reason is required and is the only record of why.
+   *
+   * Every answer reloads the list, an error included: a call that timed out on the way back may
+   * still have archived the batch on the server, and the card must show that rather than invite a
+   * second attempt.
    */
   public async OnArchive(row: BatchRow): Promise<void> {
     if (row.Busy) return;
@@ -221,22 +232,42 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
       const res = await this.client().ArchiveBatch(row.ID, reason.trim());
       if (res.Success) {
         this.setActionMessage(`Archived batch ${row.JournalEntryBatchNumber} — no ERP call; its journal entries stay locked to it.`, false);
-        await this.loadBatches();
       } else {
         this.setActionMessage(res.ErrorMessage ?? `Batch ${row.JournalEntryBatchNumber} was not archived. Try again.`, true);
       }
+      await this.loadBatches();
     } finally {
       row.Busy = false;
       this.cdr.markForCheck();
     }
   }
 
-  /** The archive-reason prompt, as a seam a test can stub. Native prompt — this package has no dialog helper. */
-  /** The reject-reason prompt, as a seam a test can stub. */
-  protected PromptForRejectReason(row: BatchRow): string | null {
-    return window.prompt(`Reject batch ${row.JournalEntryBatchNumber}? It is cancelled and its journal entries return to the candidate pool for the next build.\n\nReason (required):`);
+  /** The reject-reason prompt, as a seam a test can stub. `draft` refills it; `tooLong` says why it asks again. */
+  protected PromptForRejectReason(row: BatchRow, draft = '', tooLong = ''): string | null {
+    return window.prompt(
+      `Reject batch ${row.JournalEntryBatchNumber}? It is cancelled and its journal entries return to the candidate pool for the next build.${tooLong}\n\nReason (required):`,
+      draft,
+    );
   }
 
+  /**
+   * Ask for a reason that becomes the batch's CancelReason, asking again with the text kept while it
+   * is longer than the column holds (#307). Null when the prompt is cancelled or left blank.
+   */
+  private askForCancelReason(ask: (draft: string, tooLong: string) => string | null): string | null {
+    const max = cancelReasonMaxLength(this.ProviderToUse);
+    let draft = '';
+    let tooLong = '';
+    for (;;) {
+      const reason = ask(draft, tooLong)?.trim();
+      if (!reason) return null;
+      if (reason.length <= max) return reason;
+      draft = reason;
+      tooLong = `\n\nThis reason is ${reason.length} characters; the limit is ${max}.`;
+    }
+  }
+
+  /** The archive-reason prompt, as a seam a test can stub. Native prompt — this package has no dialog helper. */
   protected PromptForReason(row: BatchRow): string | null {
     return window.prompt(`Archive batch ${row.JournalEntryBatchNumber}? It will never post to the ERP and its journal entries stay locked to it.\n\nReason (required):`);
   }
@@ -250,10 +281,14 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
    * A Failed batch may already be in the ERP, and its entries would post again under the next batch's
    * new number. The server looks the number up first (#207) and refuses outright if the ERP holds it;
    * the operator is asked only when the lookup cannot settle it, and declining leaves the batch as is.
+   *
+   * Every answer from the cancel call reloads the list, a refusal included: when the ERP turns out to
+   * have posted the batch during the cancel, the server records it Posted and refuses, and the card
+   * must not keep showing `Failed`.
    */
   public async OnCancel(row: BatchRow): Promise<void> {
     if (row.Busy) return;
-    const reason = this.PromptForCancelReason(row)?.trim();
+    const reason = this.askForCancelReason((draft, tooLong) => this.PromptForCancelReason(row, draft, tooLong));
     if (!reason) return;
 
     row.Busy = true;
@@ -270,19 +305,22 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
       }
       if (res.Success) {
         this.setActionMessage(`Cancelled batch ${row.JournalEntryBatchNumber} — its journal entries return to the next build.`, false);
-        await this.loadBatches();
       } else {
         this.setActionMessage(res.ErrorMessage ?? `Batch ${row.JournalEntryBatchNumber} was not cancelled. Try again.`, true);
       }
+      await this.loadBatches();
     } finally {
       row.Busy = false;
       this.cdr.markForCheck();
     }
   }
 
-  /** The cancel-reason prompt, as a seam a test can stub. */
-  protected PromptForCancelReason(row: BatchRow): string | null {
-    return window.prompt(`Cancel batch ${row.JournalEntryBatchNumber}? Its journal entries return to the candidate pool for the next build.\n\nReason (required):`);
+  /** The cancel-reason prompt, as a seam a test can stub. `draft` refills it; `tooLong` says why it asks again. */
+  protected PromptForCancelReason(row: BatchRow, draft = '', tooLong = ''): string | null {
+    return window.prompt(
+      `Cancel batch ${row.JournalEntryBatchNumber}? Its journal entries return to the candidate pool for the next build.${tooLong}\n\nReason (required):`,
+      draft,
+    );
   }
 
   /**
@@ -312,8 +350,13 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     return row.Status === 'Approved' && row.Approved === true && !row.Busy;
   }
 
-  /** CFO decision controls show only while the batch is still Pending. */
+  /**
+   * CFO decision controls show only while the batch is still Pending, and only to the users the server
+   * would record a decision from: the company's approver, when they did not build the batch (#339).
+   * The server check stays the authority.
+   */
   public canDecide(row: BatchRow): boolean {
+    if (!MayDecideBatch(row, this.contextUser()?.ID, this.companyApprovers)) return false;
     return row.Status === 'Pending' && row.Approved !== true && !row.Busy;
   }
 
@@ -328,14 +371,20 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
   }
 
   /**
-   * Cancel is offered on a Pending (golive #302), Approved or Failed (#183) batch; who may cancel is
-   * the server's call. On a Pending batch it is the builder's way to withdraw it, beside the CFO's
-   * Reject. Not on a Failed batch carrying the ERP's reference: the ERP accepted it, and the server
+   * Cancel is offered on a Pending (golive #302), Approved or Failed (#183) batch, and only to the
+   * users the server would let cancel it. On a Pending batch it is the builder's way to withdraw it,
+   * beside the CFO's Reject: the company's approver or the batch's builder (#308). Past approval: the
+   * company's approver or the user who approved the batch (#339). The server check stays the
+   * authority. Not on a Failed batch carrying the ERP's reference: the ERP accepted it, and the server
    * refuses it.
    */
   public canCancel(row: BatchRow): boolean {
     if (row.Status === 'Failed' && row.ExternalJournalEntryBatchRef) return false;
-    return ['Pending', 'Approved', 'Failed'].includes(row.Status) && !row.Busy;
+    if (!['Pending', 'Approved', 'Failed'].includes(row.Status) || row.Busy) return false;
+    const userId = this.contextUser()?.ID;
+    return row.Status === 'Pending'
+      ? MayCancelPendingBatch(row, userId, this.companyApprovers)
+      : MayCancelApprovedBatch(row, userId, this.companyApprovers);
   }
 
   /** Map a batch status to a stat-badge variant for the status pill. */
@@ -355,14 +404,18 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
 
   private async loadBatches(): Promise<void> {
     const rv = this.runView();
-    const res = await rv.RunView<mjBizAppsAccountingJournalEntryBatchEntity>(
-      {
-        EntityName: BATCH_ENTITY,
-        OrderBy: 'BatchedAt DESC',
-        ResultType: 'simple',
-      },
-      this.contextUser(),
-    );
+    const [res, approvers] = await Promise.all([
+      rv.RunView<mjBizAppsAccountingJournalEntryBatchEntity>(
+        {
+          EntityName: BATCH_ENTITY,
+          OrderBy: 'BatchedAt DESC',
+          ResultType: 'simple',
+        },
+        this.contextUser(),
+      ),
+      LoadCompanyApprovers(rv, this.contextUser()),
+    ]);
+    this.companyApprovers = approvers;
     if (!res.Success) {
       this.Batches = [];
       this.LoadError = res.ErrorMessage ?? 'Could not load journal entry batches. Refresh the page to try again.';
@@ -388,6 +441,9 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
       ErrorMessage: b.ErrorMessage,
       ArchiveReason: b.ArchiveReason,
       CancelReason: b.CancelReason,
+      CompanyID: b.CompanyID,
+      BatchedByUserID: b.BatchedByUserID,
+      ApprovedByUserID: b.ApprovedByUserID,
     };
   }
 

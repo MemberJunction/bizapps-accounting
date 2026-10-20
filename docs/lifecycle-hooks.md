@@ -24,7 +24,7 @@ friendly thing happen; the trigger is the floor that catches anything — even r
 
 | # | Hook | Entity | What causes it to fire | How | Status |
 |---|---|---|---|---|---|
-| **W1** | Profile init (TZ default removed, #158; COA seed = explicit only, 2026-07-30) | `AccountingCompanyProfile` | a saved profile's **`EntityType`** changes | check auto · `ValidateAsync()`; seed via explicit `SeedDefaultChartOfAccounts()` | ✅ |
+| **W1** | Profile init (TZ default removed, #158; COA seed = explicit only, 2026-07-30) | `AccountingCompanyProfile` | a saved profile's **`EntityType`** changes, or **`BooksClosedThroughDate`** changes | check auto · `ValidateAsync()`; seed via explicit `SeedDefaultChartOfAccounts()` | ✅ |
 | **W2** | JE numbering (per company, per FY) | `JournalEntry` | a **new** JE is saved with **no `EntryNumber`** | auto · `Save()` | ✅ |
 | **W3** | Batch numbering (GLOBAL) | `JournalEntryBatch` | a **new** batch is saved with **no `JournalEntryBatchNumber`** | auto · `Save()` | ✅ |
 | **W4** | Adjusting-entry routing | — | — | — | 🚫 retired 2026-07-06 (periods removed, CH-1) |
@@ -53,13 +53,18 @@ refused while the company owns an active GL account. Those types keep no books: 
 their legal entity's accounts (`AccountingEngineBase.LegalEntityFor`). `GLAccountEntityServer`
 refuses the same state from the account side: creating or reactivating an active account on such a
 company.
+**Validates (bc-aidp-next-golive#316):** setting, moving or clearing `BooksClosedThroughDate` is
+refused unless the saving user holds `MJ.BizApps.Accounting.BooksClosedThroughDate.Set` (the Finance
+role). An authorization missing from the catalog is held by nobody. Other edits are not checked.
 - *(The profile's 5 default GL-account refs were RETIRED 2026-07-23 — role/link model replaces them.)*
 - *(Period generation was REMOVED 2026-07-06 — no `AccountingPeriod` rows exist to create.)*
 
 ### W2 — JE numbering *(✅ `JournalEntryEntityServer.ts` + `SequenceService.ts`)*
 **Fires:** on a brand-new JournalEntry with no number.
 **Does:** calls the atomic sproc `spAssignNextJournalEntryNumber(@CompanyID, @FiscalYear)` (HOLDLOCK/UPDLOCK — gap-free
-under concurrency) and sets **`EntryNumber = JE-{CompanyCode}-{FY}-{seq:000000}`** before `super.Save()`. FY is the
+under concurrency) and sets **`EntryNumber = JE-{CompanyCode}-{FY}-{seq:000000}`** before `super.Save()`. On PostgreSQL it
+calls the function of the same name (row-locked `INSERT … ON CONFLICT DO UPDATE`, same format, same gap-free rule);
+`SequenceService` picks the SQL by the provider's `PlatformKey`. FY is the
 fiscal year `EffectiveDate` falls in, from the company's fiscal-year start on its profile (`FiscalYearOf`).
 **The sequence is per company, per fiscal year** (D19, BA-D31; the 2026-07-06 global sequence, D-SEQ, is retired
 for JEs).
@@ -67,7 +72,7 @@ for JEs).
 ### W3 — Batch numbering *(✅ `JournalEntryBatchEntityServer.ts` + `SequenceService.ts`)*
 **Fires:** on a brand-new batch with no number.
 **Does:** `spAssignNextJournalEntryBatchNumber()` → **`JournalEntryBatchNumber = BATCH-{seq:000000}`** — a single **GLOBAL** counter
-(D19: batch numbering stays global, though each batch belongs to one company, D7).
+(D19: batch numbering stays global, though each batch belongs to one company, D7). On PostgreSQL, the function of the same name.
 
 ### W6 — Reversal generation *(✅ `JournalEntryEntityServer.GenerateReversal(reason)`)*
 **Fires:** only when code explicitly calls it on a saved JE.
@@ -233,7 +238,14 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   (`CancelAfterTeardown()`) needs no rejection: it is limited to a Pending batch whose teardown has run.
 - **`TasksAppApprovalGate.recordDecision`** — now requires `contextUser` to BE the batch company's
   `AccountingCompanyProfile.ApprovalCFOUserID` (no CFO configured ⇒ hard-fail). Previously any
-  authenticated user could approve any batch, including their own.
+  authenticated user could approve any batch, including their own. The decision is recorded on the
+  batch's stamped `ApprovalTaskID`, as `assertApproved`, `isRejected` and the cancel paths read it, never
+  the newest Task Link, which is writable through the tasks app; a batch with no stamp is refused (#313).
+- **`JournalEntryBatchEntityServer.Validate` — the approval Task is set once (#313).** A saved batch whose
+  loaded `ApprovalTaskID` is set refuses any other value, so a Pending batch cannot be pointed at another
+  batch's approved Task. Setting it on a batch with none (the build's stamp) passes. The database enforces
+  the same rule for `ApprovalTaskID` and `ApprovalTaskRaisedAt` on raw SQL
+  (`trg_JournalEntryBatch_ApprovalTaskSetOnce`, 50035), and a filtered unique index keeps one batch per Task.
 - **SQL-predicate id validation (`SqlGuards.ts`)** — `isSqlGuid`/`requireSqlGuid`/`sqlGuidLiteral`
   (extracted from the engine's private `sqlGuid`) now guard every client-supplied id that is
   interpolated into an `ExtraFilter`: the batch remote ops, the gate's Task-Link lookups, W9's
@@ -253,10 +265,12 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   ordinary save: they are not guarded), so a creator identified later unlocks a row raised as
   unresolved; a terminal row is never touched. It is marked `RequiresSystemUser`, so through the API
   only the system user may raise; the consuming apps' detectors call it in-process, where that gate
-  does not apply. It reads existing rows with `UPDLOCK, HOLDLOCK`, so a concurrent raise of the same
-  item waits and returns the first one's row.
-- **`Accounting.ClearFinanceException`** locks the row (`UPDLOCK`) in its transaction before reading
-  it, so of two concurrent clears the second finds the row no longer Open (`NOT_OPEN`).
+  does not apply. It reads existing rows with `UPDLOCK, HOLDLOCK` on SQL Server; on PostgreSQL it
+  first takes a transaction-scoped advisory lock per (type, DedupeKey), then reads with `FOR UPDATE`.
+  Either way a concurrent raise of the same item waits and returns the first one's row.
+- **`Accounting.ClearFinanceException`** locks the row (`UPDLOCK` on SQL Server, `FOR UPDATE` on
+  PostgreSQL) in its transaction before reading it, so of two concurrent clears the second finds the
+  row no longer Open (`NOT_OPEN`).
 - **Who may clear which exception (golive #320 §4)** is decided per row by
   `FinanceExceptionClearPolicy.ts`, after the checks that always apply (still Open, not the source
   record's creator, a note). The first rule that applies names the authorization the reviewer must

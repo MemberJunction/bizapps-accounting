@@ -44,6 +44,7 @@ export interface RecordManualJournalEntryDecisionOutput {
 @RegisterClass(BaseRemotableOperation, 'Accounting.RecordManualJournalEntryDecision')
 export class RecordManualJournalEntryDecisionOperation extends BaseRemotableOperation<RecordManualJournalEntryDecisionInput, RecordManualJournalEntryDecisionOutput> {
   public readonly OperationKey = 'Accounting.RecordManualJournalEntryDecision';
+  public readonly RequiredScope = 'accounting:write';
 
   protected async InternalExecute(input: RecordManualJournalEntryDecisionInput, provider: IMetadataProvider, user: UserInfo): Promise<RecordManualJournalEntryDecisionOutput> {
     if (!input?.JournalEntryID) throw new Error('The decision was not recorded: no journal entry was given.');
