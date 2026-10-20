@@ -229,6 +229,17 @@ describe('cancelJournalEntryBatch — a Pending cancel (#233, golive #302)', () 
     expect(tx.RollbackTransaction).toHaveBeenCalled();
     expect(tx.CommitTransaction).not.toHaveBeenCalled();
   });
+
+  // A failed read of the approval Task's decisions now throws from isRejected (golive #320 §3);
+  // it used to read as "not rejected". The cancel refuses rather than guessing.
+  it('refuses a Pending cancel, before anything is written, when the rejection check cannot read the decisions', async () => {
+    const w = world('Pending');
+    const g = use(gate({ allowed: true, rejected: false }));
+    g.isRejected.mockRejectedValueOnce(new Error('Could not read the decisions on approval task T1: database unavailable'));
+    await expect(cancelJournalEntryBatch(BATCH_ID, USER, w.provider, { reason: 'Built with the wrong entries' })).rejects.toThrow(/Could not read the decisions/);
+    expect(g.assertMayCancelPending).not.toHaveBeenCalled();
+    expectUntouched(w, 'Pending', g);
+  });
 });
 
 describe('cancelJournalEntryBatch — authorizing a cancel past approval', () => {
