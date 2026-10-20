@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <img alt="MJ Version" src="https://img.shields.io/badge/MemberJunction-6.1.5%2B-blue?style=flat-square" />
+  <img alt="MJ Version" src="https://img.shields.io/badge/MemberJunction-6.1.6%2B-blue?style=flat-square" />
   <img alt="Angular" src="https://img.shields.io/badge/Angular-21-DD0031?style=flat-square&logo=angular&logoColor=white" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white" />
   <img alt="SQL Server" src="https://img.shields.io/badge/SQL%20Server-2019%2B-CC2927?style=flat-square&logo=microsoftsqlserver&logoColor=white" />
@@ -339,7 +339,7 @@ Ruling of record: **build first, iterate in the system** — plans stay thin; no
 
 | Layer | Technology | Version |
 |---|---|---|
-| **Platform** | [MemberJunction](https://github.com/MemberJunction/MJ) | 6.1.5+ |
+| **Platform** | [MemberJunction](https://github.com/MemberJunction/MJ) | 6.1.6+ |
 | **Runtime** | Node.js | 18+ |
 | **Language** | TypeScript | 5.9 (strict) |
 | **Database (primary)** | SQL Server / Azure SQL | 2019+ |
@@ -348,7 +348,7 @@ Ruling of record: **build first, iterate in the system** — plans stay thin; no
 | **UI Framework** | Angular | 21 |
 | **Build** | Turborepo | 2.7 |
 | **Validation** | Zod | 3.25 |
-| **SQL Conversion** | [`@memberjunction/sql-converter`](https://github.com/MemberJunction/MJ/tree/main/packages/SQLConverter) (through the `mj` CLI) | 6.1.5+ |
+| **SQL Conversion** | [`@memberjunction/sql-converter`](https://github.com/MemberJunction/MJ/tree/main/packages/SQLConverter) (through the `mj` CLI) | 6.1.6+ |
 
 ---
 
