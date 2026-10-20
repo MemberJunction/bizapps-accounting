@@ -664,5 +664,122 @@
       "lastModified": "2026-10-08T21:19:07.493Z",
       "checksum": "57e0987a587028ab8f1d7decf354a5965f13a272a171a1f2acecf86c40f9e48f"
     }
+  },
+  {
+    "fields": {
+      "Category": "Financial Settings",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Accounting Company Profiles&Name=BooksClosedThroughDate"
+    },
+    "sync": {
+      "lastModified": "2026-10-20T12:29:54.881Z",
+      "checksum": "056836a523ee04141cc0e0938dae55e988658d21a4826cc4084d68ea6df24765"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Administrative Settings",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Accounting Company Profiles&Name=ManualJournalEntryApprovalThreshold"
+    },
+    "sync": {
+      "lastModified": "2026-10-20T12:29:54.910Z",
+      "checksum": "491a41d7b7318a1a30f19149505c0f11928f682935698b99480dbe22e5d0166e"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Administrative Settings",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Accounting Company Profiles&Name=ManualJournalEntryApproverRoleID"
+    },
+    "sync": {
+      "lastModified": "2026-10-20T12:29:54.934Z",
+      "checksum": "491a41d7b7318a1a30f19149505c0f11928f682935698b99480dbe22e5d0166e"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Account Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: GL Accounts&Name=IsControlAccount"
+    },
+    "sync": {
+      "lastModified": "2026-10-20T12:29:54.959Z",
+      "checksum": "cad76c1f63ba33f2f31d72363c3dd1474d25da2eb05c2c5ed3c417f12b0a6c09"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Approval",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=ApprovalLevel"
+    },
+    "sync": {
+      "lastModified": "2026-10-20T12:29:54.981Z",
+      "checksum": "d02dae4375485bc9c7b7ca3753ec15a883ae01c77816fe659668d9dea4280128"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Approval",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=ApprovalRequestedByUserID"
+    },
+    "sync": {
+      "lastModified": "2026-10-20T12:29:55.004Z",
+      "checksum": "d02dae4375485bc9c7b7ca3753ec15a883ae01c77816fe659668d9dea4280128"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Approval",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=ApprovalTaskID"
+    },
+    "sync": {
+      "lastModified": "2026-10-20T12:29:55.026Z",
+      "checksum": "d02dae4375485bc9c7b7ca3753ec15a883ae01c77816fe659668d9dea4280128"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Approval",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=ApprovedAt"
+    },
+    "sync": {
+      "lastModified": "2026-10-20T12:29:55.050Z",
+      "checksum": "d02dae4375485bc9c7b7ca3753ec15a883ae01c77816fe659668d9dea4280128"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Approval",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=ApprovedByUserID"
+    },
+    "sync": {
+      "lastModified": "2026-10-20T12:29:55.071Z",
+      "checksum": "d02dae4375485bc9c7b7ca3753ec15a883ae01c77816fe659668d9dea4280128"
+    }
   }
 ]
