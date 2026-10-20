@@ -16,6 +16,7 @@
 export { AccountingCompanyProfileEntityServer } from './AccountingCompanyProfileEntityServer.js';
 export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
+export { JournalEntryLineDimensionEntityServer, LoadJournalEntryLineDimensionEntityServer } from './JournalEntryLineDimensionEntityServer.js';
 export { JournalEntryBatchEntityServer, type ApprovedContentCheck, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
 export { GLAccountEntityServer, BusinessCentralAccountNumberError, BUSINESS_CENTRAL_ACCOUNT_NUMBER_MAX_LENGTH } from './GLAccountEntityServer.js';
 export { DimensionEntityServer, LoadDimensionEntityServer } from './DimensionEntityServer.js';
@@ -60,6 +61,8 @@ export {
   classifyViewEntries,
   previewBatch,
   pendingCandidateFilter,
+  APPROVED_OR_NO_APPROVAL_NEEDED_CLAUSE,
+  IsAwaitingManualApproval,
   outOfOrderSkipCount,
   perCompanySubtotals,
   pendingCompanies,
@@ -244,3 +247,27 @@ export {
   type FinanceExceptionClearResolution,
 } from './FinanceExceptionClearPolicy.js';
 export { FINANCE_EXCEPTION_ENTITY } from './FinanceExceptionEntityServer.js';
+
+// Manual journal entry approval (golive #353, #320 §3): a manual entry saved while its company has a
+// ManualJournalEntryApprovalThreshold is routed to the approver role or the Approval CFO and stays out
+// of every batch until approved. Decided through Accounting.RecordManualJournalEntryDecision.
+export {
+  ManualJournalEntryApprovalService,
+  ManualJournalEntryApprovalError,
+  RouteManualJournalEntryApproval,
+  AssertMayDecideManualJournalEntry,
+  IsManualJournalEntry,
+  type ManualJournalEntryApprovalLevel,
+  type ManualJournalEntryApprovalPolicy,
+  type ManualJournalEntryApprovalPlan,
+  type ManualJournalEntryRoutingInput,
+  type ManualJournalEntryDeciderInput,
+  type ManualJournalEntryDecisionResult,
+  type ManualJournalEntrySaveAction,
+} from './ManualJournalEntryApproval.js';
+export {
+  RecordManualJournalEntryDecisionOperation,
+  LoadManualJournalEntryOperations,
+  type RecordManualJournalEntryDecisionInput,
+  type RecordManualJournalEntryDecisionOutput,
+} from './ManualJournalEntryOperations.js';
