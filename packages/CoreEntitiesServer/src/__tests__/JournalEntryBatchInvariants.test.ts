@@ -676,6 +676,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
 
     it('approves a Pending batch and records the user it acts as', async () => {
       asSaved('Pending');
+      batch.ContextCurrentUser = approver;
       expect(await batch.Approve(approver)).toBe(true);
       expect(batch.Status).toBe('Approved');
       expect(batch.ApprovedByUserID).toBe('U-APPROVER');
@@ -687,6 +688,12 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       batch.ApprovedByUserID = 'U-CHOSEN-BY-CALLER';
       await batch.Approve(approver);
       expect(batch.ApprovedByUserID).toBe('U-APPROVER');
+    });
+
+    it('refuses to record a user other than the one signed in (golive #320 §3)', async () => {
+      asSaved('Pending');
+      batch.ContextCurrentUser = { ID: 'U-SIGNED-IN' } as UserInfo;
+      expect(await batch.Approve(approver)).toBe(false);
     });
 
     it('lowers its flag once the save returns, so a later plain save is refused again', async () => {

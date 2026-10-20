@@ -126,7 +126,7 @@ describe('CreateJournalEntry refuses an EffectiveDate that names no day', () => 
   it('keeps the pipeline\'s own message for a value that does not parse', async () => {
     const errors = await errorsFor('not-a-date');
     expect(errors[0].Code).toBe('MALFORMED_DRAFT');
-    expect(errors[0].Message).toMatch(/is not a valid ISO date/);
+    expect(errors[0].Message).toMatch(/is not a valid date/);
   });
 });
 

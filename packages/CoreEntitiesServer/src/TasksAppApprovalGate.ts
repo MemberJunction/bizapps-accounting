@@ -19,7 +19,7 @@
  *     not count); otherwise THROW (blocks the send). Fails closed when ApprovalTaskID is empty.
  *     The Task records the batch's builder as its creator (CreatedByPersonID).
  *     It also requires the batch's recorded approver (written only by the approval, #447), not its
- *     builder, and an approval on the Task not attributed to anyone else (#446).
+ *     builder (#446).
  *   recordDecision(batchId, outcome, decidedByPersonId, notes): record the decision on the batch's
  *     stamped approval Task via TaskOrchestrationService (#313). The shared entry point for BOTH the in-app approve
  *     control and the Tasks inbox. It refuses first, writing nothing, when the batch is no longer
@@ -75,7 +75,7 @@ import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
 } from '@mj-biz-apps/accounting-entities';
 import type { JournalEntryBatchApprovalGate, JournalEntryBatchCancelGate, RecordedArchive, RecordedCancellation } from './JournalEntryBatchEngine.js';
-import { ResolveAllPersonIDsForUser, ResolvePersonIDForUser, ResolvePersonIDsForUsers, ResolveUserIDsForPeople } from './person-user-link.js';
+import { ResolveAllPersonIDsForUser, ResolvePersonIDForUser, ResolvePersonIDsForUsers } from './person-user-link.js';
 import { requireSqlGuid } from './SqlGuards.js';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
@@ -170,14 +170,10 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
   /**
    * Block the send unless the batch was approved through the approval decision (#446).
    *
-   * Three things must hold. The batch's stamped approval Task carries a terminal approval. The batch
-   * records an approver, which only the approval writes (JournalEntryBatchEntityServer.Approve, after
-   * recordDecision checked the approver; #447, #451), and that approver did not build the batch.
-   * And the approval is not attributed to anyone else: Task Decisions are writable through the tasks
-   * app, so a decision row made there, outside recordDecision, does not count unless its Person is the
-   * recorded approver's. A decision with no Person still counts, because an approver with no linked
-   * Person records one; the batch's own approver record is what binds it to the approval.
-   * approvalRefusal then requires the decider to be the company's Approval CFO as configured now.
+   * The batch's stamped approval Task must carry a terminal approval made by an allowed decider
+   * (approvalRefusal). The batch must also record an approver, which only the approval writes
+   * (JournalEntryBatchEntityServer.Approve, after recordDecision checked the approver; #447, #451),
+   * and that approver must not have built the batch.
    */
   async assertApproved(batchId: string, contextUser: UserInfo): Promise<void> {
     // SECURITY: resolve the approval Task from the batch's STAMPED ApprovalTaskID column, not
@@ -190,16 +186,13 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     const stamped = await this.resolveStampedApprovalTask(batchId, contextUser);
     if (!stamped) throw new Error(`Batch ${batchId} cannot be sent: it has no approval task, so it was not built through the approval process.`);
     const { task, batch } = stamped;
-    const approverUserId = this.recordedApprover(batch);
     const approvals = await this.terminalDecisions(task.ID, 'Approval', contextUser);
     if (approvals.length === 0) {
       throw new Error(`Batch ${batchId} is not approved yet: its approval task has no Approved decision.`);
     }
-    if (!(await this.hasApprovalBy(approvals, approverUserId, contextUser))) {
-      throw new Error(`Batch ${batch.JournalEntryBatchNumber ?? batchId} cannot be sent: its approval task has no Approved decision by the user recorded as its approver.`);
-    }
     const refusal = await this.approvalRefusal(batch, approvals, contextUser);
     if (refusal) throw new Error(`Batch ${batch.JournalEntryBatchNumber ?? batchId} cannot be sent: ${refusal}`);
+    this.assertRecordedApprover(batch);
   }
 
   /**
@@ -248,8 +241,11 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
       `(the Approval CFO on its Accounting Company Profile, user ${cfoUserId}). A decision recorded by anyone else does not count.`;
   }
 
-  /** The batch's recorded approver; throws when there is none, or when it is the batch's builder. */
-  private recordedApprover(batch: mjBizAppsAccountingJournalEntryBatchEntity): string {
+  /**
+   * Throws when the batch records no approver, or records its builder (#446, #447). Only the approval
+   * writes ApprovedByUserID, so a batch without one was not approved through the approval decision.
+   */
+  private assertRecordedApprover(batch: mjBizAppsAccountingJournalEntryBatchEntity): void {
     const label = batch.JournalEntryBatchNumber ?? batch.ID;
     if (!batch.ApprovedByUserID) {
       throw new Error(`Batch ${label} cannot be sent: it records no approver, so it was never approved through the approval decision.`);
@@ -259,7 +255,6 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
         `Batch ${label} cannot be sent: its recorded approver is the user who built it, and the user who built a batch may not approve it.`,
       );
     }
-    return batch.ApprovedByUserID;
   }
 
   /**
@@ -645,21 +640,6 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     const entity = this.provider.EntityByName(BATCH_ENTITY);
     if (!entity) throw new Error(`The '${BATCH_ENTITY}' entity is missing from the metadata, so the approval task cannot be linked.`);
     return entity.ID;
-  }
-
-  /**
-   * True when one of the Task's approvals is not attributed to anyone but `approverUserId` (#446): its
-   * DecidedByPersonID is empty, or names the approver's Person. A Person bound to no user, or to
-   * another user, does not count.
-   */
-  private async hasApprovalBy(
-    approvals: mjBizAppsTasksTaskDecisionEntity[], approverUserId: string, contextUser: UserInfo,
-  ): Promise<boolean> {
-    if (approvals.some(d => !d.DecidedByPersonID)) return true;
-    const personIds = approvals.map(d => d.DecidedByPersonID).filter((id): id is string => !!id);
-    if (personIds.length === 0) return false;
-    const usersByPerson = await ResolveUserIDsForPeople(personIds, this.provider, contextUser);
-    return personIds.some(id => UUIDsEqual(usersByPerson.get(id.toLowerCase()) ?? null, approverUserId));
   }
 
   /**

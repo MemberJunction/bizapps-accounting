@@ -382,7 +382,7 @@ describe('AccountingERPEngine.PostJournalBatch', () => {
 
     const result: ErpPostResult = await AccountingERPEngine.Instance.PostJournalBatch(batch, [], user, p);
 
-    expect(result).toEqual({ success: false, error: `No active 'QuickBooks' integration for company ${COMPANY}.` });
+    expect(result).toEqual({ success: false, error: `Company ${COMPANY} has no active 'QuickBooks' connection, so the batch cannot be sent. Ask an administrator to set one up.` });
     expect(runVerb).not.toHaveBeenCalled();
   });
 
