@@ -2,7 +2,7 @@
  * Server-side subclass of FinanceException — the STATUS GUARD (golive #279).
  *
  * A finance exception is cleared by a reviewer who did not create the source record, holding
- * MJ.BizApps.Accounting.FinanceExceptions.Clear. Those checks live in
+ * the clearing right its rule names (FinanceExceptionClearPolicy.ts). Those checks live in
  * `Accounting.ClearFinanceException`; this class makes that operation the only way through:
  *
  *   - A new row is Open, with no review fields.
