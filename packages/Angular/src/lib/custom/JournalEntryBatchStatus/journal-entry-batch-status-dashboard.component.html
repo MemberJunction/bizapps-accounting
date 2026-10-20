@@ -14,9 +14,11 @@
     </div>
 
     <div actions>
-      <button mjButton variant="primary" size="sm" [disabled]="Building" (click)="OpenBuildPreview()">
-        <i class="fa-solid fa-layer-group"></i> Build Batch
-      </button>
+      @if (MayBuild) {
+        <button mjButton variant="primary" size="sm" [disabled]="Building" (click)="OpenBuildPreview()">
+          <i class="fa-solid fa-layer-group"></i> Build Batch
+        </button>
+      }
     </div>
 
     <div toolbar>
@@ -181,6 +183,15 @@
             [ngModel]="BuildTarget" (ngModelChange)="OnBuildTargetChange($event)"
             aria-label="Build target system" />
         </label>
+        <!-- Same default and hint as the batch workspace and the Build Batch modal (#426). -->
+        <label class="bs-field">
+          <span class="bs-field__label">Include entries through</span>
+          <input type="date" class="mj-input" [ngModel]="BuildCutoffDate" (ngModelChange)="OnBuildCutoffChange($event)"
+            aria-label="Effective date cutoff" />
+          @if (!BuildCutoffDate) {
+            <span class="bs-field__hint">No cutoff — includes everything through the posting date, today.</span>
+          }
+        </label>
         <div class="bs-preview__facts">
           <div><span class="bs-field__label">Covers</span>
             <strong>{{ PreviewStart ? (PreviewStart | date:'yyyy-MM-dd':'UTC') : '—' }}</strong>
@@ -192,7 +203,7 @@
       </div>
 
       @if (PreviewCount === 0) {
-        <div class="bs-detail__empty">No pending journal entries to batch right now.</div>
+        <div class="bs-detail__empty">No pending journal entries to batch through this date.</div>
       } @else {
         <div class="bs-preview__tablewrap">
           <table class="bs-detail-table">

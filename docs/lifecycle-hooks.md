@@ -144,6 +144,40 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   retry, `recordFailedBatchPosted`) and `→Posted` (`markBatchPosted`) saves are its only callers, so a
   generic-form or GraphQL save cannot mark a batch Sent and then Posted without the ERP being called.
   `Sent → Failed` stays a plain save: recording a failure calls no ERP.
+- **`JournalEntryBatchEntityServer.Validate` — `Approved` and `Archived` are their verbs' (#447, #448).**
+  A saved batch moves to `Approved` only through `Approve(contextUser)` and to `Archived` only through
+  `Archive(reason, contextUser)`, each raising a transient flag for its one save, as `Cancel()` does.
+  `Approve()` writes `ApprovedAt` / `ApprovedByUserID` from the user it acts as; it does not decide who
+  may approve. That is `TasksAppApprovalGate.recordDecision`, which `Accounting.RecordJournalEntryBatchDecision`
+  runs first, or the auto-post waiver's system-user check. `approveJournalEntryBatch` refuses an
+  `approvedByUserId` other than the context user. So the generic form or the GraphQL update cannot
+  record an approval no configured approver made, under an approver of the caller's choosing.
+- **`JournalEntryBatchEntityServer.Validate` — the audit fields are the server's (#451).** On a saved
+  batch, `BatchedAt`, `BatchedByUserID`, the approval, archive, cancel and send who/when pairs and
+  `ERPNotPostedConfirmedAt` / `ERPNotPostedConfirmedByUserID` change only while a verb is saving
+  (`Approve`, `Archive`, `Cancel`/`CancelAfterTeardown`, `SaveDispatchTransition`); a plain save that
+  changes one is refused. Values are compared as instants and case-insensitive IDs, so a form that sends
+  back what it loaded passes. The fields stay `AllowUpdateAPI = 1` on purpose: MJ leaves a field with it
+  off out of the create and update procedures, so the server's own stamps would not persist either.
+- **`JournalEntryBatchEntityServer.Archive()` authorizes itself (#448)** through the resolved cancel gate's
+  `assertMayArchive`, before anything is written: before approval only the company's `ApprovalCFOUserID`
+  (the builder may cancel a Pending batch but not archive it, since an archive cannot be undone), past
+  approval the CFO or the batch's approver (who must then have a linked Person). The batch pages show
+  Archive only to those users (`MayArchiveBatch`).
+- **Build, Regenerate, Dispatch and Archive require the Finance role (#448).** Each of the four Remote
+  Operations first checks the `MJ.BizApps.Accounting.JournalEntryBatches.Operate` Authorization, granted to
+  the Finance role in `metadata/authorizations/` and `metadata/authorization-roles/`, through
+  `UserCanOperateJournalEntryBatches` (accounting-engine-base, shared with the pages), before reading anything.
+  It fails closed: an Authorization missing from the catalog is held by nobody. The scheduled build and
+  auto-post (`Accounting.BuildJournalEntryBatches`) call the engine directly as the system user, not these
+  operations, so they are unaffected. The batch pages hide Dispatch, Regenerate, Archive, Build and Retry
+  from users without the grant.
+- **`TasksAppApprovalGate.assertApproved` re-checks who approved (#446).** Besides a terminal approval on
+  the stamped Task, the batch must record an approver (written only by `Approve()`) who is not its builder,
+  and the approval must not be attributed to anyone else: Task Decisions are writable through the tasks
+  app, so a decision whose `DecidedByPersonID` resolves to another user, or to no user, does not count. A
+  decision with no Person still counts (an approver with no linked Person records one); the batch's own
+  approver record is what binds it.
 - **`JournalEntryBatchEntityServer.CheckControlTotalCoherence()`** — the Pending→Approved footing +
   member-count check is now a public method shared with the engine: `sendJournalEntryBatch` re-runs
   it **before** every `→Sent` (`Approved→Sent`, and `Failed→Sent` on a retry), so a batch whose member
@@ -182,8 +216,8 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   unlocks only while its batch is `Pending` or `Cancelled`; a batch becomes Cancelled only with its
   pointer cleared). From `Approved`/`Failed`, and from a `Pending` batch nobody rejected (golive #302), a
   reason is required. A rolled-back cancel reloads the
-  instance. `Save()` stamps `CancelledAt` / `CancelledByUserID` on the transition, as it does for the
-  approval and archive pairs.
+  instance. `Cancel()` and `CancelAfterTeardown()` write `CancelledAt` / `CancelledByUserID` from the
+  user they act as; a plain save cannot set them (#451, below).
   **`Cancel()` authorizes itself (#214)**, before anything is written, so a server caller that loads the
   entity and calls it directly meets the same rules as the engine. It requires a context user and
   resolves its gate and ERP lookup through `JournalEntryBatchDispatchServices` (below). The options
@@ -229,7 +263,10 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   `JournalEntryBatchDispatchServices` (MJ ClassFactory; the defaults are `TasksAppApprovalGate` and
   the AccountingERPEngine lookup). A caller cannot pass them, so it cannot swap in a gate that allows
   everything or leave the lookup out. A higher-priority ClassFactory registration in the same process
-  does replace them; unit tests rely on that, and it is the one way around the check.
+  replaces them only where that is deliberate (#452): in a unit-test run (Vitest sets `VITEST`), or when
+  the server's `ACCOUNTING_DISPATCH_SERVICES_OVERRIDE` environment variable names the subclass. Anywhere
+  else `Resolve()` logs an error naming the registered class and uses the real services; an allowed
+  replacement is logged too.
   A **Pending** cancel needs either a terminal rejection on the approval Task (`isRejected`), which
   `RecordJournalEntryBatchDecision` records before cancelling, or (golive #302) a reason from the company's
   CFO or the user who built the batch (`assertMayCancelPending`); that cancel comments on the approval Task
@@ -293,8 +330,8 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
 
 - **S1 batch dispatch — ✅** (`JournalEntryBatchEngine.ts`): `buildJournalEntryBatch(companyId, targetSystem, …)` nets one
   company's Pending JEs into ONE single-company batch (D7; netting keys on company × account × dims; the
-  ERP receives **account numbers**); `approveJournalEntryBatch` flips Pending→Approved with
-  audit stamps; `sendJournalEntryBatch` requires Approved (or Failed, for a retry) + the CFO gate
+  ERP receives **account numbers**); `approveJournalEntryBatch` flips Pending→Approved through
+  `JournalEntryBatchEntityServer.Approve()`, stamping the context user as approver; `sendJournalEntryBatch` requires Approved (or Failed, for a retry) + the CFO gate
   (`TasksAppApprovalGate` — one Task assigned to the Person linked to the batch company's CFO, `ApprovalCFOUserID`;
   a CFO with no active linked Person refuses the build, #387) → Sent →
   **Posted** + JEs→GLPosted. A send the ERP rejects, or whose poster throws, returns normally with the batch `Failed`,

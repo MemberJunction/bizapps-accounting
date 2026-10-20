@@ -89,22 +89,22 @@ export interface MJASummaryFigure {
                 font-variant-numeric: tabular-nums;
             }
             .tone-credit {
-                color: var(--mj-color-success, #1a7f37);
+                color: var(--mj-status-success-text);
             }
             .tone-muted {
                 color: var(--mj-text-muted);
             }
             .tone-success {
-                color: var(--mj-color-success, #1a7f37);
+                color: var(--mj-status-success-text);
             }
             .tone-warning {
-                color: var(--mj-color-warning, #9a6700);
+                color: var(--mj-status-warning-text);
             }
             .tone-danger {
-                color: var(--mj-color-danger, #cf222e);
+                color: var(--mj-status-error-text);
             }
             .tone-info {
-                color: var(--mj-color-info, #0969da);
+                color: var(--mj-status-info-text);
             }
             .mja-strip__note {
                 margin-left: auto;

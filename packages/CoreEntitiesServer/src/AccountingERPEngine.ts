@@ -7,7 +7,7 @@
  */
 import { IntegrationEngine } from '@memberjunction/integration-engine';
 import { IMetadataProvider, IRunViewProvider, LogError, LogStatus, UserInfo } from '@memberjunction/core';
-import { BaseSingleton, EscapeSQLString, MJGlobal } from '@memberjunction/global';
+import { BaseSingleton, EscapeSQLString, MJGlobal, UUIDsEqual } from '@memberjunction/global';
 import { ExternalFieldLimitEngine, ToCalendarDay } from '@mj-biz-apps/common-entities';
 import {
   ACCOUNTING_ENGINE_EXTENSION_ENTITY,
@@ -128,9 +128,18 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
 
   private seams: AccountingERPEngineSeams = {};
 
-  /** Test injection. Production leaves this empty and uses ActionEngine + IntegrationEngine. */
+  /**
+   * ERP_POSTING_NOT_READ_BACK raises that failed, by batch ID (#414). Held so the signal is not lost
+   * with the raise: while one is held for a company, its lookups do not trust nothing found, and each
+   * such lookup tries the raise again. Held in this process only, so a restart drops it; the log line
+   * the failed raise wrote stays.
+   */
+  private unraisedUnreadPostings = new Map<string, AccountingFinanceExceptionToRaise>();
+
+  /** Test injection. Production leaves this empty and uses ActionEngine + IntegrationEngine. Starts with no held raises. */
   public UseSeams(seams: AccountingERPEngineSeams): void {
     this.seams = seams;
+    this.unraisedUnreadPostings.clear();
   }
 
   public async Config(forceRefresh: boolean, contextUser: UserInfo, provider?: IMetadataProvider): Promise<void> {
@@ -399,31 +408,66 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
 
   /**
    * Raises ERP_POSTING_NOT_READ_BACK on a batch the ERP accepted but that could not be read back
-   * (#205). Never throws: the post stands whatever happens here, so a raise that fails is logged.
+   * (#205). Never throws: the post stands whatever happens here. A raise that fails is logged and
+   * held, so the company's lookups stop trusting nothing found until it lands (#414).
    */
   private async raiseUnreadPosting(
     batch: mjBizAppsAccountingJournalEntryBatchEntity, integrationName: string, posted: ErpPostResult, provider: IMetadataProvider,
   ): Promise<void> {
-    const doc = batch.JournalEntryBatchNumber ?? batch.ID;
+    const exception = unreadPostingException(batch, integrationName, posted);
+    const why = await this.tryRaiseUnreadPosting(exception, provider);
+    if (why === null) return;
+    this.unraisedUnreadPostings.set(batch.ID, exception);
+    LogError(`AccountingERPEngine.PostJournalBatch: batch ${batch.JournalEntryBatchNumber ?? batch.ID} posted but could not be read back, and raising ${ERP_POSTING_NOT_READ_BACK} failed: ${why}`);
+  }
+
+  /** Raise one ERP_POSTING_NOT_READ_BACK exception. Never throws: null when it landed, otherwise why not. */
+  private async tryRaiseUnreadPosting(exception: AccountingFinanceExceptionToRaise, provider: IMetadataProvider): Promise<string | null> {
     try {
       const raise = this.seams.raiseFinanceExceptions ?? RaiseFinanceExceptions;
-      const result = await raise({ Exceptions: [unreadPostingException(batch, integrationName, posted)] }, provider);
-      const skipped = result.Results?.[0]?.Skipped === true;
-      if (!result.Success || skipped) {
-        const why = skipped ? `the ${ERP_POSTING_NOT_READ_BACK} type is inactive` : (result.Errors ?? []).map((e) => e.Message).join(' ');
-        LogError(`AccountingERPEngine.PostJournalBatch: batch ${doc} posted but could not be read back, and raising ${ERP_POSTING_NOT_READ_BACK} failed: ${why}`);
-      }
+      const result = await raise({ Exceptions: [exception] }, provider);
+      if (result.Results?.[0]?.Skipped === true) return `the ${ERP_POSTING_NOT_READ_BACK} type is inactive`;
+      if (!result.Success) return (result.Errors ?? []).map((e) => e.Message).join(' ') || 'no reason given';
+      return null;
     } catch (e) {
-      LogError(`AccountingERPEngine.PostJournalBatch: batch ${doc} posted but could not be read back, and raising ${ERP_POSTING_NOT_READ_BACK} threw.`, null, e);
+      return `it threw: ${e instanceof Error ? e.message : String(e)}`;
     }
+  }
+
+  /**
+   * Try again every held raise for the company (#414). Returns the batch IDs still held: their raise
+   * failed again, so nothing in the database yet says the company's lookup may be blind.
+   */
+  private async retryUnraisedUnreadPostings(companyId: string, provider: IMetadataProvider): Promise<string[]> {
+    const stillHeld: string[] = [];
+    for (const [batchId, exception] of this.unraisedUnreadPostings) {
+      if (!UUIDsEqual(exception.CompanyID, companyId)) continue;
+      const why = await this.tryRaiseUnreadPosting(exception, provider);
+      if (why === null) {
+        this.unraisedUnreadPostings.delete(batchId);
+      } else {
+        stillHeld.push(batchId);
+        LogError(`AccountingERPEngine: raising ${ERP_POSTING_NOT_READ_BACK} for batch ${batchId} failed again: ${why}`);
+      }
+    }
+    return stillHeld;
   }
 
   /**
    * `NotFound`, unless an Open ERP_POSTING_NOT_READ_BACK exception says the company's lookup may be
    * blind (#205). Fails closed: with that exception type missing or inactive, a raise would have been
-   * skipped and only logged, so nothing found is not trusted either.
+   * skipped and only logged, so nothing found is not trusted either; nor while a raise for the company
+   * failed and is held in this process (#414).
    */
   private async nothingFound(companyId: string, provider: IMetadataProvider): Promise<ErpJournalLookupResult> {
+    const held = await this.retryUnraisedUnreadPostings(companyId, provider);
+    if (held.length > 0) {
+      return {
+        status: 'Unavailable',
+        reason: `the ERP accepted ${held.length} batch(es) in this company that could not then be read back (${held.join(', ')}), and raising ` +
+          `${ERP_POSTING_NOT_READ_BACK} for them failed, so a lookup that finds nothing does not show the batch did not post. Check those postings in the ERP.`,
+      };
+    }
     const rv = provider as unknown as IRunViewProvider;
     const [typeRes, openRes] = await rv.RunViews<{ IsActive?: boolean; SourceRecordID?: string }>([
       { EntityName: FINANCE_EXCEPTION_TYPE_ENTITY, ExtraFilter: `Code='${ERP_POSTING_NOT_READ_BACK}'`, Fields: ['IsActive'], ResultType: 'simple', BypassCache: true },
@@ -845,14 +889,24 @@ const ERP_PROVIDER_KEYS: readonly string[] = ['Microsoft Dynamics 365 Business C
 /**
  * Whether an Integration name and an ERP name (a batch's TargetSystem, or a provider key) mean the same system.
  * Compares letters and digits only, so 'business-central', 'Business Central' and 'BusinessCentral' all match.
+ * Both sides go through {@link canonicalERPName}, so an alias means the same system on either side (#418).
  */
 export function namesMatch(integrationName: string, targetSystem: string | null | undefined): boolean {
   if (!targetSystem) return false;
-  const a = integrationName.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const b = targetSystem.toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (a.includes('quickbooks') && b.includes('quickbooks')) return true;
-  if (a.includes('businesscentral') && (b.includes('businesscentral') || b === 'bc')) return true;
-  return a === b;
+  return canonicalERPName(integrationName) === canonicalERPName(targetSystem);
+}
+
+/**
+ * One name per ERP a provider serves. Any name containing 'businesscentral', and 'bc', are Business
+ * Central. QuickBooks Online is matched by its own name, plus bare 'QuickBooks', the only QuickBooks
+ * value a batch's TargetSystem allows (#419). Any other QuickBooks name, such as QuickBooks Desktop,
+ * stays itself: no provider serves it, so it is refused, not posted through the Online provider.
+ */
+function canonicalERPName(name: string): string {
+  const n = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (n.includes('businesscentral') || n === 'bc') return 'businesscentral';
+  if (n.includes('quickbooksonline') || n === 'quickbooks') return 'quickbooksonline';
+  return n;
 }
 
 /** Whether an Integration is one of the ERPs a built-in provider serves, by the rule {@link namesMatch} applies. */

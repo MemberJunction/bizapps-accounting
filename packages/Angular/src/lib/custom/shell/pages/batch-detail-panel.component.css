@@ -40,7 +40,7 @@
   font-variant-numeric: tabular-nums;
 }
 .mono {
-  font-family: var(--mj-font-mono, monospace);
+  font-family: var(--mj-font-family-mono);
   font-size: 12px;
 }
 

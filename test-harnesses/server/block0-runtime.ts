@@ -81,6 +81,7 @@ const EXPECTED_ROLES: ReadonlyArray<{ sequence: number; name: string }> = [
   { sequence: 90, name: 'Processing Fee' },
   { sequence: 100, name: 'Unbilled Receivable' },
   { sequence: 110, name: 'Customer Deposits' },
+  { sequence: 120, name: 'Gift Card Liability' },
 ];
 
 const RUN_TAG = `BLOCK0-${Date.now()}`;

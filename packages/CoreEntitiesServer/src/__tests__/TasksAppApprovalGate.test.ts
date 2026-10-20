@@ -142,13 +142,15 @@ interface CancelWorld {
  * are the Tasks that load. Task Links always answer with a newer, forged link to FORGED_TASK_ID — the gate must
  * not follow it.
  */
-function cancelProvider(opts: { cfoUserId: string | null; approvalTaskId: string | null; hasPerson: boolean; loadableTaskIds?: string[] }, world: CancelWorld): IMetadataProvider {
+function cancelProvider(
+  opts: { cfoUserId: string | null; approvalTaskId: string | null; hasPerson: boolean; loadableTaskIds?: string[]; status?: string }, world: CancelWorld,
+): IMetadataProvider {
   const loadable = opts.loadableTaskIds ?? [TASK_ID, FORGED_TASK_ID];
   return {
     GetEntityObject: async (entityName: string) => {
       if (entityName === BATCH_ENTITY) {
-        // Cancelled, as the batch reads when recordCancellation runs: after the cancel was saved, inside its transaction.
-        return { Load: async () => true, ID: BATCH_ID, CompanyID: COMPANY_ID, JournalEntryBatchNumber: 'BATCH-0007', Status: 'Cancelled', ApprovedByUserID: APPROVER_USER_ID, BatchedByUserID: BUILDER_USER_ID, ApprovalTaskID: opts.approvalTaskId };
+        // Cancelled by default, as the batch reads when recordCancellation runs: after the cancel was saved, inside its transaction.
+        return { Load: async () => true, ID: BATCH_ID, CompanyID: COMPANY_ID, JournalEntryBatchNumber: 'BATCH-0007', Status: opts.status ?? 'Cancelled', ApprovedByUserID: APPROVER_USER_ID, BatchedByUserID: BUILDER_USER_ID, ApprovalTaskID: opts.approvalTaskId };
       }
       if (entityName === ACP_ENTITY) return { Load: async () => true, ApprovalCFOUserID: opts.cfoUserId };
       if (entityName === 'MJ_BizApps_Tasks: Tasks') {
@@ -395,17 +397,37 @@ const REJECTED_OUTCOME_ID = '0a0a0a0a-0000-4000-8000-00000000a003';
  * A provider serving a batch with (optionally) a stamped approval Task carrying decisions of the given outcomes.
  * With `forgedRejectedLink`, Task Links answer with a newer link to FORGED_TASK_ID, which carries a rejection.
  */
-function decisionProvider(opts: { hasTask: boolean; outcomeIds: string[]; forgedRejectedLink?: boolean; forgedApprovedLink?: boolean }): IMetadataProvider {
+const APPROVER_PERSON_ID = '5e2b9c4d-0000-4000-8000-00000000a99e';
+const OTHER_USER_PERSON_ID = '5e2b9c4d-0000-4000-8000-0000000007e5';
+
+/** What the batch records about its approval, and whom each decision names, for decisionProvider. */
+interface DecisionWorld {
+  /** The batch's ApprovedByUserID; defaults to CFO_USER_ID, the company's approver. */
+  approvedByUserId?: string | null;
+  /** The batch's BatchedByUserID; defaults to BUILDER_USER_ID. */
+  batchedByUserId?: string;
+  /** Each decision's DecidedByPersonID, by index; a missing entry is no Person. */
+  decidedByPersonIds?: Array<string | null>;
+}
+
+/**
+ * A provider serving a batch with (optionally) a stamped approval Task carrying decisions of the given outcomes.
+ * With `forgedRejectedLink`, Task Links answer with a newer link to FORGED_TASK_ID, which carries a rejection.
+ * APPROVER_PERSON_ID is the approver's (the CFO's) Person and OTHER_USER_PERSON_ID another user's.
+ */
+function decisionProvider(
+  opts: { hasTask: boolean; outcomeIds: string[]; forgedRejectedLink?: boolean; forgedApprovedLink?: boolean }, world: DecisionWorld = {},
+): IMetadataProvider {
+  const batch = {
+    Load: async () => true, ID: BATCH_ID, CompanyID: COMPANY_ID, ApprovalTaskID: opts.hasTask ? TASK_ID : null,
+    ApprovedByUserID: world.approvedByUserId === undefined ? CFO_USER_ID : world.approvedByUserId,
+    BatchedByUserID: world.batchedByUserId ?? BUILDER_USER_ID,
+  };
   return {
+    Entities: [],
     GetEntityObject: async (entityName: string) => {
       // assertApproved and isRejected load the batch for its stamped ApprovalTaskID.
-      // The CFO approved it through the sanctioned path (its audit names the CFO), and someone else built it.
-      if (entityName === BATCH_ENTITY) {
-        return {
-          Load: async () => true, ID: BATCH_ID, ApprovalTaskID: opts.hasTask ? TASK_ID : null,
-          CompanyID: COMPANY_ID, BatchedByUserID: BUILDER_USER_ID, ApprovedByUserID: CFO_USER_ID,
-        };
-      }
+      if (entityName === BATCH_ENTITY) return { ...batch };
       // assertApproved reads the company's CFO to check who made the approval (golive #320 §3).
       if (entityName === ACP_ENTITY) return { Load: async () => true, ApprovalCFOUserID: CFO_USER_ID };
       if (entityName === 'MJ_BizApps_Tasks: Tasks') {
@@ -423,7 +445,7 @@ function decisionProvider(opts: { hasTask: boolean; outcomeIds: string[]; forged
       if (params.EntityName === 'MJ_BizApps_Tasks: Task Decisions') {
         const forgedOutcome = opts.forgedApprovedLink ? APPROVED_OUTCOME_ID : REJECTED_OUTCOME_ID;
         const outcomeIds = params.ExtraFilter?.includes(FORGED_TASK_ID) ? [forgedOutcome] : opts.outcomeIds;
-        return { Success: true, Results: outcomeIds.map(OutcomeID => ({ OutcomeID })) };
+        return { Success: true, Results: outcomeIds.map((OutcomeID, i) => ({ OutcomeID, DecidedByPersonID: world.decidedByPersonIds?.[i] ?? null })) };
       }
       if (params.EntityName === 'MJ_BizApps_Tasks: Task Decision Outcomes') {
         return {
@@ -433,6 +455,15 @@ function decisionProvider(opts: { hasTask: boolean; outcomeIds: string[]; forged
             { ID: CONDITIONS_OUTCOME_ID, Code: 'ApprovedWithConditions' },
             { ID: REJECTED_OUTCOME_ID, Code: 'Rejected' },
           ],
+        };
+      }
+      if (params.EntityName === 'MJ_BizApps_Common: People') {
+        return {
+          Success: true,
+          Results: [
+            { ID: APPROVER_PERSON_ID, LinkedUserID: CFO_USER_ID },
+            { ID: OTHER_USER_PERSON_ID, LinkedUserID: OTHER_USER_ID },
+          ].filter(p => params.ExtraFilter?.includes(p.ID)),
         };
       }
       return { Success: true, Results: [] };
@@ -468,7 +499,7 @@ describe('TasksAppApprovalGate.isRejected — whether the approval Task records 
 
   it('does not count a rejection as an approval', async () => {
     const gate = new TasksAppApprovalGate(decisionProvider({ hasTask: true, outcomeIds: [REJECTED_OUTCOME_ID] }));
-    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/is not approved/);
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/has no Approved decision/);
   });
 });
 
@@ -482,12 +513,102 @@ describe('TasksAppApprovalGate.assertApproved — the stamped approval Task deci
 
   it('refuses when a newer Task Link names an approved Task but the stamped Task carries no approval', async () => {
     const gate = new TasksAppApprovalGate(decisionProvider({ hasTask: true, outcomeIds: [], forgedApprovedLink: true }));
-    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/is not approved/);
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/has no Approved decision/);
   });
 
   it('refuses a batch with no stamped approval Task, even when a Task Link names an approved Task', async () => {
     const gate = new TasksAppApprovalGate(decisionProvider({ hasTask: false, outcomeIds: [], forgedApprovedLink: true }));
     await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/has no approval task, so it was not built/);
+  });
+});
+
+// ─── the send re-checks who approved (#446) ─────────────────────────────────
+
+describe('TasksAppApprovalGate.assertApproved — the approval came from the batch\'s approver (#446)', () => {
+  const approved = { hasTask: true, outcomeIds: [APPROVED_OUTCOME_ID] };
+
+  it('refuses an approval decision on a batch that records no approver — one written outside the approval', async () => {
+    const gate = new TasksAppApprovalGate(decisionProvider(approved, { approvedByUserId: null }));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/records no approver/);
+  });
+
+  it('refuses a batch whose recorded approver built it', async () => {
+    const gate = new TasksAppApprovalGate(decisionProvider(approved, { approvedByUserId: BUILDER_USER_ID }));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/recorded approver is the user who built it/);
+  });
+
+  it('passes an approval attributed to the recorded approver\'s Person', async () => {
+    const gate = new TasksAppApprovalGate(decisionProvider(approved, { decidedByPersonIds: [APPROVER_PERSON_ID] }));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).resolves.toBeUndefined();
+  });
+
+  it('refuses when the only approval is attributed to someone else\'s Person', async () => {
+    const gate = new TasksAppApprovalGate(decisionProvider(approved, { decidedByPersonIds: [OTHER_USER_PERSON_ID] }));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/has no Approved decision by the user recorded as its approver/);
+  });
+
+  it('refuses when the approval names a Person bound to no user', async () => {
+    const gate = new TasksAppApprovalGate(decisionProvider(approved, { decidedByPersonIds: ['5e2b9c4d-0000-4000-8000-0000000000ff'] }));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/has no Approved decision/);
+  });
+
+  it('passes when the recorded approver\'s approval sits beside a forged one', async () => {
+    const gate = new TasksAppApprovalGate(decisionProvider(
+      { hasTask: true, outcomeIds: [APPROVED_OUTCOME_ID, APPROVED_OUTCOME_ID] }, { decidedByPersonIds: [OTHER_USER_PERSON_ID, APPROVER_PERSON_ID] },
+    ));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).resolves.toBeUndefined();
+  });
+
+  it('does not count a rejection attributed to the approver as an approval', async () => {
+    const gate = new TasksAppApprovalGate(decisionProvider(
+      { hasTask: true, outcomeIds: [REJECTED_OUTCOME_ID] }, { decidedByPersonIds: [APPROVER_PERSON_ID] },
+    ));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/has no Approved decision/);
+  });
+});
+
+// ─── who may archive (#448) ─────────────────────────────────────────────────
+
+describe('TasksAppApprovalGate.assertMayArchive — who may archive (#448)', () => {
+  const world = (): CancelWorld => ({ comments: [] });
+  const gateFor = (status: string, hasPerson = true, cfoUserId: string | null = CFO_USER_ID) =>
+    new TasksAppApprovalGate(cancelProvider({ cfoUserId, approvalTaskId: TASK_ID, hasPerson, status }, world()));
+
+  it('lets only the configured CFO archive a Pending batch', async () => {
+    await expect(gateFor('Pending').assertMayArchive(BATCH_ID, { ID: CFO_USER_ID } as UserInfo)).resolves.toBeUndefined();
+  });
+
+  it.each([BUILDER_USER_ID, OTHER_USER_ID, APPROVER_USER_ID])('refuses anyone else on a Pending batch, the builder included (%s)', async (userId) => {
+    await expect(gateFor('Pending').assertMayArchive(BATCH_ID, { ID: userId } as UserInfo)).rejects.toThrow(
+      /only the company's configured approver \(AccountingCompanyProfile.ApprovalCFOUserID\) may archive it before approval/,
+    );
+  });
+
+  it('refuses the builder of a Pending batch even when the company has no CFO configured', async () => {
+    await expect(gateFor('Pending', true, null).assertMayArchive(BATCH_ID, { ID: BUILDER_USER_ID } as UserInfo)).rejects.toThrow(/may archive it before approval/);
+  });
+
+  it('still lets the builder cancel the Pending batch it may not archive', async () => {
+    await expect(gateFor('Pending').assertMayCancelPending(BATCH_ID, { ID: BUILDER_USER_ID } as UserInfo)).resolves.toBeUndefined();
+  });
+
+  it.each(['Approved', 'Failed'])('lets the configured CFO and the approver archive a %s batch', async (status) => {
+    await expect(gateFor(status).assertMayArchive(BATCH_ID, { ID: CFO_USER_ID } as UserInfo)).resolves.toBeUndefined();
+    await expect(gateFor(status).assertMayArchive(BATCH_ID, { ID: APPROVER_USER_ID } as UserInfo)).resolves.toBeUndefined();
+  });
+
+  it.each(['Approved', 'Failed'])('refuses the builder and anyone else on a %s batch', async (status) => {
+    for (const userId of [BUILDER_USER_ID, OTHER_USER_ID]) {
+      await expect(gateFor(status).assertMayArchive(BATCH_ID, { ID: userId } as UserInfo)).rejects.toThrow(
+        /or the user who approved this batch may archive it after approval/,
+      );
+    }
+  });
+
+  it('refuses an allowed user with no linked Person past approval, naming the archive', async () => {
+    await expect(gateFor('Approved', false).assertMayArchive(BATCH_ID, { ID: CFO_USER_ID } as UserInfo)).rejects.toThrow(
+      /the archive cannot be recorded on its approval Task/,
+    );
   });
 });
 

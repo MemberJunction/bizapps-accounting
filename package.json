@@ -15,7 +15,7 @@
     "build:packages": "turbo --log-order=stream build --filter=\"@mj-biz-apps/accounting-*\"",
     "test": "turbo --log-order=stream --continue test test:dom test:types --filter=\"@mj-biz-apps/accounting-*\" --filter=!@mj-biz-apps/accounting-integration-tests",
     "mj": "mj",
-    "mj:migrate": "mj migrate --schema __mj_BizAppsAccounting --dir ./migrations",
+    "mj:migrate": "mj migrate --schema __mj_BizAppsAccounting",
     "mj:codegen": "mj codegen",
     "install:deps": "pnpm install",
     "setup": "echo 'Please run: pnpm run mj:migrate && pnpm run mj:codegen && pnpm run build'",

@@ -23,6 +23,7 @@ import { WorkspaceTipDirective } from '../../../transfer-pending/workspace-tabs/
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { AccountingShellModule } from '../shell.module';
 import { AUGUST_CLOSE_IN_CHICAGO, stubbedReadsProvider, useBusinessClock } from '../../../../__tests__/support/business-clock';
+import { BatchOperatorCatalog } from '../../../../__tests__/support/batch-operator';
 
 /**
  * The batch workspace's default cutoff is the BUSINESS day, sent as a day (golive #168).
@@ -44,10 +45,14 @@ interface RecordedCall {
   Payload: Record<string, unknown>;
 }
 
-/** A provider that carries a user and records every remote operation the page routes. */
-function recordingProvider(calls: RecordedCall[]): IMetadataProvider {
-  const provider: Pick<IMetadataProvider, 'CurrentUser'> & Pick<IRemoteOperationProvider, 'RouteOperation'> = {
+/**
+ * A provider that carries a user and records every remote operation the page routes. The batch-operator
+ * grant (#448) goes to every user unless `operators` names who holds it.
+ */
+function recordingProvider(calls: RecordedCall[], operators?: readonly string[]): IMetadataProvider {
+  const provider: Pick<IMetadataProvider, 'CurrentUser' | 'Authorizations'> & Pick<IRemoteOperationProvider, 'RouteOperation'> = {
     CurrentUser: new UserInfo(),
+    Authorizations: BatchOperatorCatalog(operators),
     RouteOperation: async <TInput, TOutput>(name: string, payload: TInput): Promise<RemoteOpResult<TOutput>> => {
       calls.push({ Name: name, Payload: payload as Record<string, unknown> });
       const emptyPreview = { Candidates: [] } as unknown as TOutput;
@@ -124,9 +129,9 @@ describe('JournalEntryBatchWorkspacePageComponent — posting date (golive #315)
       .compileComponents();
   });
 
-  async function render(): Promise<JournalEntryBatchWorkspacePageComponent> {
+  async function render(operators?: readonly string[]): Promise<JournalEntryBatchWorkspacePageComponent> {
     const fixture = TestBed.createComponent(JournalEntryBatchWorkspacePageComponent);
-    fixture.componentRef.setInput('Provider', recordingProvider(calls));
+    fixture.componentRef.setInput('Provider', recordingProvider(calls, operators));
     fixture.detectChanges();
     await fixture.whenStable();
     return fixture.componentInstance;
@@ -148,6 +153,17 @@ describe('JournalEntryBatchWorkspacePageComponent — posting date (golive #315)
     page.Apply();
     await vi.waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0].Payload['PostingDate']).toBe(BUSINESS_DAY);
+  });
+
+  it('ends the "through" chip at a posting date earlier than the cutoff (#401)', async () => {
+    // The pool ends at the earlier of the two, so the chip must not describe a wider window.
+    const page = await render();
+    page.Draft!.Criteria.PostingDate = '2026-08-29';
+    expect(page.CriteriaChips).toContain('through 2026-08-29 (posting date)');
+    expect(page.CriteriaChips).not.toContain(`through ${BUSINESS_DAY}`);
+
+    page.Draft!.Criteria.PostingDate = '2026-09-02';
+    expect(page.CriteriaChips).toContain(`through ${BUSINESS_DAY}`);
   });
 
   it('sends the chosen posting date with the build', async () => {
@@ -201,6 +217,16 @@ describe('JournalEntryBatchWorkspacePageComponent — posting date (golive #315)
 
     const build = calls.find(c => c.Name === 'Accounting.BuildJournalEntryBatch');
     expect(build?.Payload['PostingDate']).toBe('2026-09-01');
+  });
+
+  it('blocks the build, and sends nothing, for a user without the batch-operator grant (#448)', async () => {
+    const page = await render([]);
+    withPreview(page, '2026-08-30');
+    page.Draft!.Criteria.PostingDate = '2026-08-30';
+    expect(page.CanBuild).toBe(false);
+    expect(page.BuildBlockedReason).toBe('Building a journal entry batch requires the Finance role.');
+    await page.Build();
+    expect(calls.find(c => c.Name === 'Accounting.BuildJournalEntryBatch')).toBeUndefined();
   });
 
   it('allows a posting date on the latest included entry\'s day', async () => {

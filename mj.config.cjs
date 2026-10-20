@@ -187,6 +187,15 @@ module.exports = {
   },
 
   // ---------------------------------------------------------------------------
+  // Migrations source
+  // ---------------------------------------------------------------------------
+  // `pnpm run mj:migrate` passes no --dir, so `mj migrate` reads this location and,
+  // with DB_PLATFORM=postgresql, swaps it to ./migrations-pg. An explicit --dir
+  // turns that swap off. Leave `mjRepoVersion` unset here: when it is set and no
+  // --dir is given, `mj migrate` fetches MJ core's migrations instead of this repo's.
+  migrationsLocation: 'filesystem:./migrations',
+
+  // ---------------------------------------------------------------------------
   // SQL Output (for migrations)
   // ---------------------------------------------------------------------------
   // Default v3.x: enabled: true, folderPath: './migrations/v3/'

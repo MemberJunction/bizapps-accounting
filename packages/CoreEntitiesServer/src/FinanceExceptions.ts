@@ -278,7 +278,12 @@ interface BoundSQL {
   Parameters: string[];
 }
 
-/** The (type, DedupeKeys) predicate for one chunk, with its parameters in placeholder order. */
+/**
+ * The (type, DedupeKeys) predicate for one chunk, with its parameters in placeholder order.
+ * DedupeKey matches case-insensitively on both platforms, as dedupeIdentity does: SQL Server's
+ * default collation already ignores case, and PostgreSQL compares lower() of both sides, the form
+ * a unique index on lower("DedupeKey") in the PostgreSQL Finance Exceptions migration can serve.
+ */
 function existingPredicate(chunk: ResolvedRaise[], platform: DatabasePlatform): BoundSQL {
   const byType = new Map<string, string[]>();
   for (const r of chunk) {
@@ -290,9 +295,15 @@ function existingPredicate(chunk: ResolvedRaise[], platform: DatabasePlatform): 
     Parameters.push(value);
     return placeholder(Parameters.length);
   };
-  const clauses = [...byType.entries()].map(
-    ([typeID, keys]) => `(FinanceExceptionTypeID = ${bind(typeID)} AND DedupeKey IN (${keys.map(bind).join(', ')}))`,
-  );
+  const clauses =
+    platform === 'postgresql'
+      ? [...byType.entries()].map(
+          ([typeID, keys]) =>
+            `(FinanceExceptionTypeID = ${bind(typeID)} AND lower(DedupeKey) IN (${keys.map(k => `lower(${bind(k)}::text)`).join(', ')}))`,
+        )
+      : [...byType.entries()].map(
+          ([typeID, keys]) => `(FinanceExceptionTypeID = ${bind(typeID)} AND DedupeKey IN (${keys.map(bind).join(', ')}))`,
+        );
   return { SQL: clauses.join(' OR '), Parameters };
 }
 

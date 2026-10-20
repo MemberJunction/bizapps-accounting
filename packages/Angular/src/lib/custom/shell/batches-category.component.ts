@@ -5,6 +5,7 @@ import { ResourceData } from '@memberjunction/core-entities';
 import { CompositeKey, RunView } from '@memberjunction/core';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { MJLeftNavSection } from '@memberjunction/ng-ui-components';
+import { UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
 import { CategoryShellBase } from './category-shell.base';
 import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
 import { JournalEntryBatchDispatchClient } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
@@ -91,8 +92,16 @@ export class BatchesCategoryComponent extends CategoryShellBase {
    * Build is the create verb for batches — they are not blank records.
    * Same remote op the old workspace used, without the include/exclude session.
    */
+  /**
+   * Whether the signed-in user holds the batch-operator Authorization (the Finance role) that a build
+   * requires on the server (#448). The server stays the authority; this only decides what shows.
+   */
+  public get MayBuild(): boolean {
+    return UserCanOperateJournalEntryBatches(this.ProviderToUse.CurrentUser, this.ProviderToUse.Authorizations);
+  }
+
   public async BuildJournalEntryBatch(): Promise<void> {
-    if (this.Building) return;
+    if (this.Building || !this.MayBuild) return;
     this.Building = true;
     this.BuildMessage = null;
     this.BuildIsError = false;

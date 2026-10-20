@@ -1,0 +1,14 @@
+[
+  {
+    "fields": {
+      "Name": "MJ.BizApps.Accounting.JournalEntryBatches.Operate",
+      "ParentID": null,
+      "IsActive": true,
+      "UseAuditLog": true,
+      "Description": "Build, regenerate, dispatch or archive a journal entry batch through the Accounting.BuildJournalEntryBatch, RegenerateJournalEntryBatch, DispatchJournalEntryBatch and ArchiveJournalEntryBatch operations. Held by the Finance role. Archiving also requires the company's configured approver (or, past approval, the batch's approver), and dispatching still requires the batch's approval."
+    },
+    "primaryKey": {
+      "ID": "96D18911-0436-4821-9CC5-78D841A32760"
+    }
+  }
+]

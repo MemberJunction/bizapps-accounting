@@ -100,9 +100,11 @@
                 </div>
               }
 
-              @if (row.Status === 'Pending' && row.Approved === false && row.ApprovalReason) {
+              <!-- A Pending batch is not approved by definition; the send gate's reason for refusing it
+                   ("records no approver") is not news to the operator, so the card states the stage. -->
+              @if (row.Status === 'Pending' && row.Approved === false) {
                 <div class="bd-card__hint">
-                  <i class="fa-solid fa-circle-info"></i> {{ row.ApprovalReason }}
+                  <i class="fa-solid fa-hourglass-half"></i> Awaiting approval
                 </div>
               }
 
@@ -150,3 +152,6 @@
     }
   </mj-page-body>
 </mj-page-layout>
+
+<!-- REJECT / ARCHIVE / CANCEL (#405): the shared batch-action dialog, as on Dispatch status and the Batches overview. -->
+<mja-batch-action-dialog [State]="Dialog" (Confirm)="ConfirmDialog()" (Dismiss)="DismissDialog()" />

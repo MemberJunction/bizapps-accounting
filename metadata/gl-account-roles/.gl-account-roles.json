@@ -34,7 +34,7 @@
   {
     "fields": {
       "Name": "Inventory",
-      "Description": "Inventory asset account (deferred domain - seeded per AM-2 for completeness).",
+      "Description": "Inventory asset account. Nothing in Accounting posts to this role yet.",
       "Status": "Active",
       "Cardinality": "One",
       "Sequence": 30
@@ -50,7 +50,7 @@
   {
     "fields": {
       "Name": "Cost of Goods Sold",
-      "Description": "COGS expense account (deferred domain - seeded per AM-2 for completeness).",
+      "Description": "Cost of goods sold expense account. Nothing in Accounting posts to this role yet.",
       "Status": "Active",
       "Cardinality": "One",
       "Sequence": 40
@@ -114,7 +114,7 @@
   {
     "fields": {
       "Name": "Deferred Revenue",
-      "Description": "Liability account credited for revenue not yet earned (subscriptions). ASSUMED addition (OQ-H): absent from the 07-03 seed list but required by the meeting's own subscription example - confirm with Amith.",
+      "Description": "Liability account credited for revenue not yet earned (subscriptions).",
       "Status": "Active",
       "Cardinality": "One",
       "Sequence": 80
@@ -185,6 +185,18 @@
     "sync": {
       "lastModified": "2026-09-29T00:01:41.013Z",
       "checksum": "6dc3eb935ef79d294795a6063baf4871490fcaa96cb5334077855902dfc52567"
+    }
+  },
+  {
+    "fields": {
+      "Name": "Gift Card Liability",
+      "Description": "Liability account for what the company owes on gift cards sold and not yet spent. Orders credits it when a gift card is sold, since the sale earns no revenue, and debits it when the card is spent as a tender. Resolved like every other role: product, product category, product type, then company. With no link, orders books the gift card to the Deferred Revenue account instead and logs a warning; the entry balances, but the two obligations cannot be told apart on the balance sheet.",
+      "Status": "Active",
+      "Cardinality": "One",
+      "Sequence": 120
+    },
+    "primaryKey": {
+      "ID": "00513874-D40A-49CD-97FF-AD55B85937FF"
     }
   }
 ]

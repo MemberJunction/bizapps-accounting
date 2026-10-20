@@ -1,6 +1,6 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, Input, inject, OnInit, OnDestroy } from '@angular/core';
 import { RunView, type IRemoteOperationProvider } from '@memberjunction/core';
-import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import { AccountingEngineBase, UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
 import { BusinessTimeZoneEngine, IsBeforeDay, IsCalendarDay, ToCalendarDay } from '@mj-biz-apps/common-entities';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
@@ -310,15 +310,23 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     const d = this.Draft;
     if (!d) return [];
     const chips: string[] = [];
-    // An empty cutoff is shown, not left to the absence of a chip: the pool then runs through the
-    // posting date, which always ends it (golive #315).
-    chips.push(d.Criteria.Cutoff ? `through ${d.Criteria.Cutoff}` : 'no cutoff — through the posting date');
+    chips.push(this.poolEndChip(d.Criteria.Cutoff, d.Criteria.PostingDate));
     chips.push(`posting date ${d.Criteria.PostingDate || 'not set'}`);
     chips.push(this.companyChipLabel(d.Criteria.CompanyIDs));
     chips.push(this.EntryTypeScopes.find((s) => s.Id === d.Criteria.EntryTypeScope)?.Label ?? 'All');
     chips.push(d.Criteria.Source === 'View' ? 'from a saved view' : 'oldest-forward');
     chips.push(`→ ${d.Criteria.TargetSystem}`);
     return chips;
+  }
+
+  /** The chip for where the candidate pool ends: the earlier of the cutoff and the posting date
+   *  (#401). An empty cutoff is shown, not left to the absence of a chip: the pool then runs through
+   *  the posting date, which always ends it (golive #315). Both are `YYYY-MM-DD`, so they compare as
+   *  strings. */
+  private poolEndChip(cutoff: string | null | undefined, postingDate: string | null | undefined): string {
+    if (!cutoff) return 'no cutoff — through the posting date';
+    if (postingDate && postingDate < cutoff) return `through ${postingDate} (posting date)`;
+    return `through ${cutoff}`;
   }
 
   private companyChipLabel(ids: string[]): string {
@@ -459,8 +467,16 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
 
   // ─── build ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Whether the signed-in user holds the batch-operator Authorization (the Finance role) that a build
+   * requires on the server (#448). The server stays the authority; this only decides what shows.
+   */
+  public get MayBuild(): boolean {
+    return UserCanOperateJournalEntryBatches(this.ProviderToUse.CurrentUser, this.ProviderToUse.Authorizations);
+  }
+
   public get CanBuild(): boolean {
-    return !!this.Preview && this.IncludedCount > 0 && !this.IsBuilding && !this.IsBuilt && this.IsBalanced && !this.PostingDateProblem
+    return this.MayBuild && !!this.Preview && this.IncludedCount > 0 && !this.IsBuilding && !this.IsBuilt && this.IsBalanced && !this.PostingDateProblem
       && (!this.PostingDateWarning || this.PostingDateConfirmed);
   }
 
@@ -529,6 +545,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   }
 
   public get BuildBlockedReason(): string | null {
+    if (!this.MayBuild) return 'Building a journal entry batch requires the Finance role.';
     if (this.IsBuilt) return 'This tab is already built.';
     if (!this.Preview || this.Preview.Candidates.length === 0) return 'Nothing matches these criteria.';
     if (this.IncludedCount === 0) return 'Every entry is excluded — nothing to build.';

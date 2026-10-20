@@ -1,0 +1,77 @@
+<mj-dialog [Visible]="State.IsOpen" [Title]="State.Title" Width="560px" (Close)="OnDismiss()">
+  @if (State.Batch; as batch) {
+    @switch (State.Action) {
+      @case ('Reject') {
+        <p>
+          Rejecting <span class="bad-mono">{{ batch.JournalEntryBatchNumber }}</span> cancels it and returns its
+          {{ batch.TotalEntries }} journal entries to the candidate pool for the next build.
+        </p>
+      }
+      @case ('Archive') {
+        <p>
+          Archiving <span class="bad-mono">{{ batch.JournalEntryBatchNumber }}</span> closes it for good: it never posts to
+          {{ batch.TargetSystem }}, and its {{ batch.TotalEntries }} journal entries stay locked to it. This is not a cancellation.
+        </p>
+      }
+      @default {
+        <p>
+          Cancelling <span class="bad-mono">{{ batch.JournalEntryBatchNumber }}</span> deletes its summary entry and returns its
+          {{ batch.TotalEntries }} journal entries to the next build, which needs a new approval.
+          @if (batch.Status === 'Pending') { Its approval request is closed. }
+        </p>
+        @if (State.ERPCheckReason === null) {
+          @if (batch.Status === 'Failed') {
+            <p>
+              {{ batch.TargetSystem }} is checked for document number <span class="bad-mono">{{ batch.JournalEntryBatchNumber }}</span>
+              first. If the failed send posted anyway, the cancel is refused: retry the batch instead, and the retry records it posted.
+            </p>
+          }
+        } @else if (State.ERPCheckKind === 'Mismatch') {
+          <p><strong>{{ batch.TargetSystem }} already holds a posting under this document number.</strong> {{ State.ERPCheckReason }}</p>
+          <p>
+            If that posting is this batch, do not cancel: its entries would post a second time. Reconcile it in
+            {{ batch.TargetSystem }} instead. To cancel anyway, type the batch number:
+          </p>
+          <input
+            type="text"
+            class="mj-input bad-mono"
+            [(ngModel)]="State.MismatchText"
+            [attr.aria-label]="'Type ' + batch.JournalEntryBatchNumber + ' to cancel anyway'"
+            [placeholder]="batch.JournalEntryBatchNumber" />
+        } @else {
+          <p>{{ State.ERPCheckReason }}</p>
+          <p>
+            In {{ batch.TargetSystem }}, search for document number <span class="bad-mono">{{ batch.JournalEntryBatchNumber }}</span>.
+            Cancel only if it is not there.
+          </p>
+        }
+      }
+    }
+    <label class="bad-reason__label" for="bad-reason">Reason (required)</label>
+    <textarea id="bad-reason" class="mj-input bad-reason__input" rows="3" [(ngModel)]="State.Reason"></textarea>
+    @if (State.ReasonProblem) {
+      <span class="bad-reason__problem" role="alert">{{ State.ReasonProblem }}</span>
+    }
+  }
+  <mj-dialog-actions>
+    <button mjButton type="button" [variant]="State.ERPCheckKind === 'Mismatch' ? 'flat' : 'primary'" size="sm"
+            [disabled]="!State.CanConfirm" (click)="OnConfirm()">
+      @if (State.Busy) {
+        <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Working…
+      } @else {
+        @switch (State.Action) {
+          @case ('Reject') { <i class="fa-solid fa-thumbs-down" aria-hidden="true"></i> Reject batch }
+          @case ('Archive') { <i class="fa-solid fa-box-archive" aria-hidden="true"></i> Archive batch }
+          @default {
+            <i class="fa-solid fa-ban" aria-hidden="true"></i>
+            @if (State.ERPCheckReason === null) { Cancel batch }
+            @else if (State.ERPCheckKind === 'Mismatch') { It is not this batch — cancel anyway }
+            @else { It has not posted — cancel batch }
+          }
+        }
+      }
+    </button>
+    <button mjButton type="button" [variant]="State.ERPCheckKind === 'Mismatch' ? 'primary' : 'flat'" size="sm"
+            [disabled]="State.Busy" (click)="OnDismiss()">Keep batch</button>
+  </mj-dialog-actions>
+</mj-dialog>

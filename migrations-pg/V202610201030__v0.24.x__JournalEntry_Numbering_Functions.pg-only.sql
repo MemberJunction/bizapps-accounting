@@ -37,7 +37,7 @@
 -- -----------------------------------------------------------------------------
 -- Journal entry number: per company, per fiscal year
 -- -----------------------------------------------------------------------------
-CREATE FUNCTION __mj_BizAppsAccounting."spAssignNextJournalEntryNumber"(
+CREATE FUNCTION "__mj_BizAppsAccounting"."spAssignNextJournalEntryNumber"(
     p_company_id UUID,
     p_fiscal_year INTEGER
 )
@@ -49,14 +49,14 @@ DECLARE
     v_next_seq INTEGER;
 BEGIN
     SELECT "CompanyCode" INTO v_company_code
-      FROM __mj_BizAppsAccounting."AccountingCompanyProfile"
+      FROM "__mj_BizAppsAccounting"."AccountingCompanyProfile"
      WHERE "ID" = p_company_id;
     IF v_company_code IS NULL THEN
         RAISE EXCEPTION 'spAssignNextJournalEntryNumber: no AccountingCompanyProfile exists for @CompanyID (the company must be accounting-enabled before JEs can be numbered).'
             USING ERRCODE = 'P0001', DETAIL = '50020';
     END IF;
 
-    INSERT INTO __mj_BizAppsAccounting."JournalEntrySequence" AS s ("CompanyID", "FiscalYear", "NextSequenceNumber")
+    INSERT INTO "__mj_BizAppsAccounting"."JournalEntrySequence" AS s ("CompanyID", "FiscalYear", "NextSequenceNumber")
     VALUES (p_company_id, p_fiscal_year, 2)
     ON CONFLICT ("CompanyID", "FiscalYear")
     DO UPDATE SET "NextSequenceNumber" = s."NextSequenceNumber" + 1
@@ -69,14 +69,14 @@ $$;
 -- -----------------------------------------------------------------------------
 -- Journal entry batch number: one global counter (batches are multi-company)
 -- -----------------------------------------------------------------------------
-CREATE FUNCTION __mj_BizAppsAccounting."spAssignNextJournalEntryBatchNumber"()
+CREATE FUNCTION "__mj_BizAppsAccounting"."spAssignNextJournalEntryBatchNumber"()
 RETURNS VARCHAR(40)
 LANGUAGE plpgsql
 AS $$
 DECLARE
     v_next_seq INTEGER;
 BEGIN
-    INSERT INTO __mj_BizAppsAccounting."JournalEntryBatchSequence" AS s ("ID", "NextSequenceNumber")
+    INSERT INTO "__mj_BizAppsAccounting"."JournalEntryBatchSequence" AS s ("ID", "NextSequenceNumber")
     VALUES (1, 2)
     ON CONFLICT ("ID")
     DO UPDATE SET "NextSequenceNumber" = s."NextSequenceNumber" + 1
@@ -91,5 +91,5 @@ $$;
 -- Written in the form the converter emits for every grant: a host without the
 -- cdp roles skips the grant instead of failing the migration.
 -- -----------------------------------------------------------------------------
-DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spAssignNextJournalEntryNumber"(UUID, INTEGER) TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
-DO $$ BEGIN GRANT EXECUTE ON FUNCTION __mj_BizAppsAccounting."spAssignNextJournalEntryBatchNumber"() TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spAssignNextJournalEntryNumber"(UUID, INTEGER) TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spAssignNextJournalEntryBatchNumber"() TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
