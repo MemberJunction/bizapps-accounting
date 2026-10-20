@@ -20,5 +20,8 @@ export default defineConfig({
     // *.dom.test.ts are DOM specs — this package's (vitest.dom.config.ts) and tier 4's under
     // test-harnesses/gui/ — never picked up here.
     exclude: ['**/node_modules/**', '**/dist/**', '**/*.dom.test.ts'],
+    // common-ng ships ngc output with extensionless relative imports, which Node's ESM loader does
+    // not resolve. Inlining it lets Vite resolve them, as the host build does.
+    server: { deps: { inline: ['@mj-biz-apps/common-ng'] } },
   },
 });
