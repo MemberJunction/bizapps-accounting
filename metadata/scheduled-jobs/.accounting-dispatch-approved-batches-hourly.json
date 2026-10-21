@@ -1,0 +1,44 @@
+[
+  {
+    "_comments": [
+      "The scheduled half of dispatch: sends every Approved batch, the batches a CFO approved in the app, to its ERP. The Dispatch button is the manual half; both call sendJournalEntryBatch.",
+      "",
+      "  · CronExpression `0 30 * * * *`: six fields, seconds first, so 30 minutes past every hour. An approval waits at most an hour for its send.",
+      "    The half hour keeps it off the 01:00 nightly post and the 02:00 ERP sync.",
+      "",
+      "  · Approved only. A Failed batch may already be in the ERP, so it is retried by an operator after checking the ERP, never by this job.",
+      "    A send refused before Sent (approval gate, content changed since approval, number already in the ERP) leaves the batch Approved,",
+      "    and every run reports it again until someone acts on it.",
+      "",
+      "  · ConcurrencyMode Skip: an overlapping run would race the first for the same batches (the send-once trigger would stop the second,",
+      "    but it would still report). MissedRunPolicy RunOnce: each run sends everything Approved, so one catch-up run covers any number missed.",
+      "",
+      "  · NotifyOnFailure: a run where a batch did not post reports POST_INCOMPLETE with each batch's reason. OwnerUserID / NotifyUserID stay",
+      "    NULL, as on the other jobs.",
+      "",
+      "  · Hosts disable this row rather than deleting it."
+    ],
+    "fields": {
+      "Name": "Accounting — Dispatch approved journal entry batches (hourly)",
+      "Description": "Sends every Approved journal entry batch to its ERP, as the Dispatch button does. Approves nothing and never retries a Failed batch.",
+      "JobTypeID": "3B94DD43-E961-4D85-B7F4-B6783D748766",
+      "CronExpression": "0 30 * * * *",
+      "Timezone": "America/Chicago",
+      "Status": "Active",
+      "ConcurrencyMode": "Skip",
+      "MissedRunPolicy": "RunOnce",
+      "RunImmediatelyIfNeverRun": false,
+      "MaxRuntimeMinutes": 50,
+      "NotifyOnSuccess": false,
+      "NotifyOnFailure": true,
+      "NotifyViaEmail": false,
+      "NotifyViaInApp": true,
+      "Configuration": {
+        "ActionID": "FA82A39C-0DA9-4CBB-8A4A-6CDFFB78415D"
+      }
+    },
+    "primaryKey": {
+      "ID": "53D5BC72-32D2-4F20-9535-FBE2958F3A3C"
+    }
+  }
+]
