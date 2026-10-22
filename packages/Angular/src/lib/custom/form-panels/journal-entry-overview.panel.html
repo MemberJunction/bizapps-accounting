@@ -41,7 +41,16 @@
                             <div class="mja-je-ov-fact__l">Batch</div>
                             <div class="mja-je-ov-fact__v">
                                 @if (Record.JournalEntryBatchID) {
-                                    <button type="button" class="mja-je-link" (click)="OpenBatch()">
+                                    <button
+                                        type="button"
+                                        class="mja-je-link"
+                                        [mjRecordLink]="Record"
+                                        FieldName="JournalEntryBatchID"
+                                        [EntityName]="'MJ_BizApps_Accounting: Journal Entry Batches'"
+                                        [RecordID]="Record.JournalEntryBatchID"
+                                        [DisplayName]="Record.JournalEntryBatch"
+                                        [HandleClick]="false"
+                                        (click)="OpenBatch()">
                                         {{ Record.JournalEntryBatch || 'Open batch' }}
                                     </button>
                                 } @else {
@@ -80,7 +89,15 @@
                             <div>
                                 <div class="mja-je-ov-fact__l">Record</div>
                                 <div class="mja-je-ov-fact__v">
-                                    <button type="button" class="mja-je-link" (click)="OpenSource()">{{ Record.LinkedRecordID }}</button>
+                                    <button
+                                        type="button"
+                                        class="mja-je-link"
+                                        [mjRecordLink]="Record"
+                                        FieldName="LinkedRecordID"
+                                        [EntityName]="Record.LinkedEntity"
+                                        [RecordID]="Record.LinkedRecordID"
+                                        [HandleClick]="false"
+                                        (click)="OpenSource()">{{ Record.LinkedRecordID }}</button>
                                 </div>
                             </div>
                         </div>
@@ -98,14 +115,32 @@
                     @if (Record.ReversesJournalEntryID) {
                         <p class="mja-je-ov-note">
                             This entry reverses
-                            <button type="button" class="mja-je-link" (click)="OpenReverses()">
+                            <button
+                                type="button"
+                                class="mja-je-link"
+                                [mjRecordLink]="Record"
+                                FieldName="ReversesJournalEntryID"
+                                [EntityName]="'MJ_BizApps_Accounting: Journal Entries'"
+                                [RecordID]="Record.ReversesJournalEntryID"
+                                [DisplayName]="Record.ReversesJournalEntry"
+                                [HandleClick]="false"
+                                (click)="OpenReverses()">
                                 {{ Record.ReversesJournalEntry || 'the original entry' }}
                             </button>.
                         </p>
                     } @else if (Record.ReversedByJournalEntryID) {
                         <p class="mja-je-ov-note">
                             Reversed by
-                            <button type="button" class="mja-je-link" (click)="OpenReversedBy()">
+                            <button
+                                type="button"
+                                class="mja-je-link"
+                                [mjRecordLink]="Record"
+                                FieldName="ReversedByJournalEntryID"
+                                [EntityName]="'MJ_BizApps_Accounting: Journal Entries'"
+                                [RecordID]="Record.ReversedByJournalEntryID"
+                                [DisplayName]="Record.ReversedByJournalEntry"
+                                [HandleClick]="false"
+                                (click)="OpenReversedBy()">
                                 {{ Record.ReversedByJournalEntry || 'another entry' }}
                             </button>.
                         </p>
