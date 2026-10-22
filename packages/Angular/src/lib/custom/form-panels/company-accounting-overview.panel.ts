@@ -8,7 +8,7 @@ import {
     MJCardFooterDirective,
 } from '@memberjunction/ng-ui-components';
 import { NavigationService } from '@memberjunction/ng-shared';
-import { BaseFormComponent, BaseFormPanel } from '@memberjunction/ng-base-forms';
+import { BaseFormComponent, BaseFormPanel, BaseFormsModule } from '@memberjunction/ng-base-forms';
 import { RegisterClassEx } from '@memberjunction/global';
 import { MJCompanyEntity } from '@memberjunction/core-entities';
 import { formatJournalDate } from './journal-entry-panel.helpers';
@@ -188,6 +188,7 @@ const COMP_OVERVIEW_CSS = `
     selector: 'mja-company-accounting-overview',
     imports: [
         CommonModule,
+        BaseFormsModule,
         MJCardGridComponent,
         MJCardComponent,
         MJCardToolsDirective,
@@ -316,7 +317,13 @@ const COMP_OVERVIEW_CSS = `
                                 </thead>
                                 <tbody>
                                     @for (b of Batches; track b.ID) {
-                                        <tr (click)="OnBatchClick(b)">
+                                        <tr
+                                            mjRecordLink
+                                            [EntityName]="'MJ_BizApps_Accounting: Journal Entry Batches'"
+                                            [RecordID]="b.ID"
+                                            [DisplayName]="b.BatchNumber"
+                                            [HandleClick]="false"
+                                            (click)="OnBatchClick(b)">
                                             <td class="mja-code">{{ b.BatchNumber }}</td>
                                             <td>{{ FormatDate(b.PostingDate) }}</td>
                                             <td>\${{ b.TotalDebits.toLocaleString('en-US', { minimumFractionDigits: 2 }) }}</td>
