@@ -14,7 +14,13 @@
                 </div>
                 <div class="mja-je-hero__meta">
                     @if (Record.Company) {
-                        <span>{{ Record.Company }}</span>
+                        <span
+                            [mjRecordLink]="Record"
+                            FieldName="CompanyID"
+                            [EntityName]="'MJ: Companies'"
+                            [RecordID]="Record.CompanyID"
+                            [DisplayName]="Record.Company"
+                            (Navigate)="FormComponent.OnFormNavigate($event)">{{ Record.Company }}</span>
                     }
                     <span>{{ EffectiveDateLabel }}</span>
                     @if (Record.Description && !Collapsed) {
@@ -54,7 +60,14 @@
             </div>
             <div class="mja-je-stat">
                 <span class="mja-je-stat__label">Company</span>
-                <span class="mja-je-stat__value">{{ Record.Company || '—' }}</span>
+                <span
+                    class="mja-je-stat__value"
+                    [mjRecordLink]="Record"
+                    FieldName="CompanyID"
+                    [EntityName]="'MJ: Companies'"
+                    [RecordID]="Record.CompanyID"
+                    [DisplayName]="Record.Company"
+                    (Navigate)="FormComponent.OnFormNavigate($event)">{{ Record.Company || '—' }}</span>
             </div>
         </div>
 

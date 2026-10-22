@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
+import { BaseFormsModule } from '@memberjunction/ng-base-forms';
 import { RunView, RunViewParams } from '@memberjunction/core';
 import type { MJCompanyEntity } from '@memberjunction/core-entities';
 import { CompanyAccountingOverviewComponent } from './company-accounting-overview.panel';
@@ -23,7 +24,7 @@ describe('CompanyAccountingOverviewComponent — PostingDate reads as the stored
   useBusinessClock(WEST_OF_UTC);
 
   beforeEach(() => {
-    TestBed.overrideComponent(CompanyAccountingOverviewComponent, { set: { imports: [CommonModule], schemas: [CUSTOM_ELEMENTS_SCHEMA] } });
+    TestBed.overrideComponent(CompanyAccountingOverviewComponent, { set: { imports: [CommonModule, BaseFormsModule], schemas: [CUSTOM_ELEMENTS_SCHEMA] } });
     // `simple` results arrive as JSON: the DATE column is an ISO string at UTC midnight.
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
       p.EntityName === BATCH_ENTITY
