@@ -1,5 +1,15 @@
 # @mj-biz-apps/accounting-actions
 
+## 0.25.0
+
+### Minor Changes
+
+- b3592ca: Add `Accounting.DispatchApprovedJournalEntryBatches` and an hourly scheduled job that runs it. The job sends every Approved journal entry batch to its ERP through the same send as the Dispatch button, so each send passes the CFO approval gate, the approved-content check and the ERP lookup. It approves nothing and never retries a Failed batch. Only the MJ system user may run it.
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-core-entities-server@0.25.0
+
 ## 0.24.0
 
 ### Patch Changes
