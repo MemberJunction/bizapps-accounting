@@ -1,5 +1,13 @@
 # @mj-biz-apps/accounting-entities
 
+## 0.25.0
+
+### Minor Changes
+
+- 1d11c39: Release seed for 0.25: `V202610231900__v0.25.x__Metadata_Sync.sql` and its PostgreSQL counterpart create the Dispatch Approved Journal Entry Batches action with its four params, and set `EntityIDFieldName` on the three polymorphic record-ID fields (Finance Exceptions, GL Account Links, Journal Entries), for hosts, which install by migration and never read `metadata/`. As in earlier releases, `metadata/scheduled-jobs` is not seeded, so the new hourly dispatch job is not created on hosts.
+- 69680e9: Populate `EntityField.EntityIDFieldName` metadata on polymorphic foreign-key record-ID fields so MemberJunction forms, grids, cards, and detail panels resolve target record names and render smart clickable record links.
+- a54fd4e: `metadata/entities/.polymorphic-fk-entity-fields.json` gives every `MJ: Entity Fields` entry a `primaryKey` lookup (`@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=<entity>&Name=<field>`). The entries had none, and `mj sync push` creates a new row for any record without a `primaryKey`, so on a fresh database it tried to insert a second field row with a NULL `EntityID` and the app's whole metadata push rolled back. With the lookup, push updates the field row CodeGen created and sets its `EntityIDFieldName`.
+
 ## 0.24.0
 
 ### Minor Changes
