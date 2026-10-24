@@ -1,5 +1,5 @@
 /**
- * Build, Regenerate, Dispatch and Archive require the batch-operator Authorization, held by the
+ * Build, Regenerate, Dispatch, Resume and Archive require the batch-operator Authorization, held by the
  * Finance role (#448). The check runs first, before any read, so a caller without it learns only
  * that. The engine is mocked: what is under test is whether the operation reaches it.
  */
@@ -11,12 +11,13 @@ import {
   BuildJournalEntryBatchOperation,
   DispatchJournalEntryBatchOperation,
   RegenerateJournalEntryBatchOperation,
+  ResumeJournalEntryBatchPostingOperation,
 } from '../JournalEntryBatchOperations.js';
-import { buildJournalEntryBatch, regenerateJournalEntryBatch, sendJournalEntryBatch } from '../JournalEntryBatchEngine.js';
+import { buildJournalEntryBatch, regenerateJournalEntryBatch, resumeJournalEntryBatchPosting, sendJournalEntryBatch } from '../JournalEntryBatchEngine.js';
 
 vi.mock('../JournalEntryBatchEngine.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../JournalEntryBatchEngine.js')>();
-  return { ...actual, buildJournalEntryBatch: vi.fn(), regenerateJournalEntryBatch: vi.fn(), sendJournalEntryBatch: vi.fn() };
+  return { ...actual, buildJournalEntryBatch: vi.fn(), regenerateJournalEntryBatch: vi.fn(), resumeJournalEntryBatchPosting: vi.fn(), sendJournalEntryBatch: vi.fn() };
 });
 
 const BATCH_ID = 'bbbbbbbb-0000-4000-8000-000000000001';
@@ -56,6 +57,13 @@ const cases = [
     })().Run(),
     reached: () => vi.mocked(sendJournalEntryBatch),
   },
+  {
+    name: 'Resume',
+    run: (p: IMetadataProvider, u: UserInfo) => new (class extends ResumeJournalEntryBatchPostingOperation {
+      public Run() { return this.InternalExecute({ JournalEntryBatchID: BATCH_ID }, p, u); }
+    })().Run(),
+    reached: () => vi.mocked(resumeJournalEntryBatchPosting),
+  },
 ] as const;
 
 describe('batch operations require the batch-operator Authorization (#448)', () => {
@@ -63,6 +71,7 @@ describe('batch operations require the batch-operator Authorization (#448)', () 
     vi.mocked(buildJournalEntryBatch).mockReset().mockResolvedValue({} as never);
     vi.mocked(regenerateJournalEntryBatch).mockReset().mockResolvedValue({} as never);
     vi.mocked(sendJournalEntryBatch).mockReset().mockResolvedValue({ Status: 'Posted', ExternalJournalEntryBatchRef: 'JEB-1' } as never);
+    vi.mocked(resumeJournalEntryBatchPosting).mockReset().mockResolvedValue({ batch: { Status: 'GLPosted' }, journalEntriesPosted: 1 } as never);
   });
 
   it.each(cases)('$name refuses a user without it, before reaching the engine', async ({ run, reached }) => {

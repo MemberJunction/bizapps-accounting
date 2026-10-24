@@ -46,7 +46,8 @@ export async function defaultAccountingVerbRunner(call: AccountingVerbCall): Pro
         Message: `Cannot reach the ERP: no action named ${call.Verb} is installed.`,
       };
     }
-    const params = Object.entries({ CompanyID: call.CompanyID, ...call.Params }).map(([Name, Value]) => ({
+    // CompanyID is added last, so a caller param of the same name cannot override the chosen company.
+    const params = Object.entries({ ...call.Params, CompanyID: call.CompanyID }).map(([Name, Value]) => ({
       Name,
       Value,
       Type: 'Input' as const,
