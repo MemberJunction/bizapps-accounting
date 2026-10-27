@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { IMetadataProvider, Metadata, RunView, RunViewParams, UserInfo } from '@memberjunction/core';
 import { BatchOperatorCatalog } from '../../../__tests__/support/batch-operator';
+import { ComponentCss, RuleBody } from '../../../__tests__/support/component-styles';
 import { AccountingBatchesPageComponent, BatchItem } from './accounting-batches.component';
 import {
   BuildJournalEntryBatchOptionsInput,
@@ -1069,5 +1070,34 @@ describe('AccountingBatchesPageComponent — Approve, Reject, Dispatch and Retry
     expect(confirms).toEqual([false, true]);
     expect(page.RetryConfirm.IsOpen).toBe(false);
     expect(page.ActionMessage).toBe('Dispatched batch JEB-TEST-0003 to BusinessCentral: Posted (ref BC-1).');
+  });
+});
+
+/**
+ * THE PAGE CARRIES ITS OWN SCROLLBAR (bc-aidp-next-golive#367).
+ *
+ * Reported together with the dashboard, and the same defect: the shell sizes this host to its
+ * content pane and clips what overflows, with no window scrollbar behind it, so looking for Sent
+ * batches below the first screen found nothing to scroll. The host was height:100% with overflow
+ * left at its initial `visible`, and the layout inside it min-height:100% with no scroller either.
+ *
+ * Measured in a browser against the shipped rules, ten cards in a 300px pane: clientHeight 300
+ * against scrollHeight 704, and scrollTop stayed 0 on the host, the layout and the document alike.
+ */
+describe('AccountingBatchesPageComponent — the batches page scrolls (DOM)', () => {
+  const css = ComponentCss(AccountingBatchesPageComponent);
+
+  it('hides overflow on the host, so the scrollbar belongs to the page and not the shell', () => {
+    const host = RuleBody(css, '[_nghost');
+    expect(host).toContain('overflow: hidden');
+    expect(host).toContain('height: 100%');
+  });
+
+  it('scrolls the layout, and does not let it grow past the host instead', () => {
+    const layout = RuleBody(css, '.mja-batches-layout[');
+    expect(layout).toContain('overflow-y: auto');
+    expect(layout).toContain('min-height: 0');
+    // min-height:100% is what made this box taller than the thing meant to scroll it.
+    expect(layout).not.toContain('min-height: 100%');
   });
 });
