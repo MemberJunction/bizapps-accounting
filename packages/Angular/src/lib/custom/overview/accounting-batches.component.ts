@@ -524,14 +524,34 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
         </div>
     `,
     styles: [`
-        :host { display: block; width: 100%; height: 100%; box-sizing: border-box; }
+        /* The page's own scroll container (bc-aidp-next-golive#367).
+
+           The host is sized to the shell's content pane, so anything past the first screen has to
+           scroll INSIDE it -- there is no window scrollbar to fall back on, and the shell's content
+           pane clips what overflows. The host therefore hides its own overflow and the layout below
+           carries overflow-y:auto, which is how the orders dashboard does it. What this replaces
+           was min-height:100% on the layout with no scroller anywhere: the content grew past the
+           host exactly as intended and then had nowhere to go. */
+        :host {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            min-height: 0;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
 
         .mja-batches-layout {
             display: flex;
             flex-direction: column;
             gap: 16px;
             padding: 20px 24px;
-            min-height: 100%;
+            height: 100%;
+            /* min-height:0 so a flex child that overflows cannot push this box taller than the
+               host -- without it auto resolves to the content height and nothing scrolls. */
+            min-height: 0;
+            overflow-y: auto;
             background: var(--mj-bg-surface-sunken, #f8fafc);
             box-sizing: border-box;
         }
