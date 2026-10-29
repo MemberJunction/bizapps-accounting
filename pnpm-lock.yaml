@@ -59,7 +59,7 @@ importers:
   packages/Actions:
     dependencies:
       '@mj-biz-apps/accounting-core-entities-server':
-        specifier: ^0.25.0
+        specifier: ^0.23.0
         version: link:../CoreEntitiesServer
       zod:
         specifier: ^3.25.28
@@ -114,10 +114,10 @@ importers:
   packages/Angular:
     dependencies:
       '@mj-biz-apps/accounting-engine-base':
-        specifier: ^0.25.0
+        specifier: ^0.23.0
         version: link:../EngineBase
       '@mj-biz-apps/accounting-entities':
-        specifier: ^0.25.0
+        specifier: ^0.23.0
         version: link:../Entities
       ag-grid-angular:
         specifier: ^35.0.1
@@ -223,10 +223,10 @@ importers:
   packages/CoreEntitiesServer:
     dependencies:
       '@mj-biz-apps/accounting-engine-base':
-        specifier: ^0.25.0
+        specifier: ^0.23.0
         version: link:../EngineBase
       '@mj-biz-apps/accounting-entities':
-        specifier: ^0.25.0
+        specifier: ^0.23.0
         version: link:../Entities
     devDependencies:
       '@memberjunction/actions':
@@ -275,7 +275,7 @@ importers:
   packages/EngineBase:
     dependencies:
       '@mj-biz-apps/accounting-entities':
-        specifier: ^0.25.0
+        specifier: ^0.23.0
         version: link:../Entities
     devDependencies:
       '@memberjunction/core':
@@ -328,7 +328,7 @@ importers:
         specifier: ^6.1.6
         version: 6.1.6(@aws-sdk/credential-provider-node@3.972.81)(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(@smithy/signature-v4@5.7.3)(axios@1.19.0)(chokidar@3.6.0)(encoding@0.1.13)(typescript@5.9.3)(ws@8.21.3)(zod@3.25.76)
       '@mj-biz-apps/accounting-entities':
-        specifier: '>=0.25.0'
+        specifier: '>=0.23.0'
         version: link:../Entities
     devDependencies:
       '@types/node':
@@ -347,13 +347,13 @@ importers:
   packages/Server:
     dependencies:
       '@mj-biz-apps/accounting-actions':
-        specifier: ^0.25.0
+        specifier: ^0.23.0
         version: link:../Actions
       '@mj-biz-apps/accounting-core-entities-server':
-        specifier: ^0.25.0
+        specifier: ^0.23.0
         version: link:../CoreEntitiesServer
       '@mj-biz-apps/accounting-entities':
-        specifier: ^0.25.0
+        specifier: ^0.23.0
         version: link:../Entities
       class-validator:
         specifier: ^0.14.3

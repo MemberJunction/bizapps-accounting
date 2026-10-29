@@ -2,6 +2,7 @@ import { Directive, ChangeDetectorRef, inject } from '@angular/core';
 import { BaseDashboard } from '@memberjunction/ng-shared';
 import { MJLeftNavItem, MJLeftNavSection } from '@memberjunction/ng-ui-components';
 import { CompanyScopeService } from '../shared/company-scope.service';
+import { DashboardPeriodService } from '../shared/dashboard-period.service';
 import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
 
 /**
@@ -25,6 +26,8 @@ import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-re
 export abstract class CategoryShellBase extends BaseDashboard {
   protected cdr = inject(ChangeDetectorRef);
   public Scope = inject(CompanyScopeService);
+  /** The dashboards' shared period. Loaded here with the scope so a dashboard opens on the saved one. */
+  public Periods = inject(DashboardPeriodService);
   /** Provided per shell (see the component's `providers`), so two open categories stay independent. */
   public PageRefresh = inject(PageRefreshService);
 
@@ -50,7 +53,8 @@ export abstract class CategoryShellBase extends BaseDashboard {
    */
   protected async loadData(): Promise<void> {
     if (!this.ActivePageId) this.ActivePageId = this.DefaultPageId;
-    await this.Scope.Load(this.ProviderToUse.CurrentUser, this.ProviderToUse);
+    // The dashboards' period loads beside the scope; both are idempotent, so every shell asks.
+    await Promise.all([this.Scope.Load(this.ProviderToUse.CurrentUser, this.ProviderToUse), this.Periods.Load()]);
     await this.loadCategoryData();
     this.cdr.markForCheck();
   }

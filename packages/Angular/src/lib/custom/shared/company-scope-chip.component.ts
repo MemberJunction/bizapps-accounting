@@ -1,5 +1,7 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, ElementRef, HostListener, inject } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, DestroyRef, ElementRef, HostListener, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { merge } from 'rxjs';
 import { CompanyScopeService, ScopeCompany } from './company-scope.service';
 
 /**
@@ -56,12 +58,23 @@ import { CompanyScopeService, ScopeCompany } from './company-scope.service';
   `,
   styleUrls: ['./company-scope-chip.component.css'],
 })
-export class CompanyScopeChipComponent {
+export class CompanyScopeChipComponent implements OnInit {
   public Scope = inject(CompanyScopeService);
   private cdr = inject(ChangeDetectorRef);
   private host = inject(ElementRef<HTMLElement>);
+  private destroyRef = inject(DestroyRef);
 
   public MenuOpen = false;
+
+  /**
+   * The scope also changes from outside this chip (the dashboards' filter bar sets it), and an OnPush
+   * chip would keep showing the old label until its own next event. Re-render on every change.
+   */
+  ngOnInit(): void {
+    merge(this.Scope.SelectedIDs$, this.Scope.Companies$)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.cdr.markForCheck());
+  }
 
   public get Companies(): ScopeCompany[] {
     return this.Scope.Companies;

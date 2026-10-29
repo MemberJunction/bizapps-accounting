@@ -43,7 +43,7 @@
     "@memberjunction/ng-shared": "^6.1.6",
     "@memberjunction/ng-shared-generic": "^6.1.6",
     "@memberjunction/ng-ui-components": "^6.1.6",
-    "@mj-biz-apps/common-ng": "^5.50.2",
+    "@mj-biz-apps/common-ng": "^5.55.0",
     "@mj-biz-apps/common-entities": "^5.50.2",
     "rxjs": "^7.8.2",
     "@memberjunction/ng-base-types": "^6.1.6",
@@ -77,7 +77,7 @@
     "@memberjunction/ng-shared": "^6.1.6",
     "@memberjunction/ng-shared-generic": "^6.1.6",
     "@memberjunction/ng-ui-components": "^6.1.6",
-    "@mj-biz-apps/common-ng": "5.50.2",
+    "@mj-biz-apps/common-ng": "5.55.0",
     "@mj-biz-apps/common-entities": "5.50.2",
     "@memberjunction/ng-base-types": "^6.1.6"
   },
