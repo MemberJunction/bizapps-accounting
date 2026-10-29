@@ -78,7 +78,7 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 
 /**
  * Refuse a caller who does not hold the batch-operator Authorization (#448), before anything is read.
- * Build, Regenerate, Dispatch and Archive change what reaches the ERP or keep entries out of it for
+ * Build, Regenerate, Dispatch, Resume and Archive change what reaches the ERP or keep entries out of it for
  * good, so beyond entity permissions they need the Finance role's grant. Checked inside the operation,
  * where the request's provider (and its Authorization catalog) is in hand, as ClearFinanceException does.
  * The scheduled build and auto-post call the engine directly, not these operations, so they are unaffected.
@@ -321,6 +321,7 @@ export class ResumeJournalEntryBatchPostingOperation extends BaseRemotableOperat
   public readonly RequiredScope = 'accounting:post';
 
   protected async InternalExecute(input: ResumeJournalEntryBatchPostingInput, provider: IMetadataProvider, user: UserInfo): Promise<ResumeJournalEntryBatchPostingOutput> {
+    requireBatchOperator(user, provider, 'ResumeJournalEntryBatchPosting');
     if (!input?.JournalEntryBatchID) throw new Error('Posting was not resumed: no batch was given.');
     requireSqlGuid(input.JournalEntryBatchID, 'ResumeJournalEntryBatchPosting');
     const { batch, journalEntriesPosted } = await resumeJournalEntryBatchPosting(input.JournalEntryBatchID, user, provider);
