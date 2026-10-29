@@ -1,5 +1,42 @@
 # @mj-biz-apps/accounting-actions
 
+## 0.25.0
+
+### Minor Changes
+
+- b3592ca: Add `Accounting.DispatchApprovedJournalEntryBatches` and an hourly scheduled job that runs it. The job sends every Approved journal entry batch to its ERP through the same send as the Dispatch button, so each send passes the CFO approval gate, the approved-content check and the ERP lookup. It approves nothing and never retries a Failed batch. Only the MJ system user may run it.
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-core-entities-server@0.25.0
+
+## 0.24.0
+
+### Patch Changes
+
+- Updated dependencies [96b1a48]
+- Updated dependencies [201d11f]
+- Updated dependencies [5ee4741]
+- Updated dependencies [7b88d06]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [803a7ab]
+- Updated dependencies [6d866b6]
+- Updated dependencies [74e2ad9]
+- Updated dependencies [47d5474]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [140106d]
+- Updated dependencies [fa4f5fa]
+- Updated dependencies [ecdc1e0]
+- Updated dependencies [003d4e6]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [4c0476c]
+- Updated dependencies [aff9c70]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [a7c8e83]
+- Updated dependencies [074060f]
+- Updated dependencies [ea5f9f7]
+  - @mj-biz-apps/accounting-core-entities-server@0.24.0
+
 ## 0.23.0
 
 ### Patch Changes

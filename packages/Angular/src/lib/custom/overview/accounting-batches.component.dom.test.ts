@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { RunView, RunViewParams } from '@memberjunction/core';
+import { IMetadataProvider, Metadata, RunView, RunViewParams, UserInfo } from '@memberjunction/core';
+import { BatchOperatorCatalog } from '../../../__tests__/support/batch-operator';
 import { AccountingBatchesPageComponent, BatchItem } from './accounting-batches.component';
 import {
   BuildJournalEntryBatchOptionsInput,
@@ -20,6 +21,24 @@ import { AUGUST_CLOSE_IN_CHICAGO, useBusinessClock, viewResult } from '../../../
  */
 const BUSINESS_DAY = '2026-08-31';
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
+const COMPANY_PROFILE_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
+const COMPANY_ID = '00000000-0000-0000-0000-0000000000c1';
+const BUILDER_USER_ID = '00000000-0000-0000-0000-0000000000b1';
+const APPROVER_USER_ID = '00000000-0000-0000-0000-0000000000a1';
+const OTHER_USER_ID = '00000000-0000-0000-0000-0000000000f1';
+/** The user recorded as having approved a batch, who may cancel it past approval. */
+const APPROVED_BY_USER_ID = '00000000-0000-0000-0000-0000000000d1';
+/** The MJ system user, which the nightly job builds as. */
+const SYSTEM_USER_ID = '00000000-0000-0000-0000-0000000000e1';
+
+/** Sign in as `userId`: the page reads the current user from the global provider. */
+function signInAs(userId: string): void {
+  const user = new UserInfo();
+  user.ID = userId;
+  // Every user holds the batch-operator grant here (#448); who sees Cancel and Archive is decided by the approver rules.
+  const provider: Pick<IMetadataProvider, 'CurrentUser' | 'Authorizations'> = { CurrentUser: user, Authorizations: BatchOperatorCatalog() };
+  vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue(provider as IMetadataProvider);
+}
 
 const LISTED_BATCH: BatchItem = {
   ID: '00000000-0000-0000-0000-000000000001',
@@ -35,6 +54,9 @@ const LISTED_BATCH: BatchItem = {
   ExternalJournalEntryBatchRef: null,
   ArchiveReason: null,
   CancelReason: null,
+  CompanyID: COMPANY_ID,
+  BatchedByUserID: BUILDER_USER_ID,
+  ApprovedByUserID: null,
 };
 
 describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', () => {
@@ -42,6 +64,8 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
   let previewCalls: PreviewJournalEntryBatchOptionsInput[];
 
   beforeEach(() => {
+    // Building needs the batch-operator grant (#448); the signed-in user holds it.
+    signInAs(APPROVER_USER_ID);
     // The page's batch list (ngOnInit) reads through the global RunView. One batch comes back so
     // the spec can see the list render: LoadBatches swallows its own errors, so an empty page is
     // not evidence that it loaded.
@@ -198,6 +222,8 @@ describe('AccountingBatchesPageComponent — DATE columns read as the stored day
   ];
 
   beforeEach(() => {
+    // Building needs the batch-operator grant (#448); the signed-in user holds it.
+    signInAs(APPROVER_USER_ID);
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
       p.EntityName === BATCH_ENTITY ? viewResult([LISTED_BATCH]) : viewResult([], 0),
     );
@@ -253,6 +279,8 @@ describe('AccountingBatchesPageComponent — entries held back by a posting star
   useBusinessClock(AUGUST_CLOSE_IN_CHICAGO);
 
   beforeEach(() => {
+    // Building needs the batch-operator grant (#448); the signed-in user holds it.
+    signInAs(APPROVER_USER_ID);
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async () => viewResult([], 0));
   });
 
@@ -301,6 +329,8 @@ describe('AccountingBatchesPageComponent — overlapping Build Batch previews (#
   });
 
   beforeEach(() => {
+    // Building needs the batch-operator grant (#448); the signed-in user holds it.
+    signInAs(APPROVER_USER_ID);
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async () => viewResult([], 0));
     pending = [];
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockImplementation(
@@ -430,6 +460,8 @@ describe('AccountingBatchesPageComponent — Build Batch selection after Clear A
   }
 
   beforeEach(() => {
+    // Building needs the batch-operator grant (#448); the signed-in user holds it.
+    signInAs(APPROVER_USER_ID);
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async () => viewResult([], 0));
     previewCalls = [];
     buildCalls = [];
@@ -556,8 +588,12 @@ describe('AccountingBatchesPageComponent — Build Batch selection after Clear A
 });
 
 describe('AccountingBatchesPageComponent — Cancel a batch (#183, golive #302)', () => {
-  const APPROVED: BatchItem = { ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000002', JournalEntryBatchNumber: 'JEB-TEST-0002', Status: 'Approved' };
-  const FAILED: BatchItem = { ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000003', JournalEntryBatchNumber: 'JEB-TEST-0003', Status: 'Failed' };
+  const APPROVED: BatchItem = {
+    ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000002', JournalEntryBatchNumber: 'JEB-TEST-0002', Status: 'Approved', ApprovedByUserID: APPROVED_BY_USER_ID,
+  };
+  const FAILED: BatchItem = {
+    ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000003', JournalEntryBatchNumber: 'JEB-TEST-0003', Status: 'Failed', ApprovedByUserID: APPROVED_BY_USER_ID,
+  };
   let cancelCalls: { ID: string; Reason: string; Confirm: boolean }[];
   /**
    * What the server answers an unconfirmed Failed cancel, standing in for its ERP lookup (#207):
@@ -566,9 +602,20 @@ describe('AccountingBatchesPageComponent — Cancel a batch (#183, golive #302)'
   let unconfirmedFailedAnswer: CancelJournalEntryBatchResult | null;
 
   beforeEach(() => {
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
-      p.EntityName === BATCH_ENTITY ? viewResult([LISTED_BATCH, APPROVED, FAILED]) : viewResult([], 0),
-    );
+    // The company's approver may cancel at every status these cases cover.
+    signInAs(APPROVER_USER_ID);
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName === BATCH_ENTITY) return viewResult([LISTED_BATCH, APPROVED, FAILED]);
+      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
+      return viewResult([], 0);
+    });
+    // The dialog reads the cancel reason's limit from the batch entity's metadata when it opens (#307).
+    const signedInUser = Metadata.Provider.CurrentUser;
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue({
+      CurrentUser: signedInUser,
+      Authorizations: BatchOperatorCatalog(),
+      EntityByName: (name: string) => (name === BATCH_ENTITY ? { Fields: [{ Name: 'CancelReason', MaxLength: 1000 }, { Name: 'ArchiveReason', MaxLength: 500 }] } : undefined),
+    } as unknown as IMetadataProvider);
     cancelCalls = [];
     unconfirmedFailedAnswer = null;
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'CancelBatch').mockImplementation(async (id, reason, confirm = false) => {
@@ -595,41 +642,49 @@ describe('AccountingBatchesPageComponent — Cancel a batch (#183, golive #302)'
     expect(page.CanCancel({ ...LISTED_BATCH, Status: 'Posted' })).toBe(false);
   });
 
+  it('offers neither Cancel nor Archive on a Failed batch carrying the ERP reference: the ERP accepted it (#412, #413)', async () => {
+    const page = await render();
+    const accepted = { ...FAILED, ExternalJournalEntryBatchRef: 'G00042' };
+    expect(page.CanArchive(FAILED)).toBe(true);
+    expect(page.CanCancel(accepted)).toBe(false);
+    expect(page.CanArchive(accepted)).toBe(false);
+  });
+
   it('cancels a Pending batch with the reason, unconfirmed (golive #302)', async () => {
     const page = await render();
     page.OnCancel(LISTED_BATCH, new Event('click'));
-    page.CancelReasonDraft = '  Built with the wrong entries  ';
-    await page.ConfirmCancel();
+    page.ActionDialog.Reason = '  Built with the wrong entries  ';
+    await page.ConfirmActionDialog();
     expect(cancelCalls).toEqual([{ ID: LISTED_BATCH.ID, Reason: 'Built with the wrong entries', Confirm: false }]);
     expect(page.ActionMessageIsError).toBe(false);
-    expect(page.CancelModalVisible).toBe(false);
+    expect(page.ActionDialog.IsOpen).toBe(false);
   });
 
   it('does not cancel with a blank reason', async () => {
     const page = await render();
     page.OnCancel(APPROVED, new Event('click'));
-    page.CancelReasonDraft = '   ';
-    await page.ConfirmCancel();
+    page.ActionDialog.Reason = '   ';
+    await page.ConfirmActionDialog();
     expect(cancelCalls).toEqual([]);
   });
 
   it('cancels an Approved batch without the ERP confirmation', async () => {
     const page = await render();
     page.OnCancel(APPROVED, new Event('click'));
-    page.CancelReasonDraft = '  wrong period  ';
-    await page.ConfirmCancel();
+    page.ActionDialog.Reason = '  wrong period  ';
+    await page.ConfirmActionDialog();
     expect(cancelCalls).toEqual([{ ID: APPROVED.ID, Reason: 'wrong period', Confirm: false }]);
     expect(page.ActionMessageIsError).toBe(false);
-    expect(page.CancelModalVisible).toBe(false);
+    expect(page.ActionDialog.IsOpen).toBe(false);
   });
 
   it('cancels a Failed batch on the first attempt, unconfirmed, when the server finds nothing in the ERP', async () => {
     const page = await render();
     page.OnCancel(FAILED, new Event('click'));
-    page.CancelReasonDraft = 'ERP rejected the journal';
-    await page.ConfirmCancel();
+    page.ActionDialog.Reason = 'ERP rejected the journal';
+    await page.ConfirmActionDialog();
     expect(cancelCalls).toEqual([{ ID: FAILED.ID, Reason: 'ERP rejected the journal', Confirm: false }]);
-    expect(page.CancelModalVisible).toBe(false);
+    expect(page.ActionDialog.IsOpen).toBe(false);
     expect(page.ActionMessageIsError).toBe(false);
   });
 
@@ -637,32 +692,31 @@ describe('AccountingBatchesPageComponent — Cancel a batch (#183, golive #302)'
     unconfirmedFailedAnswer = { Success: true, Status: 'Failed', ConfirmationRequired: 'could not check the ERP for document JEB-TEST-0003: timeout', ConfirmationKind: 'Error' };
     const page = await render();
     page.OnCancel(FAILED, new Event('click'));
-    page.CancelReasonDraft = 'ERP rejected the journal';
-    await page.ConfirmCancel();
+    page.ActionDialog.Reason = 'ERP rejected the journal';
+    await page.ConfirmActionDialog();
 
-    expect(page.CancelModalVisible).toBe(true);
-    expect(page.CancelERPCheckReason).toMatch(/could not check the ERP/);
-    expect(page.CanConfirmCancel).toBe(false); // the checkbox is the operator's word
+    expect(page.ActionDialog.IsOpen).toBe(true);
+    expect(page.ActionDialog.ERPCheckReason).toMatch(/could not check the ERP/);
+    expect(page.ActionDialog.CanConfirm).toBe(true); // "It has not posted — cancel batch" is the operator's word
 
-    page.CancelConfirmNotPostedInERP = true;
-    await page.ConfirmCancel();
+    await page.ConfirmActionDialog();
     expect(cancelCalls.map((c) => c.Confirm)).toEqual([false, true]);
-    expect(page.CancelModalVisible).toBe(false);
+    expect(page.ActionDialog.IsOpen).toBe(false);
   });
 
-  it('needs the batch number retyped to cancel past a Mismatch — the checkbox is not enough', async () => {
+  it('needs the batch number retyped to cancel past a Mismatch', async () => {
     unconfirmedFailedAnswer = { Success: true, Status: 'Failed', ConfirmationRequired: 'the ERP already holds document JEB-TEST-0003, and it does not match', ConfirmationKind: 'Mismatch' };
     const page = await render();
     page.OnCancel(FAILED, new Event('click'));
-    page.CancelReasonDraft = 'ERP rejected the journal';
-    await page.ConfirmCancel();
+    page.ActionDialog.Reason = 'ERP rejected the journal';
+    await page.ConfirmActionDialog();
 
-    page.CancelConfirmNotPostedInERP = true;
-    page.CancelMismatchText = 'JEB-TEST-000';
-    expect(page.CanConfirmCancel).toBe(false);
-    page.CancelMismatchText = 'JEB-TEST-0003';
-    expect(page.CanConfirmCancel).toBe(true);
-    await page.ConfirmCancel();
+    expect(page.ActionDialog.CanConfirm).toBe(false);
+    page.ActionDialog.MismatchText = 'JEB-TEST-000';
+    expect(page.ActionDialog.CanConfirm).toBe(false);
+    page.ActionDialog.MismatchText = 'JEB-TEST-0003';
+    expect(page.ActionDialog.CanConfirm).toBe(true);
+    await page.ConfirmActionDialog();
     expect(cancelCalls.map((c) => c.Confirm)).toEqual([false, true]);
   });
 
@@ -670,13 +724,350 @@ describe('AccountingBatchesPageComponent — Cancel a batch (#183, golive #302)'
     unconfirmedFailedAnswer = { Success: false, ErrorMessage: 'the ERP already holds document JEB-TEST-0003 and it matches this batch, so the batch posted. Retry it from Dispatch status instead' };
     const page = await render();
     page.OnCancel(FAILED, new Event('click'));
-    page.CancelReasonDraft = 'ERP rejected the journal';
-    await page.ConfirmCancel();
+    page.ActionDialog.Reason = 'ERP rejected the journal';
+    await page.ConfirmActionDialog();
 
     expect(cancelCalls).toHaveLength(1);
     expect(page.ActionMessageIsError).toBe(true);
     expect(page.ActionMessage).toMatch(/so the batch posted/);
-    expect(page.CancelERPCheckReason).toBeNull();
-    expect(page.CancelModalVisible).toBe(false); // the refusal is on the page, not behind the modal
+    expect(page.ActionDialog.ERPCheckReason).toBeNull();
+    expect(page.ActionDialog.IsOpen).toBe(false); // the refusal is on the page, not behind the modal
+  });
+
+  it('holds back a cancel reason longer than the batch\'s CancelReason metadata reports (#307)', async () => {
+    const page = await render();
+    page.OnCancel(LISTED_BATCH, new Event('click'));
+    expect(page.ActionDialog.ReasonMaxLength).toBe(1000);
+    page.ActionDialog.Reason = 'x'.repeat(1001);
+    expect(page.ActionDialog.ReasonProblem).toBe('This reason is 1001 characters; the limit is 1000.');
+    expect(page.ActionDialog.CanConfirm).toBe(false);
+  });
+});
+
+/**
+ * golive #325: a Cancel or Archive whose response is lost (a gateway timeout) may still have gone
+ * through on the server. The list reloads after every answer, so it shows the batch's real status
+ * instead of inviting a second attempt.
+ */
+describe('AccountingBatchesPageComponent — a failed Cancel or Archive reloads the list (golive #325)', () => {
+  const TIMEOUT = 'GraphQL Error (Code: 504)';
+  let listedStatus: string;
+  let batchReads: number;
+
+  beforeEach(() => {
+    listedStatus = 'Pending';
+    batchReads = 0;
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName !== BATCH_ENTITY) return viewResult([], 0);
+      batchReads++;
+      return viewResult([{ ...LISTED_BATCH, Status: listedStatus }]);
+    });
+    signInAs(BUILDER_USER_ID);
+    const signedInUser = Metadata.Provider.CurrentUser;
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue({
+      CurrentUser: signedInUser,
+      Authorizations: BatchOperatorCatalog(),
+      EntityByName: (name: string) => (name === BATCH_ENTITY ? { Fields: [{ Name: 'CancelReason', MaxLength: 1000 }, { Name: 'ArchiveReason', MaxLength: 500 }] } : undefined),
+    } as unknown as IMetadataProvider);
+  });
+
+  async function render(): Promise<AccountingBatchesPageComponent> {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    return fixture.componentInstance;
+  }
+
+  it('shows the batch Cancelled, and the error, when the cancel went through but its response timed out', async () => {
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'CancelBatch').mockImplementation(async () => {
+      listedStatus = 'Cancelled';
+      return { Success: false, ErrorMessage: TIMEOUT };
+    });
+    const page = await render();
+    page.OnCancel(LISTED_BATCH, new Event('click'));
+    page.ActionDialog.Reason = 'Built with the wrong entries';
+    await page.ConfirmActionDialog();
+
+    expect(batchReads).toBe(2);
+    expect(page.Batches.map((b) => b.Status)).toEqual(['Cancelled']);
+    expect(page.ActionMessageIsError).toBe(true);
+    expect(page.ActionMessage).toBe(TIMEOUT);
+  });
+
+  it('shows the batch Archived, and the error, when the archive went through but its response timed out', async () => {
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'ArchiveBatch').mockImplementation(async () => {
+      listedStatus = 'Archived';
+      return { Success: false, ErrorMessage: TIMEOUT };
+    });
+    const page = await render();
+    page.OnArchive(LISTED_BATCH, new Event('click'));
+    page.ActionDialog.Reason = 'Posted in the legacy system';
+    await page.ConfirmActionDialog();
+
+    expect(batchReads).toBe(2);
+    expect(page.Batches.map((b) => b.Status)).toEqual(['Archived']);
+    expect(page.ActionMessageIsError).toBe(true);
+    expect(page.ActionMessage).toBe(TIMEOUT);
+  });
+});
+
+/**
+ * The Cancel button shows only to the users the server lets cancel the batch. On a Pending batch
+ * (#308): the company's approver or the batch's builder; a batch the nightly job built has the system
+ * user as its builder, so only the approver sees it. Past approval (#339): the company's approver or
+ * the user who approved the batch.
+ */
+describe('AccountingBatchesPageComponent — who sees Cancel (#308, #339, DOM)', () => {
+  const NIGHTLY: BatchItem = {
+    ...LISTED_BATCH,
+    ID: '00000000-0000-0000-0000-000000000004',
+    JournalEntryBatchNumber: 'JEB-TEST-0004',
+    BatchedByUserID: SYSTEM_USER_ID,
+  };
+  const APPROVED: BatchItem = {
+    ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000002', JournalEntryBatchNumber: 'JEB-TEST-0002', Status: 'Approved', ApprovedByUserID: APPROVED_BY_USER_ID,
+  };
+  /** The profile read the page answers with; a case can make it fail. */
+  let profilesRead: boolean;
+
+  beforeEach(() => {
+    profilesRead = true;
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName === BATCH_ENTITY) return viewResult([LISTED_BATCH, NIGHTLY, APPROVED]);
+      if (p.EntityName === COMPANY_PROFILE_ENTITY) {
+        return profilesRead
+          ? viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }])
+          : { ...viewResult([]), Success: false, ErrorMessage: 'read refused' };
+      }
+      return viewResult([], 0);
+    });
+  });
+
+  /** The batch numbers whose row shows a Cancel button. */
+  async function rowsOfferingCancel(): Promise<string[]> {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    fixture.detectChanges();
+    const rows: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('tr'));
+    return rows
+      .filter(row => Array.from(row.querySelectorAll('button')).some(b => b.textContent?.trim() === 'Cancel'))
+      .map(row => row.querySelector('.mja-batch-num')?.textContent?.trim() ?? '');
+  }
+
+  it("shows the builder Cancel on their own Pending batch, not on the nightly job's, and not past approval", async () => {
+    signInAs(BUILDER_USER_ID);
+    expect(await rowsOfferingCancel()).toEqual(['JEB-TEST-0001']);
+  });
+
+  it("shows the company's approver Cancel on every Pending batch, the nightly job's included", async () => {
+    signInAs(APPROVER_USER_ID);
+    expect(await rowsOfferingCancel()).toEqual(['JEB-TEST-0001', 'JEB-TEST-0004', 'JEB-TEST-0002']);
+  });
+
+  it('shows the user who approved a batch Cancel on it, and not on the Pending batches', async () => {
+    signInAs(APPROVED_BY_USER_ID);
+    expect(await rowsOfferingCancel()).toEqual(['JEB-TEST-0002']);
+  });
+
+  it('shows anyone else no Cancel', async () => {
+    signInAs(OTHER_USER_ID);
+    expect(await rowsOfferingCancel()).toEqual([]);
+  });
+
+  it('shows Cancel only to the builder and the user who approved the batch when the approvers cannot be read', async () => {
+    profilesRead = false;
+    signInAs(APPROVER_USER_ID);
+    expect(await rowsOfferingCancel()).toEqual([]);
+    signInAs(BUILDER_USER_ID);
+    expect(await rowsOfferingCancel()).toEqual(['JEB-TEST-0001']);
+    signInAs(APPROVED_BY_USER_ID);
+    expect(await rowsOfferingCancel()).toEqual(['JEB-TEST-0002']);
+  });
+});
+
+describe('AccountingBatchesPageComponent — Build Batch needs the batch-operator grant (#448, DOM)', () => {
+  beforeEach(() => {
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
+      p.EntityName === BATCH_ENTITY ? viewResult([LISTED_BATCH]) : viewResult([], 0),
+    );
+  });
+
+  /** The page rendered for a user who holds the grant, or not. */
+  async function render(holdsGrant: boolean): Promise<ComponentFixture<AccountingBatchesPageComponent>> {
+    const user = new UserInfo();
+    user.ID = APPROVER_USER_ID;
+    const provider = { CurrentUser: user, Authorizations: BatchOperatorCatalog(holdsGrant ? [APPROVER_USER_ID] : []) };
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue(provider as unknown as IMetadataProvider);
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  const headerBuild = (fixture: ComponentFixture<AccountingBatchesPageComponent>): HTMLButtonElement | undefined =>
+    [...fixture.nativeElement.querySelectorAll('.mja-actions button')].find((b: HTMLButtonElement) => b.textContent?.trim() === 'Build Batch');
+
+  it('shows a holder Build Batch', async () => {
+    expect(headerBuild(await render(true))).toBeDefined();
+  });
+
+  it('hides Build Batch from anyone else, and the dialog does not open', async () => {
+    const fixture = await render(false);
+    expect(headerBuild(fixture)).toBeUndefined();
+    await fixture.componentInstance.OpenBuildBatchModal();
+    expect(fixture.componentInstance.BuildModalVisible).toBe(false);
+  });
+});
+
+/**
+ * #466: the Batches page is the app's one batch list, so the batch built here is approved and sent
+ * from here too. Approve and Reject show on a Pending batch to the company's approver who did not
+ * build it (#339); Dispatch on an Approved batch and Retry on a Failed one to holders of the
+ * batch-operator grant (#448). The server stays the authority for each.
+ */
+describe('AccountingBatchesPageComponent — Approve, Reject, Dispatch and Retry (#466, DOM)', () => {
+  const PENDING = LISTED_BATCH;
+  const APPROVED: BatchItem = {
+    ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000002', JournalEntryBatchNumber: 'JEB-TEST-0002', Status: 'Approved', ApprovedByUserID: APPROVER_USER_ID,
+  };
+  const FAILED: BatchItem = {
+    ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000003', JournalEntryBatchNumber: 'JEB-TEST-0003', Status: 'Failed', ApprovedByUserID: APPROVER_USER_ID,
+  };
+  let batchReads: number;
+
+  beforeEach(() => {
+    batchReads = 0;
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName === BATCH_ENTITY) {
+        batchReads++;
+        return viewResult([PENDING, APPROVED, FAILED]);
+      }
+      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
+      return viewResult([], 0);
+    });
+  });
+
+  /** Sign in as `userId`, holding the batch-operator grant or not. */
+  function signInHolding(userId: string, holdsGrant: boolean): void {
+    const user = new UserInfo();
+    user.ID = userId;
+    const provider = {
+      CurrentUser: user,
+      Authorizations: BatchOperatorCatalog(holdsGrant ? [userId] : []),
+      // The Reject dialog reads the cancel reason's limit from the batch entity's metadata when it opens (#307).
+      EntityByName: (name: string) => (name === BATCH_ENTITY ? { Fields: [{ Name: 'CancelReason', MaxLength: 1000 }, { Name: 'ArchiveReason', MaxLength: 500 }] } : undefined),
+    };
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue(provider as unknown as IMetadataProvider);
+  }
+
+  async function render(): Promise<ComponentFixture<AccountingBatchesPageComponent>> {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  /** Each row's batch number and its action buttons' labels. */
+  function rowActions(fixture: ComponentFixture<AccountingBatchesPageComponent>): Record<string, string[]> {
+    const rows: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('tbody tr'));
+    return Object.fromEntries(rows.map(row => [
+      row.querySelector('.mja-batch-num')?.textContent?.trim() ?? '',
+      Array.from(row.querySelectorAll('button')).map(b => b.textContent?.trim() ?? ''),
+    ]));
+  }
+
+  it("shows the company's approver Approve and Reject on a Pending batch, Dispatch on an Approved one and Retry on a Failed one", async () => {
+    signInHolding(APPROVER_USER_ID, true);
+    const actions = rowActions(await render());
+    expect(actions['JEB-TEST-0001'].slice(0, 2)).toEqual(['Approve', 'Reject']);
+    expect(actions['JEB-TEST-0002'][0]).toBe('Dispatch');
+    expect(actions['JEB-TEST-0003'][0]).toBe('Retry');
+  });
+
+  it('shows the builder no Approve or Reject on their own batch (separation of duties)', async () => {
+    signInHolding(BUILDER_USER_ID, true);
+    const actions = rowActions(await render());
+    expect(actions['JEB-TEST-0001']).not.toContain('Approve');
+    expect(actions['JEB-TEST-0001']).not.toContain('Reject');
+  });
+
+  it('shows Dispatch and Retry only to holders of the batch-operator grant', async () => {
+    signInHolding(OTHER_USER_ID, false);
+    const actions = rowActions(await render());
+    expect(actions['JEB-TEST-0002']).not.toContain('Dispatch');
+    expect(actions['JEB-TEST-0003']).not.toContain('Retry');
+  });
+
+  it('Approve records the decision, reloads the list and does not open the record', async () => {
+    signInHolding(APPROVER_USER_ID, true);
+    const decide = vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'RecordDecision').mockResolvedValue({ Success: true });
+    const fixture = await render();
+    const page = fixture.componentInstance;
+    const opened = vi.spyOn(page, 'OpenBatchRecord').mockImplementation(() => undefined);
+    const before = batchReads;
+
+    const approve = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('tbody tr button')).find(b => b.textContent?.trim() === 'Approve');
+    approve?.click();
+    await vi.waitFor(() => expect(page.DecidingBatchID).toBeNull());
+
+    expect(decide).toHaveBeenCalledWith(PENDING.ID, 'Approved');
+    expect(opened).not.toHaveBeenCalled();
+    expect(batchReads).toBeGreaterThan(before);
+    expect(page.ActionMessageIsError).toBe(false);
+    expect(page.ActionMessage).toBe('Approved batch JEB-TEST-0001. It can now be dispatched to BusinessCentral.');
+  });
+
+  it('Reject asks for a reason and records it as the decision notes', async () => {
+    signInHolding(APPROVER_USER_ID, true);
+    const decide = vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'RecordDecision').mockResolvedValue({ Success: true });
+    const page = (await render()).componentInstance;
+
+    page.OnReject(PENDING, new Event('click'));
+    expect(page.ActionDialog.Action).toBe('Reject');
+    expect(decide).not.toHaveBeenCalled();
+
+    page.ActionDialog.Reason = '  wrong posting date  ';
+    await page.ConfirmActionDialog();
+    expect(decide).toHaveBeenCalledWith(PENDING.ID, 'Rejected', 'wrong posting date');
+    expect(page.ActionDialog.IsOpen).toBe(false);
+    expect(page.DecidingBatchID).toBeNull();
+  });
+
+  it('Dispatch reports a batch that did not post as an error', async () => {
+    signInHolding(APPROVER_USER_ID, true);
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'DispatchJournalEntryBatch').mockResolvedValue({ Success: true, Status: 'Failed' });
+    const page = (await render()).componentInstance;
+
+    await page.OnDispatch(APPROVED, new Event('click'));
+    expect(page.ActionMessageIsError).toBe(true);
+    expect(page.ActionMessage).toContain('JEB-TEST-0002 did not post; it is Failed.');
+  });
+
+  it("Retry opens the retry dialog when the ERP lookup cannot settle it, and retries with the operator's word", async () => {
+    signInHolding(APPROVER_USER_ID, true);
+    const confirms: boolean[] = [];
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'DispatchJournalEntryBatch').mockImplementation(async (_id, confirm = false) => {
+      confirms.push(confirm);
+      return confirm
+        ? { Success: true, Status: 'Posted', ExternalJournalEntryBatchRef: 'BC-1' }
+        : { Success: true, Status: 'Failed', ConfirmationRequired: 'the ERP lookup failed', ConfirmationKind: 'Unavailable' };
+    });
+    const page = (await render()).componentInstance;
+
+    await page.OnDispatch(FAILED, new Event('click'));
+    expect(page.RetryConfirm.Batch).toBe(FAILED);
+    expect(page.DispatchingBatchID).toBeNull();
+
+    await page.ConfirmRetry();
+    expect(confirms).toEqual([false, true]);
+    expect(page.RetryConfirm.IsOpen).toBe(false);
+    expect(page.ActionMessage).toBe('Dispatched batch JEB-TEST-0003 to BusinessCentral: Posted (ref BC-1).');
   });
 });

@@ -36,7 +36,7 @@ Batching (CoreEntitiesServer)        per-company buildJournalEntryBatch (D7) →
 DB invariants (migrations)           14 triggers (incl. single-company floors 50019/50022, summary coherence 50023)
                                      + 2 numbering sprocs (JE per company per FY, batch global)  ◄── the un-bypassable floor
 ```
-ERP master data travels: Explorer / nightly job → **`Accounting.RunERPSync`** → `AccountingERPEngine.SyncMasterData` → `IntegrationEngine.RunSync` (entity maps, per-company isolation) → registered `BaseAccountingEngineExtension` subclasses (FP&A cash import first). Only ERP connections (Business Central, QuickBooks Online) are synced; one with no entity maps, such as a posting-only connection, is reported skipped, not failed (#256). Journal dispatch: approved batch → `PostJournalBatch` → MJ verb `CreateJournalEntry` (account **numbers**, AM-4). The pre-flight lookup and the post choose the same connection: the batch company's one active connection for the target, or among several the one whose Configuration has `"postJournalEntries": true`, else refuse. Its `CompanyIntegrationID` is sent to the verb (#256, MJ#4867). Accounting never writes `CashBalance`.
+ERP master data travels: Explorer / nightly job → **`Accounting.RunERPSync`** → `AccountingERPEngine.SyncMasterData` → `IntegrationEngine.RunSync` (entity maps, per-company isolation) → registered `BaseAccountingEngineExtension` subclasses (FP&A cash import first). Only ERP connections (Business Central, QuickBooks Online) are synced; one with no entity maps, such as a posting-only connection, is reported skipped, not failed (#256). Journal dispatch: approved batch → (the Dispatch button, `Accounting.DispatchJournalEntryBatch`, or the hourly `Accounting.DispatchApprovedJournalEntryBatches` job, which sends every `Approved` batch and never retries a `Failed` one) → `sendJournalEntryBatch` → `PostJournalBatch` → MJ verb `CreateJournalEntry` (account **numbers**, AM-4). The pre-flight lookup and the post choose the same connection: the batch company's one active connection for the target, or among several the one whose Configuration has `"postJournalEntries": true`, else refuse. Its `CompanyIntegrationID` is sent to the verb (#256, MJ#4867). Accounting never writes `CashBalance`.
 
 How a write travels: caller (Orders, browser, script) → **`Accounting.CreateJournalEntry`** →
 engine pipeline → `BaseEntity.Save()` in one TransactionGroup (hooks number; triggers enforce;
@@ -122,7 +122,8 @@ Where they disagree with §3, §3 is authoritative.
 |---|---|
 | Company profile init / starter COA | `CoreEntitiesServer/AccountingCompanyProfileEntityServer.ts` (W1) + `SeedData.ts` |
 | JE numbering (per company, per FY — D19, BA-D31) | `JournalEntryEntityServer.ts` (W2) + `SequenceService.ts` + `spAssignNextJournalEntryNumber` |
-| Batch numbering (GLOBAL) | `JournalEntryBatchEntityServer.ts` (W3) + `spAssignNextJournalEntryBatchNumber` |
+| Batch numbering (GLOBAL) | `JournalEntryBatchEntityServer.ts` (W3) + `SequenceService.ts` + `spAssignNextJournalEntryBatchNumber` |
+| Numbering on PostgreSQL | `SequenceService.ts` picks the SQL by `PlatformKey`; the PL/pgSQL functions are `migrations-pg/V202610201030__v0.24.x__JournalEntry_Numbering_Functions.pg-only.sql` |
 | The minimal seeded chart | `CoreEntitiesServer/SeedData.ts` (`DEFAULT_CHART_OF_ACCOUNTS`, `DEFAULT_GL_ACCOUNT_REFS`) |
 | **The engine contract / pure pipeline / caches / ResolveLinkedAccount** | `packages/EngineBase/src/{contract,pipeline,AccountingEngineBase}.ts` |
 | **CreateJournalEntry write path + the remotable op** | `CoreEntitiesServer/AccountingEngine.ts` + `CreateJournalEntryOperation.ts` |
@@ -187,6 +188,16 @@ refuses a draft that spans companies, checks balance, and writes atomically. Hoo
   batch candidate pool. Entries dated before it (e.g. history brought in at cutover) never enter a
   batch: `pendingCandidateFilter` applies it to every build, preview and scheduled sweep, and the
   explicit-ID and view builds check it too. NULL, or no profile row, means no floor.
+- **Books closed through (golive #316):** `AccountingCompanyProfile.BooksClosedThroughDate` is the last
+  day of the latest month finance has closed for a company; a day on or before it is in a closed month.
+  It records how far the ERP's periods are closed, not a period table (D2 stands). Every build refuses a
+  posting date on or before it (`assertPostingDayOpen`, failing closed when the read fails), and both
+  build screens say so before the click. Only holders of
+  `MJ.BizApps.Accounting.BooksClosedThroughDate.Set` (the Finance role) change it, and the profile's
+  record-change history keeps each change. The ERP's own lock stays the backstop: a batch the ERP
+  rejects goes `Failed` with its message and raises an `ERP_POSTING_REJECTED` finance exception.
+  Apps that date entries into the ledger read the same date (orders' progress attestation and
+  supersede); the shared rule is `books-closed.ts` in the engine base.
 - **Recovery past Approved (#145):** a `Failed` batch is retried by dispatching it again
   (`Failed → Sent`; the gate and the coherence check re-run, the original approval is reused). A
   `Failed` batch may already be in the ERP, so every send first looks the batch number up there

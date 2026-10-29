@@ -37,9 +37,9 @@
 }
 
 .mja-kpi-val {
-    font-size: var(--mj-text-md, 15px);
+    font-size: var(--mj-text-base);
     font-weight: var(--mj-font-bold, 700);
-    font-family: var(--mj-font-mono, monospace);
+    font-family: var(--mj-font-family-mono);
     color: var(--mj-text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -216,7 +216,7 @@
 
 .mja-month-card:hover {
     border-color: var(--mj-brand-primary);
-    box-shadow: var(--mj-shadow-xs, 0 1px 2px rgba(0, 0, 0, 0.05));
+    box-shadow: var(--mj-shadow-sm);
     transform: translateY(-1px);
 }
 
@@ -255,7 +255,7 @@
 .mja-month-amount {
     font-size: var(--mj-text-sm, 13px);
     font-weight: var(--mj-font-bold, 700);
-    font-family: var(--mj-font-mono, monospace);
+    font-family: var(--mj-font-family-mono);
     color: var(--mj-brand-primary);
     white-space: nowrap;
 }
@@ -289,6 +289,11 @@
 .mja-chip--released {
     background: var(--mj-status-success-bg);
     color: var(--mj-status-success-text);
+}
+
+.mja-chip--partial {
+    background: color-mix(in srgb, var(--mj-status-warning) 15%, var(--mj-bg-surface));
+    color: var(--mj-status-warning-text);
 }
 
 .mja-chip--scheduled {

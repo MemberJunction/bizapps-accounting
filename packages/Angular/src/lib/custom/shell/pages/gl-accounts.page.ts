@@ -6,6 +6,7 @@ import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-en
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { rowKeyToId } from '../../../transfer-pending/list-scaffold/grid-row-key';
 import { CompanyScopeService } from '../../shared/company-scope.service';
+import { SaveErrorMessage } from '../../shared/save-error-message';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import type { mjBizAppsAccountingGLAccountEntity } from '@mj-biz-apps/accounting-entities';
 
@@ -68,7 +69,7 @@ interface ParentOption {
  * `GLAccount.CompanyID` is **NOT NULL** with **UNIQUE (CompanyID, Code)** — "each company has its
  * own chart" (the field's own description). There is **no global pool of unowned accounts** that
  * you then "hook to companies": an account is born inside exactly one company's chart, seeded by
- * `spSeedDefaultChartOfAccounts` (which is what `IsSystemSeeded` distinguishes from deployment
+ * `AccountingCompanyProfileEntityServer.SeedDefaultChartOfAccounts()` (which is what `IsSystemSeeded` distinguishes from deployment
  * customizations). So this page is "every account, GROUPED BY COMPANY" — the Company column is
  * first, the company drop-down narrows rather than assigns, and creating an account REQUIRES
  * picking the company that will own it. That per-company reality is surfaced, not hidden. Whether
@@ -459,8 +460,8 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
       const saved = await d.Save();
       if (!saved) {
         // MJ core already console-logs the full failure (SQL included) — here we only present the
-        // human sentence; adding our own console.error would double-log and trip the test keystone.
-        this.EditorError = this.friendlySaveError(d.LatestResult?.CompleteMessage, 'The account could not be saved.');
+        // human sentence (#383); adding our own console.error would double-log and trip the test keystone.
+        this.EditorError = SaveErrorMessage(d.LatestResult?.CompleteMessage, 'The account could not be saved.');
         return;
       }
 
@@ -468,7 +469,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
       await this.load(true);
       void this.grid?.Refresh(); // params are unchanged post-save (deep-equal → setter skips), so refetch explicitly
     } catch (e) {
-      this.EditorError = this.friendlySaveError(e instanceof Error ? e.message : String(e), 'The account could not be saved.');
+      this.EditorError = SaveErrorMessage(e instanceof Error ? e.message : String(e), 'The account could not be saved.');
     } finally {
       this.IsSaving = false;
       this.cdr.markForCheck();
@@ -517,7 +518,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
    * and behaves as "set to something nobody can find".
    *
    * `IsSystemSeeded` is deliberately never written by this page. It records that
-   * `spSeedDefaultChartOfAccounts` created the row — provenance, not a user preference. Letting the
+   * `SeedDefaultChartOfAccounts()` created the row — provenance, not a user preference. Letting the
    * UI set it would let a deployment customization claim to be platform-shipped, which is precisely
    * the distinction the flag exists to preserve. Binding the entity makes that a rule about what the
    * TEMPLATE offers rather than one enforced by a copier nobody can see.
@@ -551,13 +552,13 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
       entity.IsActive = !r.IsActive;
       const saved = await entity.Save();
       if (!saved) {
-        this.LoadError = this.friendlySaveError(entity.LatestResult?.CompleteMessage, `Account ${r.Code} was not ${r.IsActive ? 'retired' : 'reactivated'}. Try again.`);
+        this.LoadError = SaveErrorMessage(entity.LatestResult?.CompleteMessage, `Account ${r.Code} was not ${r.IsActive ? 'retired' : 'reactivated'}. Try again.`);
         return;
       }
       await this.load(true);
       void this.grid?.Refresh(); // params are unchanged post-save (deep-equal → setter skips), so refetch explicitly
     } catch (e) {
-      this.LoadError = e instanceof Error ? e.message : String(e);
+      this.LoadError = SaveErrorMessage(e instanceof Error ? e.message : String(e), `Account ${r.Code} was not ${r.IsActive ? 'retired' : 'reactivated'}. Try again.`);
     } finally {
       this.IsSaving = false;
       this.cdr.markForCheck();
@@ -605,22 +606,6 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
     if (this.Scope.IsAllCompanies) return all;
     const selected = new Set(this.Scope.SelectedIDs.map((id) => NormalizeUUID(id)));
     return all.filter((a) => selected.has(NormalizeUUID(a.CompanyID)));
-  }
-
-  /**
-   * Present a save failure as a human sentence, never a raw SQL dump (the
-   * FK-ghost incident leaked a full spCreate batch into the editor). MJ's CompleteMessage appends
-   * the executed SQL after "Query:"; everything from there down is log material, not UI copy. The
-   * one constraint a user can actually hit from this editor gets a specific, actionable message.
-   */
-  private friendlySaveError(raw: string | null | undefined, fallback: string): string {
-    if (!raw) return fallback;
-    const beforeQuery = raw.split(/\bQuery:/)[0].trim();
-    if (/FK_GLAccount_Company/i.test(beforeQuery)) {
-      return 'The selected owning company no longer exists — it may have been removed since this page loaded. Refresh and choose again.';
-    }
-    const firstLine = beforeQuery.split('\n').map((l) => l.trim()).find((l) => l.length > 0);
-    return firstLine ?? fallback;
   }
 
   /**

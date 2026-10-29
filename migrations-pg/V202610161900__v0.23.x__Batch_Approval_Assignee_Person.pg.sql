@@ -17,7 +17,7 @@
 -- that has the prior migrations.
 -- ============================================================================
 
-SET search_path TO __mj_BizAppsAccounting, public;
+SET search_path TO "__mj_BizAppsAccounting", public;
 
 WITH RECURSIVE "PeopleEntity" AS (
     SELECT e."ID"
@@ -48,7 +48,7 @@ WITH RECURSIVE "PeopleEntity" AS (
     SELECT ta."ID" AS "AssignmentID", pe."ID" AS "PeopleEntityID", up."PersonID"
     FROM __mj_BizAppsTasks."TaskAssignment" ta
     INNER JOIN __mj_BizAppsTasks."Task" t ON t."ID" = ta."TaskID"
-    INNER JOIN __mj_BizAppsAccounting."JournalEntryBatch" b ON b."ApprovalTaskID" = t."ID"
+    INNER JOIN "__mj_BizAppsAccounting"."JournalEntryBatch" b ON b."ApprovalTaskID" = t."ID"
     INNER JOIN ${mjSchema}."Entity" ue ON ue."ID" = ta."AssigneeEntityID" AND ue."Name" = 'MJ: Users'
     INNER JOIN "UserPerson" up ON up."UserID" = (CASE WHEN ta."AssigneeRecordID" ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
                                                       THEN ta."AssigneeRecordID"::UUID END)
@@ -78,7 +78,7 @@ BEGIN
     INTO v_left
     FROM __mj_BizAppsTasks."TaskAssignment" ta
     INNER JOIN __mj_BizAppsTasks."Task" t ON t."ID" = ta."TaskID"
-    INNER JOIN __mj_BizAppsAccounting."JournalEntryBatch" b ON b."ApprovalTaskID" = t."ID"
+    INNER JOIN "__mj_BizAppsAccounting"."JournalEntryBatch" b ON b."ApprovalTaskID" = t."ID"
     INNER JOIN ${mjSchema}."Entity" ue ON ue."ID" = ta."AssigneeEntityID" AND ue."Name" = 'MJ: Users'
     WHERE t."Status" IN ('Open', 'InProgress', 'Blocked');
     RAISE NOTICE 'Batch approval assignments still on a user: %', COALESCE(v_left, 'none');

@@ -1,5 +1,83 @@
 # @mj-biz-apps/accounting-ng
 
+## 0.25.0
+
+### Patch Changes
+
+- Updated dependencies [1d11c39]
+- Updated dependencies [69680e9]
+- Updated dependencies [a54fd4e]
+  - @mj-biz-apps/accounting-entities@0.25.0
+  - @mj-biz-apps/accounting-engine-base@0.25.0
+
+## 0.24.0
+
+### Minor Changes
+
+- ea5f9f7: Batch approval and archive checks (#446, #447, #448, #451, #452):
+
+  - A batch moves to Approved only through the approval decision; a plain save (the generic form or the GraphQL update) that sets Status = Approved is refused, and the approver is always the user who approved (#447).
+  - The batch audit fields (who built, approved, archived, cancelled or sent it, and when) are written by the server only; a plain save that changes one is refused (#451).
+  - Sending a batch re-checks its approval: the batch must record an approver who did not build it, and an approval decision attributed to another person does not count (#446).
+  - Building, regenerating, dispatching and archiving a batch require the Finance role, through the new `MJ.BizApps.Accounting.JournalEntryBatches.Operate` Authorization (metadata); the batch pages hide those actions from users without it. The scheduled build and auto-post are unaffected (#448).
+  - Archiving a batch is possible only through the Archive action: before approval only the company's configured approver may archive it (the builder may still cancel it), past approval the approver or whoever approved the batch; the batch pages show Archive only to them (#448). `Archive()` checks who may archive before the batch's status, so a refused user does not see the ERP's reference.
+  - Another server package can no longer silently replace the batch approval gate, ERP poster and ERP lookup: a replacement is used only in unit tests or when the `ACCOUNTING_DISPATCH_SERVICES_OVERRIDE` environment variable names it, and is logged either way (#452).
+
+- 266cf9c: New nullable column `AccountingCompanyProfile.BooksClosedThroughDate` (DATE): the last day of the latest month finance has closed for the company. A date on or before it is in a closed month. NULL means nothing is closed; existing profiles read NULL. Includes the CodeGen output for the column (entity subclass, GraphQL types, profile form field).
+- 74e2ad9: A company's `BooksClosedThroughDate` closes its months (golive #316).
+
+  - Only holders of the new `MJ.BizApps.Accounting.BooksClosedThroughDate.Set` authorization (granted to the Finance role) can set, move or clear it on the Accounting Company Profile. Every change is kept in the profile's record-change history.
+  - Every batch build refuses a posting date on or before it, and the batch workspace and the Build Batch dialog say so before the click. A failed read of the date refuses the build.
+  - Regenerating a Pending batch refuses too when the month of its posting date has closed since it was built, because Regenerate keeps that date; the message says to cancel the batch and build a new one.
+  - A batch the ERP rejects still goes `Failed` with the ERP's message, and now also raises a new `ERP_POSTING_REJECTED` finance exception, one per failed send.
+  - `@mj-biz-apps/accounting-engine-base` exports the shared rule (`IsInClosedBooks`, `FirstOpenDay`, `ClosedBooksPostingDateProblem`) and `AccountingEngineBase.BooksClosedThroughFor`, for apps that date entries into the ledger.
+
+- ea5f9f7: Journal entry dates and the deferred-revenue waterfall:
+
+  - `vwJournalEntries` computes `EffectiveDayOfWeek` and `IsWeekend` the same way whatever the session's `DATEFIRST` (#395). Values on a `DATEFIRST 7` (US English) host are unchanged: 1 is Sunday, 7 is Saturday, and only Saturday and Sunday are the weekend. The PostgreSQL view reads the weekday from the date itself (`ISODOW`), so its values do not depend on the session time zone.
+  - `Accounting.CreateJournalEntry` / `CreateJournalEntries` store a draft's `EffectiveDate` as the business day it names (#427). A date-time with an offset is filed on the business day it falls on, not its UTC day; a `YYYY-MM-DD` day or a UTC-midnight string is that day. A date-time with no offset, or a day that does not exist, is refused with `MALFORMED_DRAFT`.
+  - The waterfall shows "Partly released" for a month only part of which is recognized, and "Released" only once all of it is (#429).
+  - The waterfall keeps counting a reversed entry until its reversal's day arrives, loading the reversal's date when the caller did not pass the reversal in (#430).
+
+### Patch Changes
+
+- d924fd7: Approve and Reject (Batch Dispatch) show only to the company's configured approver, and not on a batch that user built. Cancel on an Approved or Failed batch (Batch Dispatch, the Journal Entry Batches page and Dispatch status) shows only to the company's approver or the user who approved the batch. The server checks are unchanged and still decide (#339).
+- 803a7ab: A journal entry batch approval decision is refused before it is written to the approval Task when the batch can no longer carry it out, so the Task and the batch cannot disagree. A decision on a batch that is no longer Pending is refused (#306): before, approving a batch its builder had cancelled marked the Task Approved. Rejection notes longer than the batch's cancel reason holds are refused (#307): before, the Task recorded the rejection and the batch stayed Pending. The limit is read from `JournalEntryBatch.CancelReason`'s field metadata. The Reject and Cancel prompts on JE batch approvals ask again, with the text kept, when a reason is too long, and the Batches screen's Cancel dialog limits the reason to the same length.
+- ea5f9f7: Batch screen fixes:
+
+  - The batch workspace's date chip ends at the posting date when that comes before the cutoff, since the batch takes nothing dated after it (#401).
+  - The Batch Status dashboard's Build JE batch preview has a cutoff that defaults to today's business day, sends it with the build, leaves entries after it out of the preview, and says so when it is cleared (#426).
+  - A failed save on the company setup, chart of accounts and GL accounts screens shows a sentence for the constraints a user can reach and a "not saved, try again" message for any other database error, never the database's own text (#383).
+  - Styles use MemberJunction's token names (`--mj-border-strong`, `--mj-status-*-text`, `--mj-font-family-mono`, `--mj-shadow-sm`, `--mj-text-base`) instead of names MJ does not define; a test now fails on any `--mj-*` name that neither MJ nor this package defines (#390).
+  - The Dispatch status page's Mismatch retry dialog puts "It is not this batch — post again" on the left and Cancel on the right; Cancel stays the default (#398).
+  - Reject, Archive and Cancel on Batch approvals ask for their reason in a dialog instead of the browser prompt, which the desktop Explorer does not support. Batch approvals, Dispatch status and the Batches overview now share that one dialog: the same wording, the ERP check for a Failed batch ("It has not posted — cancel batch" replaces the overview's checkbox), the batch number retyped past a Mismatch, each reason held to its column's length (Archive's included), and the confirm action on the left with Keep batch on the right (#405).
+  - The All batches page has an Archived status chip and count (#407).
+
+- 022a8af: The journal entry batch workspace's entry list has a header checkbox that ticks every entry or clears them all, like the Build Batch dialog's. Clearing keeps entries a later criteria change brings in unticked; ticking it again brings them in ticked (#327).
+- 6d866b6: A journal entry batch can now be approved, rejected and sent from the Accounting app's Batches page (#466). Since the app's nav was reduced to Overview and Batches, the only screens with Approve, Reject and Dispatch were no longer reachable, so a batch built from the Batches page stayed Pending. Each row now offers Approve and Reject on a Pending batch to the company's approver who did not build it, Dispatch on an Approved batch and Retry on a Failed one to holders of the batch-operator grant. Reject asks for a reason, which becomes the batch's cancel reason. A retry the server's ERP lookup cannot settle asks the operator to check the ERP first; that dialog is now one component shared with Dispatch status. The approval Task's description now says to approve or reject the batch in the Accounting app, since a decision recorded on the Task alone does not change the batch.
+- ea5f9f7: A Failed batch the ERP already accepted (it carries the ERP's reference) is no longer offered Cancel on Dispatch status and the Batches overview (#412), and can no longer be archived: `Archive()` refuses it and points to Retry, and the screens hide Archive for it (#413). When raising `ERP_POSTING_NOT_READ_BACK` fails, the engine now holds the raise in the process, answers `Unavailable` instead of trusting "nothing found" in that company, and tries the raise again at each such lookup outside a transaction until it lands (#414). A lookup inside a transaction, such as a cancel's recheck before it commits, keeps the hold and does not write. An Integration named `BC` now matches Business Central batches (#418). QuickBooks Online is matched by its own name (or bare `QuickBooks`), so a QuickBooks Desktop or other QuickBooks Integration no longer matches QuickBooks batches or resolves to the QuickBooks Online provider (#419).
+- 442511e: Accounting entity forms no longer put fields in the generic Details panel (MemberJunction/bizapps-orders#276). The fields CodeGen left uncategorized get a section in `metadata/entity-fields`, and the forms are regenerated. A repo check now fails when a generated form puts fields in Details.
+- 902ea80: The GL Accounts page's system-seeded tooltip names the routine that seeds the starter chart, `SeedDefaultChartOfAccounts`, instead of a procedure that was removed (#352).
+- ecdc1e0: A Pending journal entry batch can be cancelled by its builder or approver even when that user has no linked Person: its approval Task is closed, and the cancel comment is written only when there is a Person to sign it. A cancel past approval still needs one. Archiving a batch now records the archive on its approval Task the same way, in the same transaction: a Pending batch's Task is closed, and an Approved or Failed batch's Task gets a comment. The batch screens reload their list after a cancel or archive that answers with an error, so a call that went through on the server but timed out on the way back shows the batch's real status.
+- 56318f7: On a Pending journal entry batch, the Cancel button (Batch Dispatch and the Journal Entry Batches page) shows only to the users the server lets cancel it: the company's configured approver, or the user who built the batch. Batches the nightly job built show it to the approver only. The server check is unchanged and still decides (#308).
+- cc8257e: Batch Dispatch reloads the batch list after a cancel the server refuses, not only after one that succeeds. When the ERP posts a Failed batch while it is being cancelled, the server records the batch Posted and refuses the cancel; the card now shows Posted instead of staying Failed until a manual refresh (#324).
+- Updated dependencies [ff56bcc]
+- Updated dependencies [0ffa7e7]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [266cf9c]
+- Updated dependencies [74e2ad9]
+- Updated dependencies [a577db6]
+- Updated dependencies [d51bb87]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [da5d2c6]
+- Updated dependencies [a74ce5f]
+- Updated dependencies [5677f94]
+- Updated dependencies [f7b9b1c]
+  - @mj-biz-apps/accounting-entities@0.24.0
+  - @mj-biz-apps/accounting-engine-base@0.24.0
+
 ## 0.23.0
 
 ### Patch Changes

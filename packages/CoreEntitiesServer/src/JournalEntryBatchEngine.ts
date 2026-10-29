@@ -75,11 +75,13 @@ import { DatabaseProviderBase, IMetadataProvider, IRunViewProvider, LogError, Lo
 import { UUIDsEqual } from '@memberjunction/global';
 import { UserCache } from '@memberjunction/generic-database-provider';
 import type {
+  AccountingFinanceExceptionToRaise,
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingJournalEntryEntity,
   mjBizAppsAccountingJournalEntryLineEntity,
 } from '@mj-biz-apps/accounting-entities';
 import {
+  ClosedBooksPostingDateProblem,
   NetLines,
   type DimRef,
   type NetGroup,
@@ -264,6 +266,39 @@ async function assertPostingDayCoversMembers(jeIds: string[], postingDay: Calend
   );
 }
 
+/**
+ * Refuse a posting date on or before the company's BooksClosedThroughDate (golive #316). The ERP
+ * would refuse the batch once it was sent, leaving a Failed batch to work out; this says so at the
+ * build. FAILS CLOSED: a read that fails throws, since guessing "open" builds a batch into a month
+ * finance has closed. A company with no profile row, or no date, has nothing closed.
+ * Regenerate keeps the batch's posting date, so its refusal says to cancel and build anew instead.
+ */
+async function assertPostingDayOpen(
+  companyId: string, postingDay: CalendarDay, contextUser: UserInfo, p: Providers,
+  operation: 'buildJournalEntryBatch' | 'regenerateJournalEntryBatch' = 'buildJournalEntryBatch',
+): Promise<void> {
+  const res = await p.rv.RunView<{ BooksClosedThroughDate: Date | string | null }>(
+    {
+      EntityName: ACP_ENTITY,
+      ExtraFilter: `ID=${sqlGuid(companyId)}`,
+      Fields: ['BooksClosedThroughDate'],
+      ResultType: 'simple',
+      BypassCache: true,
+    },
+    contextUser,
+  );
+  if (!res.Success) throw new Error(`${operation}: could not read company ${companyId}'s books-closed-through date: ${res.ErrorMessage ?? 'unknown'}`);
+  const closedThrough = ToCalendarDay(res.Results?.[0]?.BooksClosedThroughDate ?? null);
+  const problem = ClosedBooksPostingDateProblem(postingDay, closedThrough);
+  if (!problem) return;
+  if (operation === 'regenerateJournalEntryBatch') {
+    throw new JournalEntryBatchPostingDateError(
+      `${problem} Regenerate keeps the batch's posting date, so cancel this batch and build a new one with an open posting date.`,
+    );
+  }
+  throw new JournalEntryBatchPostingDateError(problem);
+}
+
 // ─── buildJournalEntryBatch ──────────────────────────────────────────────────────────────
 
 /**
@@ -315,6 +350,7 @@ async function buildJournalEntryBatchCore(
 ): Promise<BuildJournalEntryBatchResult> {
   const p = resolveProviders(provider);
   const postingDay = await loadPostingDay(postingDate, contextUser, p.md, companyId);
+  await assertPostingDayOpen(companyId, postingDay, contextUser, p);
   await assertPostingDayCoversMembers(jeIds, postingDay, contextUser, p);
   const groups = NetLines(await loadNettableLines(companyId, jeIds, contextUser, p));
   if (groups.length === 0) {
@@ -1021,7 +1057,21 @@ export interface JournalEntryBatchCancelGate {
   /** Throw unless the user may cancel a Pending batch nobody rejected: the company's CFO or the batch's builder (golive #302). */
   assertMayCancelPending(batchId: string, contextUser: UserInfo): Promise<void>;
   assertMayCancelApproved(batchId: string, contextUser: UserInfo): Promise<void>;
+  /**
+   * Throw unless the user may archive the batch (#448): before approval only the company's CFO; past
+   * approval the CFO or the batch's approver, as for a cancel.
+   */
+  assertMayArchive(batchId: string, contextUser: UserInfo): Promise<void>;
   recordCancellation(batchId: string, cancellation: RecordedCancellation, contextUser: UserInfo): Promise<void>;
+  /** Record an archive on the approval Task, closing it when the batch was never approved (golive #325). */
+  recordArchive(batchId: string, archive: RecordedArchive, contextUser: UserInfo): Promise<void>;
+}
+
+/** What an archive records on the approval Task (golive #325). */
+export interface RecordedArchive {
+  reason: string;
+  /** The status the batch was archived FROM, passed in for the same reason as {@link RecordedCancellation.fromStatus}. */
+  fromStatus: string;
 }
 
 /** What a cancel records on the approval Task. */
@@ -1230,6 +1280,9 @@ export async function regenerateJournalEntryBatch(
   if (batch.Status !== 'Pending') {
     throw new Error(`The batch was not rebuilt: it is ${batch.Status}, and only a Pending batch can be rebuilt.`);
   }
+  // The month may have closed since the build; the ERP would refuse the batch under its kept PostingDate.
+  const postingDay = ToCalendarDay(batch.PostingDate);
+  if (postingDay) await assertPostingDayOpen(batch.CompanyID, postingDay, contextUser, p, 'regenerateJournalEntryBatch');
 
   // ONE transaction (D10 rev. 2026-07-29): teardown + re-gather + rebuild commit all-or-none.
   // Candidates are gathered AFTER teardown (inside the transaction) so the batch's own returning
@@ -1273,14 +1326,16 @@ export async function regenerateJournalEntryBatch(
 export async function approveJournalEntryBatch(
   batchId: string, approvedByUserId: string, contextUser: UserInfo, provider: IMetadataProvider,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
+  // The batch records its approver from the context user (#447); a different ID here would be a
+  // caller choosing whose approval is recorded.
+  if (!UUIDsEqual(approvedByUserId, contextUser.ID)) {
+    throw new Error(`approveJournalEntryBatch: the approver is recorded as the context user; approvedByUserId ${approvedByUserId} is not the context user ${contextUser.ID}.`);
+  }
   const p = resolveProviders(provider);
-  const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  const batch = await p.md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, contextUser);
   if (!(await batch.Load(batchId))) throw new Error(`The batch was not approved: batch ${batchId} was not found.`);
   if (batch.Status !== 'Pending') throw new Error(`The batch was not approved: it is ${batch.Status}, and only a Pending batch can be approved.`);
-  batch.Status = 'Approved';
-  batch.ApprovedAt = new Date();
-  batch.ApprovedByUserID = approvedByUserId;
-  if (!(await batch.Save())) throw new Error(`The batch was not approved: saving the approval failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown error'}`);
+  if (!(await batch.Approve(contextUser))) throw new Error(`The batch was not approved: saving the approval failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown error'}`);
   return batch;
 }
 
@@ -1448,9 +1503,11 @@ async function sendBatch(
   if (preflight.status === 'Found') return await adoptErpPosting(batch, preflight.externalJournalEntryBatchRef, sealBroken, contextUser, p);
 
   const postResult = await postOrFail(services.CreatePoster(p.md), batch, summaryLines, contextUser);
-  return postResult.success
-    ? await markBatchPosted(batch, postResult.externalJournalEntryBatchRef ?? null, contextUser, p)
-    : await failBatch(batch, postResult.error ?? 'The ERP did not accept the batch and gave no reason.');
+  if (postResult.success) return await markBatchPosted(batch, postResult.externalJournalEntryBatchRef ?? null, contextUser, p);
+  const error = postResult.error ?? 'The ERP did not accept the batch and gave no reason.';
+  const failed = await failBatch(batch, error);
+  await raiseRejectedPosting(failed, error, services, p);
+  return failed;
 }
 
 /**
@@ -1935,6 +1992,53 @@ async function failBatch(batch: mjBizAppsAccountingJournalEntryBatchEntity, erro
   LogError(`sendJournalEntryBatch: could not mark batch ${batch.JournalEntryBatchNumber ?? batch.ID} as Failed (ERP error was: ${error}): ${saveError}`);
   const status = await reloadedStatus(batch);
   throw new JournalEntryBatchFailureNotRecordedError(batch.ID, status, acceptedRef, error, saveError);
+}
+
+/** A batch the ERP rejected (golive #316). Finance clears it once the batch is retried or cancelled. */
+export const ERP_POSTING_REJECTED = 'ERP_POSTING_REJECTED';
+/** FinanceException.Summary's length. */
+const FINANCE_EXCEPTION_SUMMARY_MAX = 1000;
+
+/**
+ * Tells finance that the ERP rejected `batch` (golive #316): a Failed status on the batch alone is
+ * seen only by whoever opens the batch list, and a rejection is often a posting date the ERP has
+ * closed, which finance has to act on. One exception per send attempt, so a retry that fails again
+ * is raised again after the first was cleared. Never throws: the batch is already recorded Failed
+ * with the ERP's message, so a raise that fails is logged.
+ */
+async function raiseRejectedPosting(
+  batch: mjBizAppsAccountingJournalEntryBatchEntity, error: string, services: JournalEntryBatchDispatchServices, p: Providers,
+): Promise<void> {
+  const doc = batch.JournalEntryBatchNumber ?? batch.ID;
+  try {
+    const result = await services.RaiseFinanceExceptions({ Exceptions: [rejectedPostingException(batch, error)] }, p.md);
+    const skipped = result.Results?.[0]?.Skipped === true;
+    if (!result.Success || skipped) {
+      const why = skipped ? `the ${ERP_POSTING_REJECTED} type is inactive` : (result.Errors ?? []).map((e) => e.Message).join(' ');
+      LogError(`sendJournalEntryBatch: batch ${doc} was rejected by the ERP, and raising ${ERP_POSTING_REJECTED} failed: ${why}`);
+    }
+  } catch (e) {
+    LogError(`sendJournalEntryBatch: batch ${doc} was rejected by the ERP, and raising ${ERP_POSTING_REJECTED} threw.`, null, e);
+  }
+}
+
+/** The finance exception for a batch the ERP rejected, keyed to the batch and its send attempt. */
+export function rejectedPostingException(batch: mjBizAppsAccountingJournalEntryBatchEntity, error: string): AccountingFinanceExceptionToRaise {
+  const doc = batch.JournalEntryBatchNumber ?? batch.ID;
+  const postingDay = batch.PostingDate ? ToCalendarDay(batch.PostingDate) : null;
+  const summary = `Batch ${doc}${postingDay ? `, posting date ${postingDay},` : ''} was rejected by ${batch.TargetSystem}: ${error} ` +
+    'Fix the cause and send the batch again, or cancel it. If the posting date is in a period the ERP has closed, reopen the period or cancel and rebuild the batch with an open date.';
+  return {
+    TypeCode: ERP_POSTING_REJECTED,
+    SourceEntityName: BATCH_ENTITY,
+    SourceRecordID: batch.ID,
+    CompanyID: batch.CompanyID,
+    Amount: batch.TotalDebits ?? null,
+    // Its month is the close it affects. An unreadable posting date falls back to today's.
+    ExceptionDate: postingDay ?? new Date().toISOString().slice(0, 10),
+    Summary: summary.length > FINANCE_EXCEPTION_SUMMARY_MAX ? `${summary.slice(0, FINANCE_EXCEPTION_SUMMARY_MAX - 1)}…` : summary,
+    DedupeKey: `${batch.ID.toLowerCase()}:${batch.SendAttemptCount ?? 0}`,
+  };
 }
 
 /** The status the database holds for `batch`, reloading it; `Unknown` when the reload fails. */

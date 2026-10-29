@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { RunView, RunViewParams, RunViewResult } from '@memberjunction/core';
+import { IMetadataProvider, Metadata, RunView, RunViewParams, RunViewResult, UserInfo } from '@memberjunction/core';
 import { DashboardFilterBarComponent } from '@mj-biz-apps/common-ng';
 import { AccountingOverviewPageComponent } from './accounting-overview.component';
 import { CompanyScopeService } from '../shared/company-scope.service';
 import { useBusinessClock, viewResult, type BusinessClock } from '../../../__tests__/support/business-clock';
 import { ACME, BIRCH, stubDashboardFilterSources } from '../../../__tests__/support/dashboard-filters';
+import { BatchOperatorCatalog } from '../../../__tests__/support/batch-operator';
 
 /**
  * The Overview reads its figures for the filter bar's companies and period, on the server: the
@@ -174,5 +175,41 @@ describe('AccountingOverviewPageComponent (DOM)', () => {
     expect(text(fixture, 'overview-kpi-volume')).toBe('—');
     expect(fixture.componentInstance.MonthlyBars).toEqual([]);
     expect(fixture.nativeElement.textContent).toContain('Posting history could not be loaded.');
+  });
+});
+
+describe('AccountingOverviewPageComponent — Build Batch needs the batch-operator grant (#448, DOM)', () => {
+  const USER_ID = '00000000-0000-0000-0000-0000000000a1';
+
+  useBusinessClock(OCTOBER_IN_CHICAGO);
+
+  beforeEach(() => {
+    stubDashboardFilterSources([ACME, BIRCH]);
+    const answer = (p: RunViewParams): RunViewResult => (p.EntityName === BATCH_ENTITY ? viewResult([BATCH]) : viewResult([], 0));
+    vi.spyOn(RunView.prototype, 'RunViews').mockImplementation(async (ps: RunViewParams[]) => ps.map(answer));
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => answer(p));
+  });
+
+  async function buildButtonsFor(holdsGrant: boolean): Promise<string[]> {
+    const user = new UserInfo();
+    user.ID = USER_ID;
+    const provider = { CurrentUser: user, Authorizations: BatchOperatorCatalog(holdsGrant ? [USER_ID] : []) };
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue(provider as unknown as IMetadataProvider);
+    const fixture = TestBed.createComponent(AccountingOverviewPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    fixture.detectChanges();
+    return [...fixture.nativeElement.querySelectorAll('button')]
+      .map((b: HTMLButtonElement) => b.textContent?.trim() ?? '')
+      .filter((label: string) => label.startsWith('Build Batch'));
+  }
+
+  it('shows a holder both Build Batch buttons', async () => {
+    expect(await buildButtonsFor(true)).toEqual(['Build Batch', 'Build Batch']);
+  });
+
+  it('shows anyone else none', async () => {
+    expect(await buildButtonsFor(false)).toEqual([]);
   });
 });

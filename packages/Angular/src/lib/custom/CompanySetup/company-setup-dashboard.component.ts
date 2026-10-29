@@ -7,12 +7,15 @@ import { CompositeKey, Metadata, RunView } from '@memberjunction/core';
 import { ResourceData } from '@memberjunction/core-entities';
 import { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
 import { createdRecordId } from './created-record-id';
+import { SaveErrorMessage } from '../shared/save-error-message';
 
 const COMPANY_PROFILE_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 // __mj.User — the CFO approver FK target (ApprovalCFOUserID). MJ v5: core entities REQUIRE the
 // 'MJ: ' prefix — the bare 'Users' no longer resolves and threw "Entity Users not found in
 // metadata" as a red card on the Configuration page (same bug class as TasksAppApprovalGate).
 const USER_ENTITY = 'MJ: Users';
+/** Shown for a CFO save that failed for a reason not fit to show (#383). */
+const CFO_NOT_SAVED = 'The CFO approver was not saved. Try again; if it keeps failing, ask an administrator.';
 
 /** Value-list unions, derived from the generated entity (rule 2c — never hand-copied). */
 type EntityType = mjBizAppsAccountingAccountingCompanyProfileEntity['EntityType'];
@@ -239,7 +242,7 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
       if (!user) { this.setError('Your sign-in could not be confirmed. Sign out, sign back in, and try again.'); return; }
       await this.setCompanyCFO(company.ID, user.ID, `You are now the CFO approver for ${company.Name}.`);
     } catch (e) {
-      this.setError(e instanceof Error ? e.message : String(e));
+      this.setError(SaveErrorMessage(e instanceof Error ? e.message : String(e), CFO_NOT_SAVED));
     } finally {
       this.endSave();
     }
@@ -255,7 +258,7 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
       await this.setCompanyCFO(company.ID, this.SelectedUserID, `CFO approver set to ${user?.Name ?? 'the selected user'} for ${company.Name}.`);
       this.SelectedUserID = '';
     } catch (e) {
-      this.setError(e instanceof Error ? e.message : String(e));
+      this.setError(SaveErrorMessage(e instanceof Error ? e.message : String(e), CFO_NOT_SAVED));
     } finally {
       this.endSave();
     }
@@ -269,7 +272,7 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
     try {
       await this.setCompanyCFO(company.ID, null, `CFO approver cleared for ${company.Name}.`);
     } catch (e) {
-      this.setError(e instanceof Error ? e.message : String(e));
+      this.setError(SaveErrorMessage(e instanceof Error ? e.message : String(e), CFO_NOT_SAVED));
     } finally {
       this.endSave();
     }
@@ -282,7 +285,7 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
     if (!(await acp.Load(companyID))) { this.setError('Could not load this company\'s accounting settings. It may have been deleted; refresh the page and try again.'); return; }
     acp.ApprovalCFOUserID = userID;
     if (!(await acp.Save())) {
-      this.setError(`The CFO approver was not saved. ${acp.LatestResult?.CompleteMessage ?? 'Try again.'}`);
+      this.setError(SaveErrorMessage(acp.LatestResult?.CompleteMessage, CFO_NOT_SAVED));
       return;
     }
     this.ActionMessage = successMessage;

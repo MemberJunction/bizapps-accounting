@@ -2,7 +2,7 @@
   {
     "fields": {
       "Name": "Build Journal Entry Batches",
-      "CategoryID": "@lookup:MJ: Action Categories.Name=Accounting",
+      "CategoryID": "@lookup:MJ: Action Categories.ID=074DF299-8D1F-438B-B855-8DFF17AE565E",
       "Description": "Builds single-company GL posting batches from pending candidate journal entries, netting lines per account/dimension combination. Supports filtering by target ERP system, cutoff date, and including/excluding specific JournalEntryType codes (such as excluding RevenueRecognition for daily batch runs).",
       "Type": "Custom",
       "DriverClass": "Accounting.BuildJournalEntryBatches",
@@ -199,14 +199,14 @@
       ]
     },
     "sync": {
-      "lastModified": "2026-09-02T04:41:41.643Z",
-      "checksum": "5e77f59745a2827f25693d2abecb009d0845df436b93d9489759fb2863f2db9e"
+      "lastModified": "2026-10-20T13:23:59.616Z",
+      "checksum": "ada7653e2c795d11cdb3f6aa0849ec1b78c6eced4a1cfcd50f8e5bbb7dc0feeb"
     }
   },
   {
     "fields": {
       "Name": "Run ERP Sync",
-      "CategoryID": "@lookup:MJ: Action Categories.Name=Accounting",
+      "CategoryID": "@lookup:MJ: Action Categories.ID=074DF299-8D1F-438B-B855-8DFF17AE565E",
       "Description": "Pulls chart of accounts, dimensions, and dimension values from every credentialed Company Integration via AccountingERPEngine.SyncMasterData. One job, all companies. Hosts disable the scheduled job rather than deleting this action.",
       "Type": "Custom",
       "DriverClass": "Accounting.RunERPSync",
@@ -277,8 +277,84 @@
       ]
     },
     "sync": {
-      "lastModified": "2026-09-02T04:41:41.661Z",
-      "checksum": "b4fac10fc9fb4f00737248aa2203c784c4739fd68ca9d455f87ab1a950378ba5"
+      "lastModified": "2026-10-20T13:23:59.635Z",
+      "checksum": "92c6439357ebf9df595975289c7c62d5fbf4f12bcec58cedbaf13aa877927837"
+    }
+  },
+  {
+    "fields": {
+      "Name": "Dispatch Approved Journal Entry Batches",
+      "CategoryID": "@lookup:MJ: Action Categories.ID=074DF299-8D1F-438B-B855-8DFF17AE565E",
+      "Description": "Sends every Approved journal entry batch to its ERP, oldest approval first, the way the Dispatch button does: each send passes the CFO approval gate, the approved-content check and the ERP lookup. Approves nothing and never retries a Failed batch. Runs only as the MJ system user, for the scheduled dispatch job.",
+      "Type": "Custom",
+      "DriverClass": "Accounting.DispatchApprovedJournalEntryBatches",
+      "IconClass": "fa-solid fa-paper-plane",
+      "UserPrompt": "Dispatch the approved journal entry batches to the ERP.",
+      "CodeApprovalStatus": "Approved",
+      "Status": "Active"
+    },
+    "primaryKey": {
+      "ID": "FA82A39C-0DA9-4CBB-8A4A-6CDFFB78415D"
+    },
+    "relatedEntities": {
+      "MJ: Action Params": [
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "TargetSystem",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "Only batches for this ERP (e.g. 'BusinessCentral', 'QuickBooks'). Omit for every ERP."
+          },
+          "primaryKey": {
+            "ID": "628CECD9-A81E-4E0B-9851-5A8AB0311C21"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "CompanyIDs",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": true,
+            "IsRequired": false,
+            "Description": "Only batches for these companies. Omit for every company."
+          },
+          "primaryKey": {
+            "ID": "A43A245F-C645-4583-9573-1A651B02A6B3"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "PostedCount",
+            "Type": "Output",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "The number of batches that reached Posted in this run."
+          },
+          "primaryKey": {
+            "ID": "C8ED5C4F-4BF4-4230-9F85-87C36FF908D0"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "Batches",
+            "Type": "Output",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "JSON array of each batch sent: its ID, number, company, the status it ended at, and the error when it did not post."
+          },
+          "primaryKey": {
+            "ID": "996F2184-92AB-4A55-935A-0D583B4613AF"
+          }
+        }
+      ]
     }
   }
 ]

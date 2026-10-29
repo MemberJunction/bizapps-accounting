@@ -1,4 +1,5 @@
 import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { RunView } from '@memberjunction/core';
 import type {
     mjBizAppsAccountingJournalEntryEntity,
     mjBizAppsAccountingJournalEntryLineEntity,
@@ -9,6 +10,14 @@ import {
     type FiscalYearStart,
 } from '@mj-biz-apps/accounting-engine-base';
 import { BusinessTimeZoneEngine, CalendarDayIn, ToCalendarDay } from '@mj-biz-apps/common-entities';
+
+const JOURNAL_ENTRY_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
+
+/**
+ * How much of a month's amount is recognized: all of it, some of it, none of it yet, or the month has
+ * no amount (#429).
+ */
+export type WaterfallReleaseState = 'Released' | 'PartlyReleased' | 'Scheduled' | 'Empty';
 
 /** A single month's release cell in the waterfall */
 export interface WaterfallMonthCell {
@@ -115,6 +124,10 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
     public MonthHeaders: MonthHeader[] = [];
 
     private engineLoadRequested = false;
+    /** Reversal day by lowercased reversal ID, for reversals loaded because the caller passed none in (#430). */
+    private loadedReversalDays = new Map<string, string>();
+    /** Reversal IDs already asked for, so a load that finds nothing is not repeated on every recompute. */
+    private requestedReversalIds = new Set<string>();
 
     public ngOnChanges(changes: SimpleChanges): void {
         if (changes['JournalEntries'] || changes['TermLookup']) {
@@ -145,6 +158,15 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
         }).format(amount);
     }
 
+    /** Compared in cents, so floating-point sums of the same entries cannot read as a partial month. */
+    public ReleaseStateOf(cell: WaterfallMonthCell): WaterfallReleaseState {
+        const amount = toCents(cell.Amount);
+        const recognized = toCents(cell.RecognizedAmount);
+        if (amount <= 0) return 'Empty';
+        if (recognized >= amount) return 'Released';
+        return recognized > 0 ? 'PartlyReleased' : 'Scheduled';
+    }
+
     public GetTermBadgeClass(termIndex: number): string {
         const mod = (termIndex % 5) + 1;
         return `mja-term-badge--t${mod}`;
@@ -157,9 +179,11 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
         }
         this.ensureFiscalYearStartsLoaded();
 
-        const activeEntries = selectActiveEntries(this.JournalEntries);
-        this.DistinctTerms = this.buildDistinctTerms(activeEntries);
         const today = BusinessTimeZoneEngine.Instance.Today();
+        const reversalDays = this.knownReversalDays(this.JournalEntries);
+        this.ensureReversalDaysLoaded(reversalDays);
+        const activeEntries = selectActiveEntries(this.JournalEntries, reversalDays, today);
+        this.DistinctTerms = this.buildDistinctTerms(activeEntries);
         const todayKey = today.slice(0, 7);
         this.MonthHeaders = buildMonthHeaders(collectMonthKeys(activeEntries), todayKey);
 
@@ -184,6 +208,33 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
         // Once per component: a load that resolves without loading must not recompute in a loop.
         this.engineLoadRequested = true;
         void engine.Config().then(() => this.recalculateWaterfall());
+    }
+
+    /** Reversal days from the reversals passed in, then from those loaded for reversals that were not. */
+    private knownReversalDays(entries: mjBizAppsAccountingJournalEntryEntity[]): Map<string, string> {
+        const days = new Map(this.loadedReversalDays);
+        for (const je of entries) {
+            const day = je.ReversesJournalEntryID != null ? ToCalendarDay(je.EffectiveDate) : null;
+            if (day !== null) days.set(je.ID.toLowerCase(), day);
+        }
+        return days;
+    }
+
+    /**
+     * Callers load a term's entries by LinkedRecordID, and a reversal carries none, so a reversed
+     * entry usually arrives without its reversal. Load the missing reversals' days once, then recompute.
+     */
+    private ensureReversalDaysLoaded(known: Map<string, string>): void {
+        const missing = missingReversalIds(this.JournalEntries, known).filter((id) => !this.requestedReversalIds.has(id));
+        if (missing.length === 0) return;
+        missing.forEach((id) => this.requestedReversalIds.add(id));
+        loadReversalDays(missing)
+            .then((days) => {
+                if (days.size === 0) return;
+                days.forEach((day, id) => this.loadedReversalDays.set(id, day));
+                this.recalculateWaterfall();
+            })
+            .catch((e: unknown) => console.error('Deferred revenue waterfall: could not load reversal dates:', e));
     }
 
     private resetEmpty(): void {
@@ -343,12 +394,62 @@ function fiscalYearStartOf(je: mjBizAppsAccountingJournalEntryEntity): FiscalYea
     return AccountingEngineBase.Instance.FiscalYearStartFor(je.CompanyID);
 }
 
+function toCents(amount: number): number {
+    return Math.round(amount * 100);
+}
+
 /**
- * A reversed entry and its reversal net to zero, so neither belongs in the schedule. Checking both
- * pointers keeps the pair out even when a caller loads the reversal, which carries no link of its own.
+ * A reversed entry and its reversal net to zero once the reversal's day arrives, so from then neither
+ * belongs in the schedule. Until that day the original still stands and counts as usual (#430).
+ *
+ * A reversal itself never shows: its lines swap the original's sides, and the waterfall reads one side
+ * as a positive amount. An original whose reversal's day is not known yet is left out, as before #430,
+ * until `loadReversalDays` answers.
  */
-function isReversalPair(je: mjBizAppsAccountingJournalEntryEntity): boolean {
-    return je.ReversedByJournalEntryID != null || je.ReversesJournalEntryID != null;
+function isStanding(
+    je: mjBizAppsAccountingJournalEntryEntity,
+    reversalDays: Map<string, string>,
+    today: string,
+): boolean {
+    if (je.ReversesJournalEntryID != null) return false;
+    if (je.ReversedByJournalEntryID == null) return true;
+    const reversalDay = reversalDays.get(je.ReversedByJournalEntryID.toLowerCase());
+    // Fixed-width `YYYY-MM-DD` days compare lexically in chronological order.
+    return reversalDay !== undefined && reversalDay > today;
+}
+
+/** IDs of the reversals of entries passed in whose day is not known. */
+function missingReversalIds(
+    entries: mjBizAppsAccountingJournalEntryEntity[],
+    known: Map<string, string>,
+): string[] {
+    const ids = new Set<string>();
+    for (const je of entries) {
+        const id = je.ReversedByJournalEntryID?.toLowerCase();
+        if (id && !known.has(id)) ids.add(id);
+    }
+    return [...ids];
+}
+
+/** Each reversal's EffectiveDate as a calendar day, by lowercased ID. A failed load returns none. */
+async function loadReversalDays(ids: string[]): Promise<Map<string, string>> {
+    const days = new Map<string, string>();
+    const quoted = ids.map((id) => `'${id.replace(/'/g, "''")}'`).join(', ');
+    const result = await new RunView().RunView<{ ID: string; EffectiveDate: string | Date }>({
+        EntityName: JOURNAL_ENTRY_ENTITY,
+        ExtraFilter: `ID IN (${quoted})`,
+        Fields: ['ID', 'EffectiveDate'],
+        ResultType: 'simple',
+    });
+    if (!result.Success) {
+        console.error('Deferred revenue waterfall: could not load reversal dates:', result.ErrorMessage);
+        return days;
+    }
+    for (const row of result.Results ?? []) {
+        const day = ToCalendarDay(row.EffectiveDate);
+        if (day !== null) days.set(row.ID.toLowerCase(), day);
+    }
+    return days;
 }
 
 function isRecognitionEntry(je: mjBizAppsAccountingJournalEntryEntity): boolean {
@@ -359,8 +460,10 @@ function isRecognitionEntry(je: mjBizAppsAccountingJournalEntryEntity): boolean 
 
 function selectActiveEntries(
     entries: mjBizAppsAccountingJournalEntryEntity[],
+    reversalDays: Map<string, string>,
+    today: string,
 ): mjBizAppsAccountingJournalEntryEntity[] {
-    const standing = entries.filter((je) => !isReversalPair(je));
+    const standing = entries.filter((je) => isStanding(je, reversalDays, today));
     return standing.some(isRecognitionEntry) ? standing.filter(isRecognitionEntry) : standing;
 }
 

@@ -279,6 +279,7 @@ MJ_CORE_SCHEMA=__mj
 ```bash
 pnpm run mj:migrate                   # Apply migrations (creates __mj_BizAppsAccounting schema)
 pnpm run mj sync push --dir metadata  # Load seed metadata into your dev database (hosts get it from the release's Metadata_Sync migration)
+pnpm run demo:load                     # Optional: the predictive-scoring bench (demo-data/), never shipped to hosts
 pnpm run mj:codegen                   # Generate TypeScript / GraphQL / Angular code
 pnpm run build                        # Build all packages (Turborepo)
 ```
@@ -325,12 +326,13 @@ bizapps-accounting/
 │   └── IntegrationTests/          # @mj-biz-apps/accounting-integration-tests (private)
 ├── migrations/                    # T-SQL baseline + incremental V migrations (source of truth)
 ├── migrations-pg/                 # PG migrations (converter output)
+├── demo-data/                     # Opt-in records, never shipped (pnpm run demo:load)
 ├── metadata/                      # Seed data + entity metadata (synced via mj-sync)
 ├── docs/                          # Architecture, ERD, lifecycle hooks, binding rules, seeding guides
 ├── plans/
 │   └── bizapps-accounting-master.md  # THE design doc & decision log
 ├── test-harnesses/                # Live test tiers (see test-harnesses/README.md)
-├── scripts/                       # rebuild-db.sh (new empty database only), append-codegen.sh
+├── scripts/                       # rebuild-db.sh (new empty database only)
 └── ci/                            # Release scripts
 ```
 

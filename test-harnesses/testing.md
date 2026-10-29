@@ -508,10 +508,10 @@ Prerequisites, credentials and the mjdev instance layout: [`README.md`](README.m
 | 1 | `packages/*/src/__tests__/*.test.ts` (every package) + every package's spec type-check | `pnpm run test` from the repo root (also runs the DOM suite; this is what CI runs) |
 | 1 | one package | `cd packages/<Package> && npx vitest run` |
 | — | accounting-ng DOM (`src/**/*.dom.test.ts`, no backend) | `cd packages/Angular && pnpm run test:dom` |
-| 2 | `test-harnesses/server/block0-runtime.ts` · `block1-runtime.ts` · `engine-runtime.ts` | from the instance root: `npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/<file>.ts` (one at a time) |
+| 2 | `test-harnesses/server/block0-runtime.ts` · `block1-runtime.ts` · `engine-runtime.ts` | from the repo root: `npx tsx test-harnesses/server/<file>.ts` (one at a time) |
 | 2 | `test-harnesses/server/intercompany-runtime.ts` | from the repo root: `npx tsx test-harnesses/server/intercompany-runtime.ts` |
 | 2 | `test-harnesses/server/phase2-encapsulation.live.test.ts` | from the repo root: `npx vitest run --config test-harnesses/server/vitest.config.ts` |
-| 3 | `test-harnesses/api/engine-op-api.ts` · `batch-ops-api.ts` · `full-flow-api.ts` | from the instance root, with `MJ_API_KEY` set: `npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/<file>.ts` |
+| 3 | `test-harnesses/api/engine-op-api.ts` · `batch-ops-api.ts` · `full-flow-api.ts` | from the repo root, MJAPI running: `npx tsx test-harnesses/api/<file>.ts` |
 | 3 | `packages/IntegrationTests` (bundles `acct-world`, `acct-ledger`, `acct-batch`) | from the repo root, after a build: `pnpm run test:integration` |
 | 4 | `packages/Angular/test-harnesses/gui/*.dom.test.ts` | `cd packages/Angular && pnpm run test:gui` (inside an mjdev instance only, with MJAPI running; not in CI) |
 | 5 | `test-harnesses/playwright/specs/*.spec.ts` | `cd test-harnesses/playwright && npx playwright test` (inside the instance, MJAPI + Explorer up) |
@@ -545,13 +545,13 @@ Every harness takes the instance from its environment — **no file edits**. Def
 harnesses use `MJ_API_URL=http://localhost:4180` and `MJDEV_SLUG=accounting-revamp`; the Playwright
 harness uses `MJDEV_SLUG=bizapps-accounting-dev` and reads both ports from `mjdev ps <slug> --json`
 (overridable with `MJAPI_PORT` / `MJEXPLORER_PORT`); the tier-2 harnesses read the DB from the
-`.env` in their working directory. Below, `<slug>` is the instance, `<api-port>` / `<explorer-port>`
+`.env` in their working directory, else the nearest one from the repo root upward
+(`test-harnesses/harness-paths.mts`). Below, `<slug>` is the instance, `<api-port>` / `<explorer-port>`
 are the ports `mjdev ps <slug> --json` reports, and `mjdev` is the launcher at `bin/mjdev` in the mjdev
 workspace root.
 
 **Prereqs:** `mjdev setup <slug> all` (deps→build→migrate baseline→codegen→build), then start MJAPI +
-Explorer, then run the demo seed. Run tsx harnesses from the instance's MJ worktree root so `.env`
-resolves.
+Explorer, then run the demo seed. The commands below run from the instance's MJ worktree root.
 
 - **Start MJAPI:** `mjdev run <slug> api`
 - **Start Explorer (ng21 workaround — `mjdev run explorer` injects `--no-interactive` which ng21 rejects):**
@@ -570,10 +570,10 @@ resolves.
 - **Tier 5 (Playwright — override SLUG; ports + magic-link auto-follow):**
   `cd packages/dev-apps/bizapps-accounting/test-harnesses/playwright && MJDEV_SLUG=<slug> npx playwright test`
 
-**Portability gap:** the `api/*.ts` harnesses now read `process.env.MJDEV_SLUG` (default
-`accounting-revamp`, where the Playwright `env.ts` defaults to `bizapps-accounting-dev`). What remains:
-their key-minting fallback calls an mjdev launcher at an absolute path fixed in the code, so pass
-`MJ_API_KEY`.
+**Slug defaults differ:** the `api/*.ts` harnesses default `MJDEV_SLUG` to `accounting-revamp`, the
+Playwright `env.ts` to `bizapps-accounting-dev`; set it explicitly. Without `MJ_API_KEY` the `api/`
+harnesses mint a key with `MJDEV_BIN`, else the nearest `bin/mjdev` above the repo, else `mjdev` on
+`PATH`.
 
 **Expectation (the 2026-06-30 equivalence run above):** the squashed v1.0 baseline yields the SAME net
 schema as the old create-then-drop set, so a fully green run IS the equivalence proof that the

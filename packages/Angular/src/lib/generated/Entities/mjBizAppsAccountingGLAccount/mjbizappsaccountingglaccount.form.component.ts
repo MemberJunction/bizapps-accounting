@@ -21,7 +21,6 @@ export class mjBizAppsAccountingGLAccountFormComponent extends BaseFormComponent
             { sectionKey: 'hierarchyAndRollup', sectionName: 'Hierarchy and Rollup', isExpanded: true },
             { sectionKey: 'financialSettings', sectionName: 'Financial Settings', isExpanded: true },
             { sectionKey: 'integrationDetails', sectionName: 'Integration Details', isExpanded: true },
-            { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingIntercompanyAccountMatchesDueToGLAccountID', sectionName: 'Intercompany Account Matches (Due To GL Account)', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingIntercompanyAccountMatchesDueFromGLAccountID', sectionName: 'Intercompany Account Matches (Due From GL Account)', isExpanded: false },

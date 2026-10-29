@@ -11,15 +11,12 @@
  *   - self-contained fixtures: a run-tagged company (ACP save fires the W1 COA seeding) +
  *     dimensions, all torn down FK-aware by tag/ID afterwards. NEVER touches shared demo data.
  *
- * The .env is the INSTANCE WORKTREE root's (mj/.env) — resolved relative to this file.
+ * The .env is the working directory's, else the nearest one from the repo root upward (../harness-paths.mts).
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
-import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
+import { setupSQLServerClient, SQLServerDataProvider, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 // Side-effect imports: fire every @RegisterClass so GetEntityObject returns the server subclasses.
 import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
@@ -27,8 +24,10 @@ import '@mj-biz-apps/tasks-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
 import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
+import { LoadHarnessEnv } from '../harness-paths.mjs';
 
 export const SCHEMA = '__mj_BizAppsAccounting';
+const TASKS_SCHEMA = '__mj_BizAppsTasks';
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 const CURRENCY_ENTITY = 'MJ_BizApps_Accounting: Currencies';
@@ -53,6 +52,8 @@ export interface LiveCompany { id: string; code: string; arGL: string; revGL: st
 
 export interface LiveCtx {
   pool: sql.ConnectionPool;
+  /** The provider setupSQLServerClient created; UserCache.Refresh reads through it. */
+  sqlProvider: SQLServerDataProvider;
   teardownPool: sql.ConnectionPool;
   user: UserInfo;
   runTag: string;
@@ -131,10 +132,9 @@ async function createCompany(user: UserInfo, runTag: string, label = 'Live Harne
 }
 
 export async function bootstrapLive(): Promise<LiveCtx> {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  dotenv.config({ path: path.resolve(here, '..', '..', '..', '..', '..', '.env'), quiet: true });
+  LoadHarnessEnv();
   const { DB_HOST: host, DB_DATABASE: database, DB_USERNAME: user, DB_PASSWORD: password } = process.env;
-  if (!host || !database || !user || !password) throw new Error('Missing DB_* settings — expected the instance worktree .env (mj/.env)');
+  if (!host || !database || !user || !password) throw new Error('Missing DB_* settings — expected a .env in the working directory, the repo root or a folder above it (an mjdev instance root)');
   const port = Number(process.env.DB_PORT ?? 1433);
   const pool = await connectPool(host, port, database, user, password);
 
@@ -142,9 +142,9 @@ export async function bootstrapLive(): Promise<LiveCtx> {
   if (!cgUser || !cgPassword) throw new Error('Missing CODEGEN_DB_USERNAME/PASSWORD (db_owner teardown pool)');
   const teardownPool = await connectPool(host, port, database, cgUser, cgPassword);
 
-  await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
+  const sqlProvider = await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
   await assertInvariantTriggers(pool);
-  await UserCache.Instance.Refresh(pool);
+  await UserCache.Instance.Refresh(sqlProvider);
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('no context user found in UserCache');
 
@@ -179,11 +179,16 @@ export async function bootstrapLive(): Promise<LiveCtx> {
   }
   const batchSummaryTypeId = jetRows.find(r => r.IsJournalEntryBatchSummary)?.ID ?? entryTypes.get('JournalEntryBatchSummary')!;
 
-  return { pool, teardownPool, user: ctxUser, runTag, company, companyB, dimId, dimValSales, dimValMktg, entryTypes, batchSummaryTypeId, createdJEIds: [], createdBatchIds: [] };
+  return { pool, sqlProvider, teardownPool, user: ctxUser, runTag, company, companyB, dimId, dimValSales, dimValMktg, entryTypes, batchSummaryTypeId, createdJEIds: [], createdBatchIds: [] };
 }
 
-/** FK-aware, trigger-toggling teardown of everything the run created. Warnings, never throws. */
-export async function teardownLive(ctx: LiveCtx): Promise<void> {
+/**
+ * FK-aware, trigger-toggling teardown of everything the run created. Warnings, never throws.
+ * Removes the approval Tasks stamped on the run's batches after the batches. `afterCompanies` runs
+ * once the companies are gone and before the pools close, for rows a spec created that the
+ * companies' rows referenced (users, for example).
+ */
+export async function teardownLive(ctx: LiveCtx, afterCompanies?: () => Promise<void>): Promise<void> {
   const exec = async (q: string) => {
     try { await ctx.teardownPool.request().query(q); }
     catch (e) { console.warn(`teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); }
@@ -192,6 +197,7 @@ export async function teardownLive(ctx: LiveCtx): Promise<void> {
   const batchIds = ctx.createdBatchIds.map(id => `'${id}'`).join(',');
   const companyIdList = [ctx.company.id, ctx.companyB.id].map(id => `'${id}'`).join(',');
   const toggled = ['JournalEntryLineDimension', 'JournalEntryLine', 'JournalEntry', 'JournalEntryBatch'];
+  const approvalTaskIds = await batchApprovalTaskIds(ctx, companyIdList, batchIds);
   try {
     for (const t of toggled) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
     // Also sweep by company: locked/summary JEs the tests didn't track individually.
@@ -203,6 +209,14 @@ export async function teardownLive(ctx: LiveCtx): Promise<void> {
   } finally {
     for (const t of toggled) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
   }
+  // The approval Tasks the real gate raised. Only now: a batch references its Task, and a cancelled
+  // batch is frozen, so the reference goes with the batch row.
+  for (const id of approvalTaskIds) {
+    for (const table of ['TaskComment', 'TaskActivity', 'TaskAssignment', 'TaskLink', 'TaskDecision', 'TaskNotificationLog']) {
+      await exec(`DELETE FROM ${TASKS_SCHEMA}.${table} WHERE TaskID='${id}'`);
+    }
+    await exec(`DELETE FROM ${TASKS_SCHEMA}.Task WHERE ID='${id}'`);
+  }
   // GL account links created by the tie-guard specs — company-rooted through the account FK.
   await exec(`DELETE lk FROM ${SCHEMA}.GLAccountLink lk JOIN ${SCHEMA}.GLAccount gl ON gl.ID=lk.GLAccountID WHERE gl.CompanyID IN (${companyIdList})`);
   await exec(`DELETE FROM ${SCHEMA}.DimensionValue WHERE DimensionID='${ctx.dimId}'`);
@@ -211,6 +225,7 @@ export async function teardownLive(ctx: LiveCtx): Promise<void> {
   await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID IN (${companyIdList})`);
   await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID IN (${companyIdList})`);
   await exec(`DELETE FROM __mj.Company WHERE ID IN (${companyIdList})`);
+  if (afterCompanies) await afterCompanies();
 
   // NEVER await a full pool close (it can hang on lingering sockets — donor harness lesson);
   // race it against a short timeout so vitest's forked worker can exit.
@@ -220,6 +235,15 @@ export async function teardownLive(ctx: LiveCtx): Promise<void> {
   ]);
   await raceClose(ctx.pool);
   await raceClose(ctx.teardownPool);
+}
+
+/** The approval Task IDs stamped on the run's batches, read before the batches are deleted. */
+async function batchApprovalTaskIds(ctx: LiveCtx, companyIdList: string, batchIds: string): Promise<string[]> {
+  const rows = (await ctx.teardownPool.request().query(
+    `SELECT DISTINCT ApprovalTaskID FROM ${SCHEMA}.JournalEntryBatch WHERE ApprovalTaskID IS NOT NULL ` +
+    `AND (CompanyID IN (${companyIdList})${batchIds ? ` OR ID IN (${batchIds})` : ''})`,
+  ).catch(() => ({ recordset: [] }))).recordset as Array<{ ApprovalTaskID: string }>;
+  return rows.map(r => r.ApprovalTaskID);
 }
 
 /** Convenience: single-value raw-SQL probe (the truth the tests cross-check against). */

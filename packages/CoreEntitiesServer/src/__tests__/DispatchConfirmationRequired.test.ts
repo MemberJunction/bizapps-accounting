@@ -7,7 +7,8 @@
  * for the confirmation only then instead of sending it with every retry.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { IMetadataProvider, UserInfo } from '@memberjunction/core';
+import type { AuthorizationInfo, IMetadataProvider, UserInfo } from '@memberjunction/core';
+import { JOURNAL_ENTRY_BATCH_OPERATE_AUTH } from '@mj-biz-apps/accounting-engine-base';
 import { DispatchJournalEntryBatchOperation, type DispatchJournalEntryBatchInput as DispatchInput } from '../JournalEntryBatchOperations.js';
 import { ErpPostingUnconfirmedError, sendJournalEntryBatch } from '../JournalEntryBatchEngine.js';
 
@@ -25,8 +26,10 @@ class ProbeOperation extends DispatchJournalEntryBatchOperation {
   }
 }
 
-const provider = {} as unknown as IMetadataProvider;
 const user = { ID: 'U1' } as unknown as UserInfo;
+/** The caller holds the batch-operator Authorization (#448); who may dispatch is covered in BatchOperatorAuthorization.test.ts. */
+const operateAuth = { ID: 'AUTH-OPERATE', Name: JOURNAL_ENTRY_BATCH_OPERATE_AUTH, ParentID: null, UserCanExecute: (u: UserInfo) => u.ID === user.ID };
+const provider = { Authorizations: [operateAuth] as unknown as AuthorizationInfo[] } as unknown as IMetadataProvider;
 const BATCH_ID = 'bbbbbbbb-0000-0000-0000-000000000001';
 
 describe('DispatchJournalEntryBatchOperation — a retry the lookup could not settle', () => {
