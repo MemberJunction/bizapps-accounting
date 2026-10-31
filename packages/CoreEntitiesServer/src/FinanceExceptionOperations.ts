@@ -41,9 +41,24 @@ export class RaiseFinanceExceptionsOperation extends AccountingRaiseFinanceExcep
   protected async InternalExecute(
     input: AccountingRaiseFinanceExceptionsInput,
     provider: IMetadataProvider,
-    _user: UserInfo,
+    user: UserInfo,
   ): Promise<AccountingRaiseFinanceExceptionsOutput> {
-    return RaiseFinanceExceptions(input, provider);
+    // A raise's attribution (who created the source record) decides who may clear the row, so it is
+    // never taken from the caller's input here: a caller could otherwise forge SourceCreatedByUserID
+    // and put the finance review queue under any user's name. The operation requires a verified
+    // caller and stamps the attribution from it. Only the in-process detectors, which derive the
+    // creator from the source record itself, call RaiseFinanceExceptions directly with their own value.
+    if (!user) {
+      return {
+        Success: false,
+        Results: [],
+        Errors: [{ Code: 'CALLER_REQUIRED', Message: 'Accounting.RaiseFinanceExceptions requires an authenticated caller to attribute the raises to.' }],
+      };
+    }
+    const stamped: AccountingRaiseFinanceExceptionsInput = Array.isArray(input?.Exceptions)
+      ? { ...input, Exceptions: input.Exceptions.map(e => ({ ...e, SourceCreatedByUserID: user.ID, CreatorUnresolved: false })) }
+      : input;
+    return RaiseFinanceExceptions(stamped, provider);
   }
 }
 

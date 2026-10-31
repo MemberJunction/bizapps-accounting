@@ -6,6 +6,12 @@ import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { mjBizAppsAccountingJournalEntryBatchEntityType } from '@mj-biz-apps/accounting-entities';
 import { openBizDetail } from '../../shared/biz-detail-form';
 
+/**
+ * Ids this panel receives are interpolated into ExtraFilter strings below, so anything that is not
+ * a plain UUID is refused outright — validate-don't-escape, the same posture as the server's SqlGuards.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
@@ -169,6 +175,12 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
 
   /** ONE batched round-trip: the header and the member list are independent, keyed on the same id. */
   private async load(id: string): Promise<void> {
+    if (!UUID_RE.test(id)) {
+      // The id is embedded in the filters below; a malformed one never reaches a query.
+      this.LoadError = 'This journal entry batch could not be found. It may have been deleted, or you may not have access to it.';
+      this.cdr.markForCheck();
+      return;
+    }
     this.IsLoading = true;
     this.LoadError = null;
     this.cdr.markForCheck();

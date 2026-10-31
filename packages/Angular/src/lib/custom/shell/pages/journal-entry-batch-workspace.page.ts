@@ -27,6 +27,12 @@ import {
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
+/**
+ * `openExistingBatch` interpolates its id into an ExtraFilter, so anything that is not a plain UUID
+ * is refused outright — validate-don't-escape, the same posture as the server's SqlGuards.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** One workspace tab's session state — the draft the operator is composing. */
 interface BatchDraft {
   Criteria: JournalEntryBatchCriteria;
@@ -151,6 +157,11 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
 
   /** Load the batch and open it as a locked record tab labeled by batch number. */
   private async openExistingBatch(id: string): Promise<void> {
+    if (!UUID_RE.test(id)) {
+      // The id is embedded in the filter below; a malformed one never reaches a query.
+      this.cdr.markForCheck();
+      return;
+    }
     const rv = RunView.FromMetadataProvider(this.ProviderToUse);
     const res = await rv.RunView<{ ID: string; JournalEntryBatchNumber: string; Memo: string | null }>(
       {
