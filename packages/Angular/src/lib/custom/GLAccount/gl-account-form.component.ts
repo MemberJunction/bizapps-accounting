@@ -9,6 +9,12 @@ import { mjBizAppsAccountingGLAccountFormComponent } from '../../generated/Entit
 
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 
+/**
+ * `loadTree` interpolates the selected company id into an ExtraFilter, so anything that is not a
+ * plain UUID is refused outright — validate-don't-escape, the same posture as the server's SqlGuards.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 type AccountType = mjBizAppsAccountingGLAccountEntity['AccountType'];
 type StatusFilter = 'all' | 'active' | 'inactive';
 
@@ -126,6 +132,8 @@ export class GLAccountFormComponentExtended extends mjBizAppsAccountingGLAccount
 
   private async loadTree(): Promise<void> {
     if (!this.SelectedCompanyID) { this.allAccounts = []; this.Roots = []; return; }
+    // The id is embedded in the filter below; a malformed one never reaches a query.
+    if (!UUID_RE.test(this.SelectedCompanyID)) { this.allAccounts = []; this.Roots = []; this.cdr.markForCheck(); return; }
     this.TreeLoading = true;
     this.TreeError = null;
     this.cdr.markForCheck();
