@@ -139,4 +139,11 @@ describe('metadata/entity-actions — authored bindings', () => {
       }
     }
   });
+
+  it('guards the JournalEntryBatch AfterUpdate binding with DidFieldChangeToValue(Status, Sent)', () => {
+    const batchBinding = BINDINGS.find(
+      b => b.fields.EntityID === '@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entry Batches',
+    );
+    expect(batchBinding?.fields.ActionFilter).toBe("DidFieldChangeToValue('Status','Sent')");
+  });
 });

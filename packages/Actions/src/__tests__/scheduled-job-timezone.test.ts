@@ -26,9 +26,16 @@ const JOBS = [
     '.accounting-post-subscriptions-monthly.json',
 ] as const;
 
-const jobFields = (file: string): { CronExpression: string; Timezone: string } => {
+const ALL_JOBS = [
+    '.accounting-erp-daily-sync.json',
+    '.accounting-post-orders-payments-nightly.json',
+    '.accounting-post-subscriptions-monthly.json',
+    '.accounting-dispatch-approved-batches-hourly.json',
+] as const;
+
+const jobFields = (file: string): { CronExpression: string; Timezone: string; Status: string } => {
     const path = resolve(__dirname, '../../../../metadata/scheduled-jobs', file);
-    const [record] = JSON.parse(readFileSync(path, 'utf8')) as Array<{ fields: { CronExpression: string; Timezone: string } }>;
+    const [record] = JSON.parse(readFileSync(path, 'utf8')) as Array<{ fields: { CronExpression: string; Timezone: string; Status: string } }>;
     return record.fields;
 };
 
@@ -47,6 +54,12 @@ describe('the posting jobs schedule on the business clock, not UTC', () => {
     it('each job still declares a six-field cron, seconds first', () => {
         for (const file of JOBS) {
             expect(jobFields(file).CronExpression.trim().split(/\s+/)).toHaveLength(6);
+        }
+    });
+
+    it('every scheduled job ships Disabled so hosts explicitly opt in', () => {
+        for (const file of ALL_JOBS) {
+            expect(jobFields(file).Status, `${file} must ship Disabled`).toBe('Disabled');
         }
     });
 });

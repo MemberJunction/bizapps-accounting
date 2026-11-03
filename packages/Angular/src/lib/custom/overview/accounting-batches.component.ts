@@ -323,17 +323,6 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
                     <div class="mja-modal-controls">
                         <div class="mja-modal-field">
-                            <label class="mja-modal-label">Target ERP</label>
-                            <mj-dropdown
-                                [Data]="TargetOptions"
-                                [ValuePrimitive]="true"
-                                [(ngModel)]="BuildTarget"
-                                (ngModelChange)="OnBuildPreviewFilterChange()"
-                                aria-label="Target ERP">
-                            </mj-dropdown>
-                        </div>
-
-                        <div class="mja-modal-field">
                             <label class="mja-modal-label">Effective Date Cutoff</label>
                             <input
                                 type="date"

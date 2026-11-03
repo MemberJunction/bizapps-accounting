@@ -8,6 +8,15 @@ import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 import type { AccountingVerbResult, AccountingVerbRunner } from './AccountingVerbRunner.js';
 import type { ErpPostResult, ExternalDimensionRef } from './JournalEntryBatchEngine.js';
 
+export const BUSINESS_CENTRAL_ERP_PROVIDER_NAME = 'Microsoft Dynamics 365 Business Central' as const;
+export const QUICKBOOKS_ONLINE_ERP_PROVIDER_NAME = 'QuickBooks Online' as const;
+
+/** Keys the built-in ERP providers register under (#420 — single source of truth). */
+export const ERP_PROVIDER_KEYS: readonly string[] = [
+  BUSINESS_CENTRAL_ERP_PROVIDER_NAME,
+  QUICKBOOKS_ONLINE_ERP_PROVIDER_NAME,
+];
+
 /** One journal line as the engine sends it. */
 export interface ERPJournalLine {
   /** The ERP's identity for the account: the GL account's `ExternalAccountID`, or its `Code`. */
@@ -30,6 +39,8 @@ export interface CreateERPJournalInput {
   EntryDate: Date;
   DocNumber?: string;
   PrivateNote?: string;
+  /** Optional ERP general journal batch code from the company profile (#399). */
+  JournalCode?: string;
   Lines: ERPJournalLine[];
   /** How to find the posting if the ERP renumbers it (#205). */
   RenumberedSearch?: RenumberedJournalSearch;
@@ -104,6 +115,7 @@ export abstract class BaseAccountingERPProvider {
       EntryDate: input.EntryDate.toISOString().slice(0, 10),
       DocNumber: input.DocNumber,
       PrivateNote: input.PrivateNote,
+      ...(input.JournalCode ? { JournalCode: input.JournalCode } : {}),
       Lines: this.verbLines(input.Lines),
     });
     if (!result.Success) {
@@ -156,10 +168,10 @@ export abstract class BaseAccountingERPProvider {
 /** Upper bound on the ledger lines one lookup reads. Reaching it means the answer may be partial. */
 const BC_LOOKUP_MAX_RESULTS = 5000;
 
-@RegisterClass(BaseAccountingERPProvider, 'Microsoft Dynamics 365 Business Central')
+@RegisterClass(BaseAccountingERPProvider, BUSINESS_CENTRAL_ERP_PROVIDER_NAME)
 export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
   get IntegrationName(): string {
-    return 'Microsoft Dynamics 365 Business Central';
+    return BUSINESS_CENTRAL_ERP_PROVIDER_NAME;
   }
 
   /**
@@ -307,10 +319,10 @@ interface QuickBooksJournalEntry {
   lines: ERPPostedJournalLine[];
 }
 
-@RegisterClass(BaseAccountingERPProvider, 'QuickBooks Online')
+@RegisterClass(BaseAccountingERPProvider, QUICKBOOKS_ONLINE_ERP_PROVIDER_NAME)
 export class QuickBooksERPProvider extends BaseAccountingERPProvider {
   get IntegrationName(): string {
-    return 'QuickBooks Online';
+    return QUICKBOOKS_ONLINE_ERP_PROVIDER_NAME;
   }
 
   /** QBO accounts are referenced by QBO id only. */

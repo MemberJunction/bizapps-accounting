@@ -283,7 +283,11 @@ export class CreateBusinessCentralJournalEntryWithDimensionsAction extends Creat
    */
   private async entryDateOf(params: RunActionParams, contextUser: AccountingContextUser): Promise<Date> {
     const raw = this.getParamValue(params.Params, 'EntryDate');
-    return raw ? new Date(raw) : loadTodayBusiness(contextUser, Metadata.Provider);
+    if (raw) return new Date(raw);
+    if (!Metadata.Provider) {
+      throw new Error('The Business Central journal entry could not be created: the server has no metadata provider loaded.');
+    }
+    return loadTodayBusiness(contextUser, Metadata.Provider);
   }
 
   private successResult(

@@ -33,6 +33,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Metadata, IMetadataProvider } from '@memberjunction/core';
 import { MJGlobal } from '@memberjunction/global';
+import { ActionEngineServer, BaseAction } from '@memberjunction/actions';
+import { UserCache } from '@memberjunction/sqlserver-dataprovider';
 import {
   JournalEntryEntityServer,
   JournalEntryBatchEntityServer,
@@ -43,6 +45,8 @@ import {
   buildJournalEntryBatch,
   approveJournalEntryBatch,
   sendJournalEntryBatch,
+  autoPostJournalEntryBatch,
+  defaultAccountingVerbRunner,
   AutoApproveGate,
   TasksAppApprovalGate,
   mockErpPoster,
@@ -124,6 +128,8 @@ const PendingRejectedCancelGate: JournalEntryBatchCancelGate = {
   async assertMayCancelPending() { throw new Error('phase2 harness: every Pending batch here reads as rejected'); },
   async assertMayCancelApproved() { throw new Error('phase2 harness: no test cancels past approval'); },
   async recordCancellation() { throw new Error('phase2 harness: no test cancels past approval'); },
+  async assertMayArchive() { throw new Error('phase2 harness: no test archives via this gate'); },
+  async recordArchive() { throw new Error('phase2 harness: no test archives via this gate'); },
 };
 
 /** Send a batch with this gate and poster. The queue push and the send's resolve happen in one tick. */
@@ -759,5 +765,92 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     )).rejects.toThrow(locked);
 
     expect(Number(await scalar(ctx.pool, `SELECT COUNT(*) ${tagsOf(built.summaryJournalEntryId)}`))).toBe(before);
+  });
+
+  it('L24 — defaultAccountingVerbRunner dispatches through the live ActionEngine and surfaces SUCCESS and PROVIDER_NOT_REGISTERED (#410)', async () => {
+    const engine = ActionEngineServer.Instance;
+    if (!engine.Loaded) {
+      await engine.Config(false, ctx.user);
+    }
+    const verbName = 'CreateBusinessCentralJournalEntryWithDimensions';
+    const action = engine.GetActionByName(verbName);
+    expect(action, `expected ${verbName} action in ActionEngine cache`).toBeTruthy();
+    const driverClass = action!.DriverClass || verbName;
+
+    let simulateUnregistered = false;
+    class FakeVerbAction extends BaseAction {
+      protected override async InternalRunAction(params: { Params: Array<{ Name: string; Value?: unknown }> }): Promise<{ Success: boolean; ResultCode: string; Message?: string }> {
+        const companyId = params.Params.find((p) => p.Name === 'CompanyID')?.Value;
+        if (!companyId) return { Success: false, ResultCode: 'MISSING_COMPANY' };
+        if (simulateUnregistered) {
+          return { Success: false, ResultCode: 'PROVIDER_NOT_REGISTERED', Message: 'No ERP provider registered' };
+        }
+        return { Success: true, ResultCode: 'SUCCESS', Message: 'Posted via fake action' };
+      }
+    }
+    MJGlobal.Instance.ClassFactory.Register(BaseAction, FakeVerbAction, driverClass, 9999, true);
+
+    const ok = await defaultAccountingVerbRunner({
+      Verb: verbName,
+      CompanyID: ctx.company.id,
+      Params: { JournalCode: 'GENJNL' },
+      User: ctx.user,
+    });
+    expect(ok.Success).toBe(true);
+    expect(ok.ResultCode).toBe('SUCCESS');
+
+    simulateUnregistered = true;
+    const missing = await defaultAccountingVerbRunner({
+      Verb: verbName,
+      CompanyID: ctx.company.id,
+      Params: {},
+      User: ctx.user,
+    });
+    expect(missing.Success).toBe(false);
+    expect(missing.ResultCode).toBe('PROVIDER_NOT_REGISTERED');
+  });
+
+  it('L25 — autoPostJournalEntryBatch builds, approves as the system user, and sends to Posted without an approval Task (#433)', async () => {
+    const sysUser = UserCache.Instance.GetSystemUser() ?? ctx.user;
+    const je = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, ctx.user);
+    je.NewRecord();
+    je.CompanyID = ctx.company.id;
+    je.EffectiveDate = new Date();
+    je.EntryTypeID = ctx.entryTypes.get('OrderBooking')!;
+    je.Status = 'Pending';
+    je.Description = `${ctx.runTag} L25 auto-post`;
+    const l1 = await je.CreateLine(ctx.user);
+    l1.GLAccountID = ctx.company.arGL;
+    l1.DebitAmount = 88;
+    const l2 = await je.CreateLine(ctx.user);
+    l2.GLAccountID = ctx.company.revGL;
+    l2.CreditAmount = 88;
+    expect(await je.Save(), `L25 JE save failed: ${je.LatestResult?.CompleteMessage}`).toBe(true);
+    ctx.createdJEIds.push(je.ID);
+
+    const out = await autoPostJournalEntryBatch(
+      ctx.company.id,
+      'BusinessCentral',
+      sysUser,
+      provider,
+      { entryTypeCodes: ['OrderBooking'] },
+    );
+    ctx.createdBatchIds.push(out.build.batchId);
+
+    expect(out.build.approvalTaskId).toBeNull();
+    expect(out.batch.Status).toBe('Posted');
+    expect(out.batch.ApprovedByUserID?.toLowerCase()).toBe(sysUser.ID.toLowerCase());
+
+    const row = (await ctx.pool.request().query(
+      `SELECT Status, ApprovedByUserID FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${out.build.batchId}'`,
+    )).recordset[0] as { Status: string; ApprovedByUserID: string };
+    expect(row.Status).toBe('Posted');
+    expect(row.ApprovedByUserID.toLowerCase()).toBe(sysUser.ID.toLowerCase());
+
+    const taskLinks = Number(await scalar(
+      ctx.pool,
+      `SELECT COUNT(*) FROM __mj_BizAppsTasks.TaskLink WHERE LOWER(RecordID)=LOWER('${out.build.batchId}')`,
+    ));
+    expect(taskLinks).toBe(0);
   });
 });

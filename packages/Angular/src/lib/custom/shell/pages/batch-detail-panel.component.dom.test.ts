@@ -28,6 +28,7 @@ function header(overrides: Partial<BatchDetailHeader>): BatchDetailHeader {
     SendAttemptCount: 1,
     PostedAt: new Date('2026-09-30T11:01:00Z'),
     SealMismatchDetectedAt: null,
+    ERPPostUnconfirmedAt: null,
     ErrorMessage: null,
     ApprovalTaskID: null,
     ApprovalTaskRaisedAt: null,

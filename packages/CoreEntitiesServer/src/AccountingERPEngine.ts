@@ -37,6 +37,7 @@ import {
 } from './AccountingVerbRunner.js';
 import {
   BaseAccountingERPProvider,
+  ERP_PROVIDER_KEYS,
   type CreateERPJournalInput,
   type ERPPostedJournalLine,
   type RenumberedJournalSearch,
@@ -54,6 +55,7 @@ const CI_MAP_ENTITY = 'MJ: Company Integration Entity Maps';
 const CI_FIELD_MAP_ENTITY = 'MJ: Company Integration Field Maps';
 const INTEGRATION_ENTITY = 'MJ: Integrations';
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
+const COMPANY_PROFILE_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const FINANCE_EXCEPTION_ENTITY = 'MJ_BizApps_Accounting: Finance Exceptions';
 const FINANCE_EXCEPTION_TYPE_TABLE = '__mj_BizAppsAccounting.FinanceExceptionType';
 /** FinanceException.Summary's column width. */
@@ -95,6 +97,12 @@ interface SyncEntityMap {
   ID: string;
   /** The target entity's name, one of `ERP_SYNC_OBJECT_ENTITY`'s values. */
   Entity: string;
+}
+
+/** An entity map for one of the requested objects that is inactive or has SyncEnabled = 0 (#425). */
+interface DisabledSyncEntityMap extends SyncEntityMap {
+  Status: string;
+  SyncEnabled: boolean;
 }
 
 /**
@@ -187,20 +195,32 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     const extensions = await this.loadExtensions(provider, user, ci.CompanyID);
     await this.invokeExtensions(extensions, ctx, 'beforeSync');
     try {
-      const maps = await this.entityMapsForObjects(ci.CompanyIntegrationID, objects, user, provider);
-      if (maps.length === 0) {
+      const { activeMaps, disabledMaps } = await this.entityMapsForObjects(ci.CompanyIntegrationID, objects, user, provider);
+      if (activeMaps.length === 0 && disabledMaps.length === 0) {
         return syncResult(ci, objects, { Success: true, Skipped: true, Message: noEntityMapsReason(objects) });
       }
-      const keyProblems = await this.sharedMasterDataKeyProblems(maps, user, provider);
-      if (keyProblems.length > 0) {
-        return syncResult(ci, objects, { Success: false, Message: keyProblems.join(' ') });
+      if (activeMaps.length === 0) {
+        return syncResult(ci, objects, { Success: false, Message: allEntityMapsDisabledReason(disabledMaps, objects) });
       }
-      const sync = await this.runSync(ci.CompanyIntegrationID, user, maps.map((m) => m.ID), provider);
+      const { validMaps, problems } = await this.partitionMapsByKeyProblems(activeMaps, user, provider);
+      if (validMaps.length === 0) {
+        return syncResult(ci, objects, { Success: false, Message: problems.join(' ') });
+      }
+      const sync = await this.runSync(ci.CompanyIntegrationID, user, validMaps.map((m) => m.ID), provider);
       if (sync.Success) {
-        for (const obj of objects) {
-          await this.invokeExtensions(extensions, ctx, afterHookFor(obj));
+        const syncedEntities = new Set(validMaps.map((m) => m.Entity));
+        const syncedObjects = objects.filter((obj) => syncedEntities.has(ERP_SYNC_OBJECT_ENTITY[obj]));
+        const hookCtx = syncedObjects.length === objects.length ? ctx : { ...ctx, Objects: syncedObjects };
+        for (const obj of syncedObjects) {
+          await this.invokeExtensions(extensions, hookCtx, afterHookFor(obj));
         }
-        await this.invokeExtensions(extensions, ctx, 'afterSync');
+        await this.invokeExtensions(extensions, hookCtx, 'afterSync');
+      }
+      if (problems.length > 0) {
+        const msg = sync.Success
+          ? problems.join(' ')
+          : `${problems.join(' ')} ${sync.Message ?? 'The ERP sync failed and gave no reason.'}`.trim();
+        return syncResult(ci, objects, { Success: false, Message: msg });
       }
       return syncResult(ci, objects, { Success: sync.Success, Message: sync.Message ?? (sync.Success ? 'Synced' : 'The ERP sync failed and gave no reason.') });
     } catch (e) {
@@ -273,12 +293,14 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     const target = batch.TargetSystem as JournalEntryBatchTargetSystem;
     try {
       const lines = await erpLinesFor(batch, summaryLines, target, plugin.RequiresExternalAccountID, user, provider);
+      const journalCode = await loadCompanyJournalCode(batch.CompanyID, user, provider);
       const input: CreateERPJournalInput = {
         CompanyID: batch.CompanyID,
         CompanyIntegrationID: ci.CompanyIntegrationID,
         EntryDate: entryDateOf(batch),
         DocNumber: batch.JournalEntryBatchNumber,
         PrivateNote: `Accounting batch ${batch.JournalEntryBatchNumber}`,
+        ...(journalCode ? { JournalCode: journalCode } : {}),
         Lines: lines,
         RenumberedSearch: renumberedSearchFor(batch, lines),
       };
@@ -392,7 +414,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
         RenumberedSearch: renumberedSearchFor(batch, expected),
       }, user);
       if (found.status !== 'Ok') return found;
-      if (found.lines.length === 0) return await this.nothingFound(batch.CompanyID, provider);
+      if (found.lines.length === 0) return await this.nothingFound(batch.CompanyID, provider, batch);
       const tokens = postedBatchTokens(found.lines, batch.ID);
       if (tokens.own === 0 && tokens.others.length > 0) {
         return { status: 'Foreign', detail: `its lines carry the token of batch ${tokens.others.join(', ')}, not this batch's ${batch.ID}.` };
@@ -408,12 +430,14 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
 
   /**
    * Raises ERP_POSTING_NOT_READ_BACK on a batch the ERP accepted but that could not be read back
-   * (#205). Never throws: the post stands whatever happens here. A raise that fails is logged and
-   * held, so the company's lookups stop trusting nothing found until it lands (#414).
+   * (#205). Never throws: the post stands whatever happens here. Sets `batch.ERPPostUnconfirmedAt`
+   * before raising (#414) and holds a raise that fails so the company's lookups stop trusting
+   * nothing found until it lands or an operator clears the flag.
    */
   private async raiseUnreadPosting(
     batch: mjBizAppsAccountingJournalEntryBatchEntity, integrationName: string, posted: ErpPostResult, provider: IMetadataProvider,
   ): Promise<void> {
+    (batch as { ERPPostUnconfirmedAt?: Date | null }).ERPPostUnconfirmedAt = new Date();
     const exception = unreadPostingException(batch, integrationName, posted);
     const why = await this.tryRaiseUnreadPosting(exception, provider);
     if (why === null) return;
@@ -465,18 +489,29 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
   }
 
   /**
-   * `NotFound`, unless an Open ERP_POSTING_NOT_READ_BACK exception says the company's lookup may be
-   * blind (#205). Fails closed: with that exception type missing or inactive, a raise would have been
-   * skipped and only logged, so nothing found is not trusted either; nor while a raise for the company
-   * failed and is held in this process (#414).
+   * `NotFound`, unless an Open ERP_POSTING_NOT_READ_BACK exception or an unconfirmed batch flag says
+   * the company's lookup may be blind (#205, #414). Fails closed: with that exception type missing or
+   * inactive, a raise would have been skipped and only logged, so nothing found is not trusted either;
+   * nor while a raise for the company failed and is held in this process or stamped on the batch (#414).
    */
-  private async nothingFound(companyId: string, provider: IMetadataProvider): Promise<ErpJournalLookupResult> {
+  private async nothingFound(
+    companyId: string,
+    provider: IMetadataProvider,
+    batch?: mjBizAppsAccountingJournalEntryBatchEntity,
+  ): Promise<ErpJournalLookupResult> {
     const held = await this.retryUnraisedUnreadPostings(companyId, provider);
     if (held.length > 0) {
       return {
         status: 'Unavailable',
         reason: `the ERP accepted ${held.length} batch(es) in this company that could not then be read back (${held.join(', ')}), and raising ` +
           `${ERP_POSTING_NOT_READ_BACK} for them failed, so a lookup that finds nothing does not show the batch did not post. Check those postings in the ERP.`,
+      };
+    }
+    if ((batch as { ERPPostUnconfirmedAt?: Date | null } | undefined)?.ERPPostUnconfirmedAt != null) {
+      return {
+        status: 'Unavailable',
+        reason: `batch ${batch?.JournalEntryBatchNumber ?? batch?.ID} has ERPPostUnconfirmedAt set (#414): the ERP post could not be read back, ` +
+          'so a lookup that finds nothing does not show the batch did not post. Check the posting in the ERP before retrying or cancelling.',
       };
     }
     const rv = provider as unknown as IRunViewProvider;
@@ -637,13 +672,13 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     objects: AccountingERPSyncObject[],
     user: UserInfo,
     provider: IMetadataProvider,
-  ): Promise<SyncEntityMap[]> {
+  ): Promise<{ activeMaps: SyncEntityMap[]; disabledMaps: DisabledSyncEntityMap[] }> {
     const rv = provider as unknown as IRunViewProvider;
     const res = await rv.RunView<Record<string, unknown>>({
       EntityName: CI_MAP_ENTITY,
-      // Company Integration Entity Maps have no IsActive column (they carry Status and SyncEnabled). Filtering on
-      // IsActive made this RunView fail, so every sync reported "No entity maps" however the maps were set up.
-      ExtraFilter: `CompanyIntegrationID = '${EscapeSQLString(companyIntegrationID)}' AND Status = 'Active' AND SyncEnabled = 1`,
+      // Load all maps for the connection so we can distinguish "no maps configured" (skip) from
+      // "maps exist for the requested objects, but all are inactive or sync-disabled" (fail, #425).
+      ExtraFilter: `CompanyIntegrationID = '${EscapeSQLString(companyIntegrationID)}'`,
       ResultType: 'simple',
     }, user);
     // A failed query is an error, not "no maps": no maps is reported as skipped, and a broken map
@@ -652,35 +687,47 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
       throw new Error(`Could not load the sync maps of ERP connection ${companyIntegrationID}: ${res.ErrorMessage ?? 'unknown error'}`);
     }
     const wanted = new Set(objects.map((o) => ERP_SYNC_OBJECT_ENTITY[o]));
-    const maps: SyncEntityMap[] = [];
+    const activeMaps: SyncEntityMap[] = [];
+    const disabledMaps: DisabledSyncEntityMap[] = [];
     for (const row of res.Results ?? []) {
       const entityName = String(row.Entity ?? row.EntityName ?? '');
-      if (wanted.has(entityName)) maps.push({ ID: String(row.ID), Entity: entityName });
+      if (!wanted.has(entityName)) continue;
+      const status = row.Status !== undefined ? String(row.Status) : 'Active';
+      const syncEnabled = row.SyncEnabled !== undefined ? isTrue(row.SyncEnabled) : true;
+      if (status === 'Active' && syncEnabled) {
+        activeMaps.push({ ID: String(row.ID), Entity: entityName });
+      } else {
+        disabledMaps.push({ ID: String(row.ID), Entity: entityName, Status: status, SyncEnabled: syncEnabled });
+      }
     }
-    return maps;
+    return { activeMaps, disabledMaps };
   }
 
   /**
-   * Why the maps onto shared master data would not merge on Code (#268), one sentence per map; empty
-   * when they would. Checked before the sync runs, so a map that would insert a second copy of a
-   * Dimension fails the connection with the fix named instead of failing row by row on the unique
-   * constraint.
+   * Partitions `maps` into those that satisfy the shared master-data key contract (#268) and the
+   * failure messages for those that do not (#424). Maps without key problems (such as GL Accounts)
+   * still sync while the connection reports `Success: false` with the dimension key problem(s).
    */
-  private async sharedMasterDataKeyProblems(
+  private async partitionMapsByKeyProblems(
     maps: SyncEntityMap[],
     user: UserInfo,
     provider: IMetadataProvider,
-  ): Promise<string[]> {
+  ): Promise<{ validMaps: SyncEntityMap[]; problems: string[] }> {
     const checked = maps.filter((m) => SHARED_MASTER_DATA_MATCH_KEYS[m.Entity]);
-    if (checked.length === 0) return [];
+    if (checked.length === 0) return { validMaps: maps, problems: [] };
     const keysByMap = await this.activeKeyFieldsByMap(checked, user, provider);
+    const invalidIds = new Set<string>();
     const problems: string[] = [];
     for (const map of checked) {
       const required = SHARED_MASTER_DATA_MATCH_KEYS[map.Entity];
       const actual = keysByMap.get(map.ID.toLowerCase()) ?? [];
-      if (!sameFieldSet(required, actual)) problems.push(matchKeyProblem(map, required, actual));
+      if (!sameFieldSet(required, actual)) {
+        invalidIds.add(map.ID);
+        problems.push(matchKeyProblem(map, required, actual));
+      }
     }
-    return problems;
+    const validMaps = maps.filter((m) => !invalidIds.has(m.ID));
+    return { validMaps, problems };
   }
 
   /** Each map's active key-field destination names, keyed by lower-cased entity map ID. */
@@ -850,6 +897,35 @@ function noEntityMapsReason(objects: AccountingERPSyncObject[]): string {
     'A posting-only connection has none.';
 }
 
+/** Why an ERP connection whose maps for the requested objects are all disabled or inactive fails (#425). */
+function allEntityMapsDisabledReason(disabledMaps: DisabledSyncEntityMap[], objects: AccountingERPSyncObject[]): string {
+  const details = disabledMaps
+    .map((m) => `${m.ID} (${m.Entity}: Status=${m.Status}, SyncEnabled=${m.SyncEnabled ? 'true' : 'false'})`)
+    .join(', ');
+  return `Entity maps for ${objects.join(', ')} exist on this Company Integration, but none is Active with SyncEnabled = 1 (${details}). ` +
+    'Activate and enable sync on at least one map, or remove the maps if this is a posting-only connection (#425).';
+}
+
+/** The company's optional ERP journal batch code from its Accounting Company Profile (#399). */
+async function loadCompanyJournalCode(
+  companyId: string,
+  user: UserInfo,
+  provider: IMetadataProvider,
+): Promise<string | undefined> {
+  const rv = provider as unknown as IRunViewProvider;
+  const res = await rv.RunView<{ ID?: string; ERPJournalCode?: string | null }>({
+    EntityName: COMPANY_PROFILE_ENTITY,
+    ExtraFilter: `ID = '${EscapeSQLString(companyId)}'`,
+    Fields: ['ID', 'ERPJournalCode'],
+    ResultType: 'simple',
+  }, user);
+  if (!res?.Success) return undefined;
+  const rows = res.Results ?? [];
+  const match = rows.find((r) => !r.ID || UUIDsEqual(r.ID, companyId)) ?? rows[0];
+  const code = typeof match?.ERPJournalCode === 'string' ? match.ERPJournalCode.trim() : '';
+  return code || undefined;
+}
+
 function objectsAllowed(ext: BaseAccountingEngineExtension, ran: AccountingERPSyncObject[]): boolean {
   const wanted = ext.Configuration?.Objects;
   if (!wanted || wanted.length === 0) return true;
@@ -893,9 +969,6 @@ function extensionParticipates(
       return ext.ParticipatesInPostJournalBatchFailure && ext.RunAfterPostJournalBatchFailure;
   }
 }
-
-/** Keys the built-in ERP providers register under (see BaseAccountingERPProvider.ts). */
-const ERP_PROVIDER_KEYS: readonly string[] = ['Microsoft Dynamics 365 Business Central', 'QuickBooks Online'];
 
 /**
  * Whether an Integration name and an ERP name (a batch's TargetSystem, or a provider key) mean the same system.

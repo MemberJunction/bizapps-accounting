@@ -1,7 +1,7 @@
 # @mj-biz-apps/accounting-integration-tests
 
 GraphQL-wire suite. The checks register with MJ's integration-check registry
-(`@memberjunction/testing-integration`) and `test-harnesses/integration.mjs` runs them against a
+(`@memberjunction/testing-integration`) and `packages/IntegrationTests/integration.mjs` runs them against a
 running MJAPI, through MJ's GraphQL client. It is tier 3 in
 [the tier list](../../test-harnesses/README.md#tiers), next to the `test-harnesses/api/` harnesses.
 CI does not run it: the root `pnpm run test` filters this package out.
@@ -32,21 +32,19 @@ run, because it reads the companies AW3 stamped, and at least one Pending JE for
 - **`MJ_API_KEY` = the running MJAPI's system API key** (MJAPI reads its own `MJ_API_KEY`). The
   client sends it as `x-mj-api-key`, and MJAPI authenticates the run as its system user. This is not
   the user key (`mj_sk_…`) the `test-harnesses/api/` harnesses send under the same variable name.
-- **Environment files.** `integration.mjs` loads the repo root `.env`, then `../MJ/.env` (an MJ
-  checkout beside this repo); the client also loads `.env` from the working directory. A value is
-  never overwritten once set, so the environment wins over the repo `.env`, which wins over
-  `../MJ/.env`.
-- **The package built**: `integration.mjs` imports `packages/IntegrationTests/dist/index.js`.
-- **Module resolution.** `integration.mjs` imports `dotenv`, `@memberjunction/core` and
-  `@memberjunction/testing-integration`, which the root `package.json` does not declare. They resolve
-  only when a parent folder's `node_modules` provides them, as in the multi-repo layout that
-  `../MJ/.env` assumes.
+- **Environment files.** `integration.mjs` loads the repo root `.env` if present, then `../MJ/.env`
+  if a sibling MJ checkout exists beside this repo; the client also loads `.env` from the working
+  directory. A value is never overwritten once set, so the environment wins over the repo `.env`,
+  which wins over `../MJ/.env`.
+- **The package built**: `integration.mjs` imports `./dist/index.js`.
+- **Module resolution.** `integration.mjs` lives inside `packages/IntegrationTests`, which declares
+  `dotenv`, `@memberjunction/core` and `@memberjunction/testing-integration`, so it runs in a
+  standalone clone after `pnpm install && pnpm run build`.
 - **Data**: the ORD-WORLD companies (run the orders suite's `catalog-world.CW1` first) and a Pending
   JE for `BCP` (book an order or post a Pending JE).
 
-The runner sets `MJ_INTEGRATION_TEST=1` and defaults `RUN_MUTATION_TESTS` to `1`. It runs every check
-in the bundles it is given and does not skip checks marked `RequiresMutation` (all five are), so
-setting `RUN_MUTATION_TESTS=0` does not make a run read-only.
+The runner sets `MJ_INTEGRATION_TEST=1` and defaults `RUN_MUTATION_TESTS` to `1`. When
+`RUN_MUTATION_TESTS=0`, checks marked `RequiresMutation` are skipped and printed as `skip`.
 
 ## Run
 
@@ -54,9 +52,10 @@ From the repo root:
 
 ```bash
 pnpm run build                                       # or: pnpm --filter @mj-biz-apps/accounting-integration-tests build, once its dependencies are built
-pnpm run test:integration                            # node test-harnesses/integration.mjs — acct-world, acct-ledger, acct-batch
-node test-harnesses/integration.mjs acct-world acct-batch   # chosen bundles
-node test-harnesses/integration.mjs acct-world.AW3          # one check
+pnpm run test:integration                            # node packages/IntegrationTests/integration.mjs — acct-world, acct-ledger, acct-batch
+node packages/IntegrationTests/integration.mjs acct-world acct-batch   # chosen bundles
+node packages/IntegrationTests/integration.mjs acct-world.AW3          # one check
+RUN_MUTATION_TESTS=0 pnpm run test:integration       # skip mutating checks
 GRAPHQL_PORT=<port> pnpm run test:integration        # MJAPI on another port
 ```
 

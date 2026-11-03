@@ -1,0 +1,74 @@
+[
+  {
+    "fields": {
+      "Code": "BusinessCentral",
+      "Name": "Microsoft Dynamics 365 Business Central",
+      "Description": "Microsoft Dynamics 365 Business Central cloud or on-premises ERP",
+      "IsDefault": true,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "Code": "BusinessCentral"
+    }
+  },
+  {
+    "fields": {
+      "Code": "QuickBooks",
+      "Name": "Intuit QuickBooks",
+      "Description": "QuickBooks Online or QuickBooks Desktop",
+      "IsDefault": false,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "Code": "QuickBooks"
+    }
+  },
+  {
+    "fields": {
+      "Code": "NetSuite",
+      "Name": "Oracle NetSuite",
+      "Description": "Oracle NetSuite ERP",
+      "IsDefault": false,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "Code": "NetSuite"
+    }
+  },
+  {
+    "fields": {
+      "Code": "Sage",
+      "Name": "Sage Intacct / Sage ERP",
+      "Description": "Sage Intacct or Sage 100/300/X3 ERP",
+      "IsDefault": false,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "Code": "Sage"
+    }
+  },
+  {
+    "fields": {
+      "Code": "Xero",
+      "Name": "Xero",
+      "Description": "Xero cloud accounting platform",
+      "IsDefault": false,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "Code": "Xero"
+    }
+  },
+  {
+    "fields": {
+      "Code": "Other",
+      "Name": "Other / Custom",
+      "Description": "Other or custom external accounting system",
+      "IsDefault": false,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "Code": "Other"
+    }
+  }
+]

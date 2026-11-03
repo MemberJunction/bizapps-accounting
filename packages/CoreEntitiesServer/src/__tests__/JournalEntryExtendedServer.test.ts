@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Metadata, EntityInfo } from '@memberjunction/core';
+import { BaseEntity, Metadata, EntityInfo, ValidationErrorType } from '@memberjunction/core';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import { mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
 import { JournalEntryEntityServer } from '../JournalEntryEntityServer.js';
 import { JournalEntryLineEntityServer } from '../JournalEntryLineEntityServer.js';
 
@@ -64,7 +65,7 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
     };
 
     jeEntityInfo = createMockEntity(JE_ENTITY, ['ID', 'CompanyID', 'EffectiveDate', 'EntryTypeID', 'Status', 'EntryNumber', 'ReversesJournalEntryID', 'ReversedByJournalEntryID', 'FileID']);
-    jelEntityInfo = createMockEntity(JEL_ENTITY, ['ID', 'JournalEntryID', 'LineNumber', 'GLAccountID', 'DebitAmount', 'CreditAmount', 'Description']);
+    jelEntityInfo = createMockEntity(JEL_ENTITY, ['ID', 'JournalEntryID', 'LineNumber', 'GLAccountID', 'DebitAmount', 'CreditAmount', 'OriginalCurrencyCode', 'OriginalDebitAmount', 'OriginalCreditAmount', 'ExchangeRateUsed', 'Description']);
     const glEntityInfo = createMockEntity(GL_ENTITY, ['ID', 'CompanyID', 'Code', 'IsActive']);
 
     const entities = [jeEntityInfo, jelEntityInfo, glEntityInfo];
@@ -391,6 +392,86 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
       const result = je.Validate();
       expect(result.Errors.map(getErrorText)).toEqual([]);
       expect(result.Success).toBe(true);
+    });
+
+    it('LoadHeader loads only the header without calling LoadLines (#391)', async () => {
+      const superLoad = vi.spyOn(mjBizAppsAccountingJournalEntryEntity.prototype, 'Load').mockResolvedValue(true);
+      const loadLines = vi.spyOn(je, 'LoadLines').mockResolvedValue([]);
+      try {
+        await expect(je.LoadHeader('JE-HEADER-ONLY')).resolves.toBe(true);
+        expect(superLoad).toHaveBeenCalledWith('JE-HEADER-ONLY', undefined);
+        expect(loadLines).not.toHaveBeenCalled();
+      } finally {
+        superLoad.mockRestore();
+        loadLines.mockRestore();
+      }
+    });
+
+    describe('Foreign-currency line check (#450)', () => {
+      beforeEach(() => {
+        (AccountingEngineBase.Instance as any)._glAccounts = [
+          { ID: 'GL_100_A', CompanyID: 'CO_100', Code: '1001', CurrencyCode: 'USD', IsActive: true },
+        ];
+        (AccountingEngineBase.Instance as any)._companyProfiles = [
+          { ID: 'CO_100', FunctionalCurrencyCode: 'USD' },
+        ];
+        (AccountingEngineBase.Instance as any)._currencySpotRates = [
+          {
+            FromCurrencyCode: 'EUR',
+            ToCurrencyCode: 'USD',
+            RateDate: new Date('2026-07-01T00:00:00Z'),
+            Rate: 1.10,
+            IsActive: true,
+          },
+        ];
+      });
+
+      it('passes when |OriginalAmount × ExchangeRateUsed − FunctionalAmount| <= 0.01 and rate is within 5% of spot', () => {
+        const line = new JournalEntryLineEntityServer(jelEntityInfo as any);
+        line.NewRecord();
+        line.ParentJournalEntry = je;
+        line.GLAccountID = 'GL_100_A';
+        line.OriginalCurrencyCode = 'EUR';
+        line.OriginalDebitAmount = 100;
+        line.ExchangeRateUsed = 1.10;
+        line.DebitAmount = 110.01; // within 0.01 tolerance
+
+        const result = line.Validate();
+        expect(result.Success).toBe(true);
+        expect(result.Errors).toHaveLength(0);
+      });
+
+      it('refuses when |OriginalAmount × ExchangeRateUsed − FunctionalAmount| exceeds 0.01', () => {
+        const line = new JournalEntryLineEntityServer(jelEntityInfo as any);
+        line.NewRecord();
+        line.ParentJournalEntry = je;
+        line.GLAccountID = 'GL_100_A';
+        line.OriginalCurrencyCode = 'EUR';
+        line.OriginalDebitAmount = 100;
+        line.ExchangeRateUsed = 1.10;
+        line.DebitAmount = 110.05; // 0.05 off > 0.01
+
+        const result = line.Validate();
+        expect(result.Success).toBe(false);
+        expect(result.Errors.some(e => e.Type === ValidationErrorType.Failure && /differs from OriginalDebitAmount/.test(e.Message))).toBe(true);
+      });
+
+      it('warns without failing when ExchangeRateUsed deviates by more than 5% from CurrencySpotRate', () => {
+        const line = new JournalEntryLineEntityServer(jelEntityInfo as any);
+        line.NewRecord();
+        line.ParentJournalEntry = je;
+        line.GLAccountID = 'GL_100_A';
+        line.OriginalCurrencyCode = 'EUR';
+        line.OriginalDebitAmount = 100;
+        line.ExchangeRateUsed = 1.20; // >5% above 1.10 spot
+        line.DebitAmount = 120.00;
+
+        const result = line.Validate();
+        expect(result.Success).toBe(true);
+        expect(result.Errors).toHaveLength(1);
+        expect(result.Errors[0].Type).toBe(ValidationErrorType.Warning);
+        expect(result.Errors[0].Message).toMatch(/spot rate \(1\.1\)/);
+      });
     });
   });
 });

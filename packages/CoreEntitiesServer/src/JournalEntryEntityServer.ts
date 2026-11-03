@@ -215,6 +215,15 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
 
   // ─── Load Overrides ─────────────────────────────────────────────────────────
 
+  /**
+   * Load the journal entry header row only, without calling `LoadLines()`.
+   * Used by batch lock, unlock, GLPosted stamp, and summary header teardown so header-only
+   * transitions do not issue 2N unnecessary line and dimension queries across N entries.
+   */
+  public override async LoadHeader(ID: string, EntityRelationshipsToLoad?: string[]): Promise<boolean> {
+    return super.Load(ID, EntityRelationshipsToLoad);
+  }
+
   public override async Load(ID: string, EntityRelationshipsToLoad?: string[]): Promise<boolean> {
     const ok = await super.Load(ID, EntityRelationshipsToLoad);
     if (ok) {
@@ -223,7 +232,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     return ok;
   }
 
-  public override async LoadFromData(data: any, replaceOldValues?: boolean): Promise<boolean> {
+  public override async LoadFromData(data: Record<string, unknown>, replaceOldValues?: boolean): Promise<boolean> {
     const ok = await super.LoadFromData(data, replaceOldValues);
     if (ok && this.IsSaved) {
       await this.LoadLines();
@@ -280,7 +289,9 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     // answer out of columns the gated person wrote.
     const forgedApprovalFields = APPROVAL_FIELDS.filter(f =>
       !this.writableApprovalFields.has(f) &&
-      (this.IsSaved ? this.GetFieldByName(f)?.Dirty === true : this.Get(f) !== null && this.Get(f) !== undefined),
+      (this.IsSaved
+        ? this.GetFieldByName(f)?.Dirty === true
+        : this.GetFieldByName(f)?.Value !== null && this.GetFieldByName(f)?.Value !== undefined),
     );
     if (forgedApprovalFields.length > 0) {
       fail(
@@ -347,20 +358,20 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
           ),
         );
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       result.Success = false;
       result.Errors.push(
-        new ValidationErrorInfo('JournalEntryEntityServer.ValidateAsync', e.message || String(e), null),
+        new ValidationErrorInfo('JournalEntryEntityServer.ValidateAsync', e instanceof Error ? e.message : String(e), null),
       );
     }
 
     // Rule 5: W9 Attachment validation
     try {
       await this.ValidateAttachment();
-    } catch (e: any) {
+    } catch (e: unknown) {
       result.Success = false;
       result.Errors.push(
-        new ValidationErrorInfo('JournalEntryEntityServer.ValidateAsync', e.message || String(e), null),
+        new ValidationErrorInfo('JournalEntryEntityServer.ValidateAsync', e instanceof Error ? e.message : String(e), null),
       );
     }
 
@@ -372,10 +383,10 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
         result.Success = false;
         result.Errors.push(new ValidationErrorInfo('JournalEntryEntityServer.ValidateAsync', transitionError, null));
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       result.Success = false;
       result.Errors.push(
-        new ValidationErrorInfo('JournalEntryEntityServer.ValidateAsync', e.message || String(e), null),
+        new ValidationErrorInfo('JournalEntryEntityServer.ValidateAsync', e instanceof Error ? e.message : String(e), null),
       );
     }
 

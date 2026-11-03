@@ -21,12 +21,9 @@
         }
       </div>
 
-      <!-- Header verbs — workspace first (the working destination), then the pop-out the element
-           doctrine requires. Both close this panel as they hand the screen over. -->
+      <!-- Header verb — the pop-out the element doctrine requires, closing this panel as it hands
+           the screen over. -->
       <div class="bdp__actions">
-        <button type="button" mjButton Variant="outline" Size="sm" (click)="GoToWorkspace()" title="Open this journal entry batch in the JE batch workspace (closes this panel)">
-          <i class="fa-solid fa-diagram-project" aria-hidden="true"></i> Open in workspace
-        </button>
         <button type="button" mjButton Variant="outline" Size="sm" (click)="PopOut()" title="Open the full journal entry batch record (closes this panel)">
           <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Open full
         </button>
@@ -34,6 +31,10 @@
 
       @if (h.Status === 'Failed' && h.ErrorMessage) {
         <mj-alert Variant="error" [Message]="h.ErrorMessage"></mj-alert>
+      }
+      @if (h.ERPPostUnconfirmedAt) {
+        <mj-alert Variant="warning" Title="ERP posting not read back"
+          Message="The ERP post request returned before the posted ledger lines could be read back. Verify the posting in the ERP before retrying or cancelling this batch."></mj-alert>
       }
       @if (h.SealMismatchDetectedAt) {
         <mj-alert Variant="warning" Title="Dimension tags changed after approval"
@@ -68,6 +69,9 @@
         }
         @if (h.SealMismatchDetectedAt) {
           <div><dt>Seal mismatch</dt><dd>{{ h.SealMismatchDetectedAt | date: 'medium' }}</dd></div>
+        }
+        @if (h.ERPPostUnconfirmedAt) {
+          <div><dt>ERP unconfirmed</dt><dd>{{ h.ERPPostUnconfirmedAt | date: 'medium' }}</dd></div>
         }
       </dl>
 

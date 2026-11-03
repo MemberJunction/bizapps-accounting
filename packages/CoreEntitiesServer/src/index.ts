@@ -15,7 +15,11 @@
  */
 export { AccountingCompanyProfileEntityServer } from './AccountingCompanyProfileEntityServer.js';
 export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
-export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
+export {
+  JournalEntryLineEntityServer,
+  FX_AMOUNT_TOLERANCE,
+  FX_SPOT_RATE_WARNING_BAND,
+} from './JournalEntryLineEntityServer.js';
 export { JournalEntryLineDimensionEntityServer, LoadJournalEntryLineDimensionEntityServer } from './JournalEntryLineDimensionEntityServer.js';
 export { JournalEntryBatchEntityServer, type ApprovedContentCheck, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
 export { GLAccountEntityServer, BusinessCentralAccountNumberError, BUSINESS_CENTRAL_ACCOUNT_NUMBER_MAX_LENGTH } from './GLAccountEntityServer.js';
@@ -69,6 +73,8 @@ export {
   EmptyJournalEntryBatchError,
   JournalEntryBatchFromViewError,
   JournalEntryBatchPostingDateError,
+  MixedExternalSystemError,
+  partitionEntriesByExternalSystem,
   approveJournalEntryBatch,
   sendJournalEntryBatch,
   autoPostJournalEntryBatch,
@@ -149,9 +155,16 @@ export {
   LoadAccountingERPEngine,
 } from './AccountingERPEngine.js';
 export {
+  defaultAccountingVerbRunner,
+  type AccountingVerbRunner,
+} from './AccountingVerbRunner.js';
+export {
   BaseAccountingERPProvider,
   BusinessCentralERPProvider,
   QuickBooksERPProvider,
+  BUSINESS_CENTRAL_ERP_PROVIDER_NAME,
+  QUICKBOOKS_ONLINE_ERP_PROVIDER_NAME,
+  ERP_PROVIDER_KEYS,
   LoadAccountingERPProviders,
 } from './BaseAccountingERPProvider.js';
 export type {

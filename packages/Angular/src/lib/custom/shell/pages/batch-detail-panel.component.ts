@@ -3,7 +3,10 @@ import { RunView, CompositeKey } from '@memberjunction/core';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { MJStatBadgeVariant } from '@memberjunction/ng-ui-components';
 import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
-import { mjBizAppsAccountingJournalEntryBatchEntityType } from '@mj-biz-apps/accounting-entities';
+import {
+  mjBizAppsAccountingJournalEntryBatchEntityType,
+  mjBizAppsAccountingJournalEntryEntity,
+} from '@mj-biz-apps/accounting-entities';
 import { openBizDetail } from '../../shared/biz-detail-form';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
@@ -35,6 +38,8 @@ export interface BatchDetailHeader {
   PostedAt: Date | null;
   /** Set when a retry recorded the batch Posted from the ERP although its approved-content seal no longer matched (#216). */
   SealMismatchDetectedAt: Date | null;
+  /** Set when the ERP post succeeded or could not be read back so a retry will not re-send without checking (#414). */
+  ERPPostUnconfirmedAt: Date | null;
   ErrorMessage: string | null;
   ApprovalTaskID: string | null;
   ApprovalTaskRaisedAt: Date | null;
@@ -42,20 +47,19 @@ export interface BatchDetailHeader {
   __mj_CreatedAt: Date;
 }
 
-/** One member entry, as the batch's member list shows it. */
-interface BatchMemberRow {
-  ID: string;
-  EntryNumber: string;
-  EntryType: string;
-  Status: string;
-  EffectiveDate: Date | null;
-  Description: string | null;
-}
+/** One member entry, as the batch's member list shows it (#409). */
+type BatchMemberRow = Pick<
+  mjBizAppsAccountingJournalEntryEntity,
+  'ID' | 'EntryNumber' | 'Status' | 'Description'
+> & {
+  EffectiveDate: string | Date | null;
+  EntryType: string | null;
+};
 
 /**
  * Batch detail slide-in — the batches twin of the JE detail panel (element doctrine:
- * slide-in = quick VIEW; it carries "Open in workspace" + the pop-out, both of which CLOSE this
- * panel as they hand the screen over).
+ * slide-in = quick VIEW; it carries the pop-out button, which CLOSES this panel as it hands the
+ * screen over).
  *
  * What a reviewer needs on the first click: the batch's identity (number, status, target system,
  * posting date, company), its money (entry count + netted Dr/Cr totals), its dispatch trail
@@ -88,8 +92,6 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
   private _batchID: string | null = null;
 
   @Output() Closed = new EventEmitter<void>();
-  /** "Open in workspace" — carries the batch ID; the host routes it via GoToPage('workspace', id). */
-  @Output() OpenInWorkspace = new EventEmitter<string>();
 
   public Header: BatchDetailHeader | null = null;
   public Members: BatchMemberRow[] = [];
@@ -140,14 +142,6 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
     this.Closed.emit();
   }
 
-  /** Same close-as-you-leave rule as the JE panel: the workspace is the destination. */
-  public GoToWorkspace(): void {
-    if (!this.Header) return;
-    const id = this.Header.ID;
-    this.Closed.emit();
-    this.OpenInWorkspace.emit(id);
-  }
-
   /** Pop-out (↗) to the batch's full-depth home — required on every slide-in; closes this panel. */
   public PopOut(): void {
     if (!this.Header) return;
@@ -182,7 +176,8 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
             Fields: [
               'ID', 'JournalEntryBatchNumber', 'Status', 'TargetSystem', 'PostingDate', 'TotalEntries',
               'TotalDebits', 'TotalCredits', 'CompanyID', 'Company', 'ExternalJournalEntryBatchRef',
-              'ApprovedAt', 'SentAt', 'SentByUser', 'SendAttemptCount', 'PostedAt', 'SealMismatchDetectedAt', 'ErrorMessage', 'ApprovalTaskID',
+              'ApprovedAt', 'SentAt', 'SentByUser', 'SendAttemptCount', 'PostedAt', 'SealMismatchDetectedAt',
+              'ERPPostUnconfirmedAt', 'ErrorMessage', 'ApprovalTaskID',
               'ApprovalTaskRaisedAt', 'SummaryJournalEntryID', '__mj_CreatedAt',
             ],
             ResultType: 'simple',

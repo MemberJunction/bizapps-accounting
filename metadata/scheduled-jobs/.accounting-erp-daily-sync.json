@@ -4,15 +4,20 @@
       "One daily job → AccountingERPEngine.SyncMasterData for every credentialed company.",
       "JobTypeID is the seeded Action type (ActionScheduledJobDriver). Cron is six fields, seconds first:",
       "`0 0 2 * * *` = 02:00:00 UTC every day. Concurrency Skip so overlapping runs do not double-pull.",
-      "Hosts disable this row rather than deleting it."
+      "Two-path execution: when all three objects (accounts, dimensions, dimensionValues) are requested",
+      "and the CompanyIntegration has active CompanyIntegrationEntityMap rows for a connector-backed",
+      "integration, SyncMasterData delegates to MJ IntegrationEngine.RunSync; when a subset Objects",
+      "filter is supplied or no connector exists, it falls back to the direct BaseAccountingERPProvider pull.",
+      "Ships Disabled so a freshly installed host does not run unattended jobs before an administrator",
+      "reviews and enables them."
     ],
     "fields": {
       "Name": "Accounting — ERP master data (daily)",
-      "Description": "Pulls chart of accounts, dimensions, and dimension values from every active Company Integration. Posts of journal batches are a separate engine verb, not this job.",
+      "Description": "Pulls chart of accounts, dimensions, and dimension values from every active Company Integration (delegating full-set connector syncs to MJ IntegrationEngine.RunSync and falling back to direct provider pull for subset filters or custom providers). Posts of journal batches are a separate engine verb, not this job.",
       "JobTypeID": "3B94DD43-E961-4D85-B7F4-B6783D748766",
       "CronExpression": "0 0 2 * * *",
       "Timezone": "UTC",
-      "Status": "Active",
+      "Status": "Disabled",
       "ConcurrencyMode": "Skip",
       "MissedRunPolicy": "RunOnce",
       "RunImmediatelyIfNeverRun": false,

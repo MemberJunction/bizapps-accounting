@@ -7,6 +7,8 @@
     "entities",
     "entity-fields",
     "currencies",
+    "tax-categories",
+    "external-accounting-systems",
     "journal-entry-types",
     "gl-account-roles",
     "finance-exception-types",
