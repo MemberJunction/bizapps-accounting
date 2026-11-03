@@ -241,23 +241,39 @@ export class JournalEntryBatchPostingDateError extends Error {
   }
 }
 
+const IN_CLAUSE_CHUNK_SIZE = 500;
+
+/** Split `items` into chunks of at most `size` so SQL `IN (...)` clauses and `RunView` row caps stay bounded (#488). */
+function chunkArray<T>(items: readonly T[], size = IN_CLAUSE_CHUNK_SIZE): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
 /** Refuse the build when any member is dated after the posting day; names the offenders. */
 async function assertPostingDayCoversMembers(jeIds: string[], postingDay: CalendarDay, contextUser: UserInfo, p: Providers): Promise<void> {
   if (jeIds.length === 0) return;
-  const res = await p.rv.RunView<{ EntryNumber: string; EffectiveDate: string }>(
-    {
-      EntityName: JE_ENTITY,
-      ExtraFilter: `ID IN (${jeIds.map(sqlGuid).join(',')}) AND EffectiveDate > '${postingDay}'`,
-      OrderBy: 'EffectiveDate ASC, EntryNumber ASC',
-      Fields: ['EntryNumber', 'EffectiveDate'],
-      ResultType: 'simple',
-      BypassCache: true,
-    },
-    contextUser,
-  );
-  if (!res.Success) throw new Error(`The batch was not built: could not check the entries' dates against the posting date: ${res.ErrorMessage ?? 'unknown error'}`);
-  const later = res.Results ?? [];
+  const later: Array<{ EntryNumber: string; EffectiveDate: string }> = [];
+  for (const chunk of chunkArray(jeIds)) {
+    const res = await p.rv.RunView<{ EntryNumber: string; EffectiveDate: string }>(
+      {
+        EntityName: JE_ENTITY,
+        ExtraFilter: `ID IN (${chunk.map(sqlGuid).join(',')}) AND EffectiveDate > '${postingDay}'`,
+        OrderBy: 'EffectiveDate ASC, EntryNumber ASC',
+        Fields: ['EntryNumber', 'EffectiveDate'],
+        ResultType: 'simple',
+        BypassCache: true,
+        IgnoreMaxRows: true,
+      },
+      contextUser,
+    );
+    if (!res.Success) throw new Error(`The batch was not built: could not check the entries' dates against the posting date: ${res.ErrorMessage ?? 'unknown error'}`);
+    later.push(...(res.Results ?? []));
+  }
   if (later.length === 0) return;
+  later.sort((a, b) => ToCalendarDay(a.EffectiveDate).localeCompare(ToCalendarDay(b.EffectiveDate)) || a.EntryNumber.localeCompare(b.EntryNumber));
   const shown = later.slice(0, 5).map(r => `${r.EntryNumber} (${ToCalendarDay(r.EffectiveDate)})`).join(', ');
   const more = later.length > 5 ? ` and ${later.length - 5} more` : '';
   throw new JournalEntryBatchPostingDateError(
@@ -397,7 +413,7 @@ async function buildJournalEntryBatchCore(
 export async function pendingCompanies(contextUser: UserInfo, provider: IMetadataProvider, options: BuildJournalEntryBatchOptions = {}): Promise<string[]> {
   const p = resolveProviders(provider);
   const res = await p.rv.RunView<{ CompanyID: string }>(
-    { EntityName: JE_ENTITY, ExtraFilter: await pendingCandidateFilter(options, contextUser, p), Fields: ['CompanyID'], ResultType: 'simple', BypassCache: true },
+    { EntityName: JE_ENTITY, ExtraFilter: await pendingCandidateFilter(options, contextUser, p), Fields: ['CompanyID'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
     contextUser,
   );
   return [...new Set((res.Results ?? []).map(r => r.CompanyID))];
@@ -528,7 +544,7 @@ export interface PostingStartFloor {
  */
 async function loadPostingStartDates(contextUser: UserInfo, p: Providers): Promise<PostingStartFloor[]> {
   const res = await p.rv.RunView<{ ID: string; PostingStartDate: Date | string | null }>(
-    { EntityName: ACP_ENTITY, ExtraFilter: 'PostingStartDate IS NOT NULL', Fields: ['ID', 'PostingStartDate'], ResultType: 'simple', BypassCache: true },
+    { EntityName: ACP_ENTITY, ExtraFilter: 'PostingStartDate IS NOT NULL', Fields: ['ID', 'PostingStartDate'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
     contextUser,
   );
   if (!res.Success) throw new Error(`The batch was not built: could not load the companies' posting start dates: ${res.ErrorMessage ?? 'unknown error'}`);
@@ -575,7 +591,7 @@ export function partitionByPostingStart<T extends { ID: string; CompanyID: strin
 async function resolveEntryTypeIds(codes: string[], contextUser: UserInfo, p: Providers): Promise<string[]> {
   const inList = codes.map(sqlText).join(',');
   const res = await p.rv.RunView<{ ID: string; Code: string }>(
-    { EntityName: JET_ENTITY, ExtraFilter: `Code IN (${inList})`, Fields: ['ID', 'Code'], ResultType: 'simple', BypassCache: true },
+    { EntityName: JET_ENTITY, ExtraFilter: `Code IN (${inList})`, Fields: ['ID', 'Code'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
     contextUser,
   );
   const rows = res.Results ?? [];
@@ -628,19 +644,23 @@ export async function buildJournalEntryBatchFromExplicitIds(
 ): Promise<BuildJournalEntryBatchResult[]> {
   if (jeIds.length === 0) throw new EmptyJournalEntryBatchError('Nothing to batch: no journal entries were selected.');
   const p = resolveProviders(provider);
-  const inList = jeIds.map(sqlGuid).join(',');
-  const res = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string; EntryNumber: string; ApprovalLevel: string | null; ApprovedAt: string | null }>(
-    {
-      EntityName: JE_ENTITY,
-      ExtraFilter: `ID IN (${inList})`,
-      Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate', 'EntryNumber', 'ApprovalLevel', 'ApprovedAt'],
-      ResultType: 'simple',
-      BypassCache: true,
-    },
-    contextUser,
-  );
-  if (!res.Success) throw new Error(`The batch was not built: could not check the selected entries: ${res.ErrorMessage ?? 'unknown error'}`);
-  const rows = res.Results ?? [];
+  const rows: Array<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string; EntryNumber: string; ApprovalLevel: string | null; ApprovedAt: string | null }> = [];
+  for (const chunk of chunkArray(jeIds)) {
+    const inList = chunk.map(sqlGuid).join(',');
+    const res = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string; EntryNumber: string; ApprovalLevel: string | null; ApprovedAt: string | null }>(
+      {
+        EntityName: JE_ENTITY,
+        ExtraFilter: `ID IN (${inList})`,
+        Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate', 'EntryNumber', 'ApprovalLevel', 'ApprovedAt'],
+        ResultType: 'simple',
+        BypassCache: true,
+        IgnoreMaxRows: true,
+      },
+      contextUser,
+    );
+    if (!res.Success) throw new Error(`The batch was not built: could not check the selected entries: ${res.ErrorMessage ?? 'unknown error'}`);
+    rows.push(...(res.Results ?? []));
+  }
   const byId = new Map(rows.map(r => [r.ID.toLowerCase(), r]));
   const stale = jeIds.filter(id => byId.get(id.toLowerCase())?.Status !== 'Pending');
   if (stale.length > 0) {
@@ -712,7 +732,7 @@ export async function buildJournalEntryBatchFromView(
 ): Promise<BuildJournalEntryBatchResult[]> {
   const p = resolveProviders(provider);
   const viewRes = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string; ApprovalLevel: string | null; ApprovedAt: string | null }>(
-    { ViewID: viewId, Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate', 'ApprovalLevel', 'ApprovedAt'], ResultType: 'simple', BypassCache: true },
+    { ViewID: viewId, Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate', 'ApprovalLevel', 'ApprovedAt'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
     contextUser,
   );
   if (!viewRes.Success) throw new JournalEntryBatchFromViewError(`The batch was not built: could not run view ${viewId}: ${viewRes.ErrorMessage ?? 'unknown error'}`);
@@ -730,11 +750,16 @@ export async function buildJournalEntryBatchFromView(
   if (batchable.length === 0) throw new EmptyJournalEntryBatchError('Nothing to batch: the view holds no Pending entries that can be batched.');
   let inWindow = batchable;
   if (options.cutoff || options.startDate) {
-    const winRes = await p.rv.RunView<{ ID: string }>(
-      { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${batchable.map(sqlGuid).join(',')}) AND ${await pendingCandidateFilter(options, contextUser, p)}`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
-      contextUser,
-    );
-    inWindow = (winRes.Results ?? []).map(r => r.ID);
+    const candidateClause = await pendingCandidateFilter(options, contextUser, p);
+    const windowed: string[] = [];
+    for (const chunk of chunkArray(batchable)) {
+      const winRes = await p.rv.RunView<{ ID: string }>(
+        { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${chunk.map(sqlGuid).join(',')}) AND ${candidateClause}`, Fields: ['ID'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+        contextUser,
+      );
+      windowed.push(...(winRes.Results ?? []).map(r => r.ID));
+    }
+    inWindow = windowed;
     if (inWindow.length === 0) throw new EmptyJournalEntryBatchError('Nothing to batch: none of the view\'s entries fall inside the chosen dates.');
   }
   return buildJournalEntryBatchFromExplicitIds(inWindow, targetSystem, batchedByUserId, contextUser, provider, gate, options.postingDate ?? null);
@@ -808,6 +833,7 @@ async function loadPendingJEIds(companyId: string, contextUser: UserInfo, p: Pro
       Fields: ['ID'],
       ResultType: 'simple',
       BypassCache: true,
+      IgnoreMaxRows: true,
     },
     contextUser,
   );
@@ -815,12 +841,15 @@ async function loadPendingJEIds(companyId: string, contextUser: UserInfo, p: Pro
 }
 
 async function loadNettableLines(companyId: string, jeIds: string[], contextUser: UserInfo, p: Providers): Promise<NettableLine[]> {
-  const inList = jeIds.map(id => `'${id}'`).join(',');
-  const lineRes = await p.rv.RunView<{ ID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>(
-    { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${inList})`, Fields: ['ID', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  const lines = lineRes.Results ?? [];
+  const lines: Array<{ ID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }> = [];
+  for (const chunk of chunkArray(jeIds)) {
+    const inList = chunk.map(id => `'${id}'`).join(',');
+    const lineRes = await p.rv.RunView<{ ID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>(
+      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${inList})`, Fields: ['ID', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+      contextUser,
+    );
+    lines.push(...(lineRes.Results ?? []));
+  }
   const dimsByLine = await loadDimensionsByLine(lines.map(l => l.ID), contextUser, p);
   // The line's company IS the parent JE's header company (single-company JE, D3; trigger 50019
   // guarantees every line's GLAccount belongs to it) — and every gathered JE belongs to companyId.
@@ -830,15 +859,17 @@ async function loadNettableLines(companyId: string, jeIds: string[], contextUser
 async function loadDimensionsByLine(lineIds: string[], contextUser: UserInfo, p: Providers): Promise<Map<string, DimRef[]>> {
   const byLine = new Map<string, DimRef[]>();
   if (lineIds.length === 0) return byLine;
-  const inList = lineIds.map(id => `'${id}'`).join(',');
-  const res = await p.rv.RunView<{ JournalEntryLineID: string; DimensionID: string; DimensionValueID: string }>(
-    { EntityName: JELD_ENTITY, ExtraFilter: `JournalEntryLineID IN (${inList})`, Fields: ['JournalEntryLineID', 'DimensionID', 'DimensionValueID'], ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  for (const d of res.Results ?? []) {
-    const arr = byLine.get(d.JournalEntryLineID) ?? [];
-    arr.push({ DimensionID: d.DimensionID, DimensionValueID: d.DimensionValueID });
-    byLine.set(d.JournalEntryLineID, arr);
+  for (const chunk of chunkArray(lineIds)) {
+    const inList = chunk.map(id => `'${id}'`).join(',');
+    const res = await p.rv.RunView<{ JournalEntryLineID: string; DimensionID: string; DimensionValueID: string }>(
+      { EntityName: JELD_ENTITY, ExtraFilter: `JournalEntryLineID IN (${inList})`, Fields: ['JournalEntryLineID', 'DimensionID', 'DimensionValueID'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+      contextUser,
+    );
+    for (const d of res.Results ?? []) {
+      const arr = byLine.get(d.JournalEntryLineID) ?? [];
+      arr.push({ DimensionID: d.DimensionID, DimensionValueID: d.DimensionValueID });
+      byLine.set(d.JournalEntryLineID, arr);
+    }
   }
   return byLine;
 }
@@ -1017,13 +1048,15 @@ async function loadCodesById(
 ): Promise<Map<string, string>> {
   const byId = new Map<string, string>();
   if (ids.length === 0) return byId;
-  const inList = ids.map(id => sqlGuidLiteral(id, `resolveExternalDimensions: invalid id for ${entityName}`)).join(',');
-  const res = await p.rv.RunView<{ ID: string; Code: string }>(
-    { EntityName: entityName, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'Code'], ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  for (const row of res.Results ?? []) {
-    if (row.Code) byId.set(row.ID, row.Code);
+  for (const chunk of chunkArray(ids)) {
+    const inList = chunk.map(id => sqlGuidLiteral(id, `resolveExternalDimensions: invalid id for ${entityName}`)).join(',');
+    const res = await p.rv.RunView<{ ID: string; Code: string }>(
+      { EntityName: entityName, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'Code'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+      contextUser,
+    );
+    for (const row of res.Results ?? []) {
+      if (row.Code) byId.set(row.ID, row.Code);
+    }
   }
   return byId;
 }
@@ -1737,7 +1770,7 @@ async function postOrFail(
 async function loadSummaryLines(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo, p: Providers): Promise<mjBizAppsAccountingJournalEntryLineEntity[]> {
   if (!batch.SummaryJournalEntryID) return [];
   const res = await p.rv.RunView<mjBizAppsAccountingJournalEntryLineEntity>(
-    { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${batch.SummaryJournalEntryID}'`, OrderBy: 'LineNumber', ResultType: 'entity_object', BypassCache: true },
+    { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${batch.SummaryJournalEntryID}'`, OrderBy: 'LineNumber', ResultType: 'entity_object', BypassCache: true, IgnoreMaxRows: true },
     contextUser,
   );
   // Loud on failure: an empty result here would send the ERP an empty journal.
@@ -1796,7 +1829,7 @@ async function failAcceptedBatch(batch: JournalEntryBatchEntityServer, saveError
  */
 async function markJournalEntriesGLPosted(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo, p: Providers): Promise<number> {
   const res = await p.rv.RunView<{ ID: string }>(
-    { EntityName: JE_ENTITY, ExtraFilter: `JournalEntryBatchID=${sqlGuid(batch.ID)} AND Status='Batched'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
+    { EntityName: JE_ENTITY, ExtraFilter: `JournalEntryBatchID=${sqlGuid(batch.ID)} AND Status='Batched'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
     contextUser,
   );
   // Loud on failure: an empty result here would report the flip complete with every entry still Batched.
@@ -1895,6 +1928,7 @@ export async function findStrandedJournalEntries(contextUser: UserInfo, provider
       Fields: ['JournalEntryBatchID', 'JournalEntryBatch'],
       ResultType: 'simple',
       BypassCache: true,
+      IgnoreMaxRows: true,
     })),
     contextUser,
   );
@@ -2187,6 +2221,7 @@ export async function previewBatch(
       Fields: ['ID', 'EntryNumber', 'EffectiveDate', 'EntryTypeID', 'CompanyID', 'Description', 'ApprovalLevel', 'ApprovedAt'],
       ResultType: 'simple',
       BypassCache: true,
+      IgnoreMaxRows: true,
     },
     contextUser,
   );
@@ -2198,7 +2233,7 @@ export async function previewBatch(
 
   // Type CODES for the grid (ID → Code map, one read).
   const typeRes = await p.rv.RunView<{ ID: string; Code: string }>(
-    { EntityName: JET_ENTITY, Fields: ['ID', 'Code'], ResultType: 'simple' }, contextUser);
+    { EntityName: JET_ENTITY, Fields: ['ID', 'Code'], ResultType: 'simple', IgnoreMaxRows: true }, contextUser);
   const codeByTypeId = new Map((typeRes.Results ?? []).map(t => [t.ID.toLowerCase(), t.Code]));
 
   // Net exactly what a build of the INCLUDED set would net (grouped per company like the build).
@@ -2211,12 +2246,14 @@ export async function previewBatch(
   // not: an unticked entry still shows its own value (#253); only the totals above follow the selection.
   const amountByJE = new Map<string, number>();
   if (rows.length > 0) {
-    const lineRes = await p.rv.RunView<{ JournalEntryID: string; DebitAmount: number | null }>(
-      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${rows.map(r => `'${r.ID}'`).join(',')})`, Fields: ['JournalEntryID', 'DebitAmount'], ResultType: 'simple', BypassCache: true },
-      contextUser,
-    );
-    for (const l of lineRes.Results ?? []) {
-      amountByJE.set(l.JournalEntryID, Math.round(((amountByJE.get(l.JournalEntryID) ?? 0) + (l.DebitAmount ?? 0)) * 100) / 100);
+    for (const chunk of chunkArray(rows.map(r => r.ID))) {
+      const lineRes = await p.rv.RunView<{ JournalEntryID: string; DebitAmount: number | null }>(
+        { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${chunk.map(id => `'${id}'`).join(',')})`, Fields: ['JournalEntryID', 'DebitAmount'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+        contextUser,
+      );
+      for (const l of lineRes.Results ?? []) {
+        amountByJE.set(l.JournalEntryID, Math.round(((amountByJE.get(l.JournalEntryID) ?? 0) + (l.DebitAmount ?? 0)) * 100) / 100);
+      }
     }
   }
 
@@ -2259,17 +2296,23 @@ async function countBeforePostingStart(
 
 /** Line loading for a MIXED-company id set (preview only — the build stays per company). */
 async function loadNettableLinesUnscoped(jeIds: string[], contextUser: UserInfo, p: Providers): Promise<NettableLine[]> {
-  const inList = jeIds.map(id => `'${id}'`).join(',');
-  const jeRes = await p.rv.RunView<{ ID: string; CompanyID: string }>(
-    { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'CompanyID'], ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  const companyByJE = new Map((jeRes.Results ?? []).map(j => [j.ID.toLowerCase(), j.CompanyID]));
-  const lineRes = await p.rv.RunView<{ ID: string; JournalEntryID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>(
-    { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${inList})`, Fields: ['ID', 'JournalEntryID', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  const lines = lineRes.Results ?? [];
+  const companyByJE = new Map<string, string>();
+  const lines: Array<{ ID: string; JournalEntryID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }> = [];
+  for (const chunk of chunkArray(jeIds)) {
+    const inList = chunk.map(id => `'${id}'`).join(',');
+    const jeRes = await p.rv.RunView<{ ID: string; CompanyID: string }>(
+      { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'CompanyID'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+      contextUser,
+    );
+    for (const j of jeRes.Results ?? []) {
+      companyByJE.set(j.ID.toLowerCase(), j.CompanyID);
+    }
+    const lineRes = await p.rv.RunView<{ ID: string; JournalEntryID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>(
+      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${inList})`, Fields: ['ID', 'JournalEntryID', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+      contextUser,
+    );
+    lines.push(...(lineRes.Results ?? []));
+  }
   const dimsByLine = await loadDimensionsByLine(lines.map(l => l.ID), contextUser, p);
   return lines.map(l => ({
     companyId: companyByJE.get(l.JournalEntryID.toLowerCase()) ?? '',
@@ -2284,11 +2327,16 @@ async function loadNettableLinesUnscoped(jeIds: string[], contextUser: UserInfo,
 async function summarizeAffectedAccounts(groups: NetGroup[], contextUser: UserInfo, p: Providers): Promise<AffectedAccount[]> {
   if (groups.length === 0) return [];
   const glIds = [...new Set(groups.map(g => g.glAccountId))];
-  const glRes = await p.rv.RunView<{ ID: string; Code: string; Name: string }>(
-    { EntityName: GL_ENTITY, ExtraFilter: `ID IN (${glIds.map(id => `'${id}'`).join(',')})`, Fields: ['ID', 'Code', 'Name'], ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  const glById = new Map((glRes.Results ?? []).map(g => [g.ID.toLowerCase(), g]));
+  const glById = new Map<string, { ID: string; Code: string; Name: string }>();
+  for (const chunk of chunkArray(glIds)) {
+    const glRes = await p.rv.RunView<{ ID: string; Code: string; Name: string }>(
+      { EntityName: GL_ENTITY, ExtraFilter: `ID IN (${chunk.map(id => `'${id}'`).join(',')})`, Fields: ['ID', 'Code', 'Name'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+      contextUser,
+    );
+    for (const g of glRes.Results ?? []) {
+      glById.set(g.ID.toLowerCase(), g);
+    }
+  }
   const byAccount = new Map<string, AffectedAccount>();
   for (const g of groups) {
     const key = g.glAccountId.toLowerCase();

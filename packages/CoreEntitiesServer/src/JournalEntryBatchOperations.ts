@@ -441,8 +441,8 @@ export interface ArchiveJournalEntryBatchOutput { Status: string; ArchivedAt: st
  * Archive a batch that must never post to the ERP (golive #214). Terminal, makes NO ERP call, and
  * leaves the member journal entries locked at `Batched` — the opposite of a reject/cancel, which
  * returns them to the candidate pool. The legal-from statuses, the required reason and who may
- * archive (#448) are the entity's invariants (JournalEntryBatchEntityServer.Archive); this operation
- * only marshals.
+ * archive (#448, golive #325) are the entity's invariants (JournalEntryBatchEntityServer.Archive);
+ * this operation only marshals.
  */
 @RegisterClass(BaseRemotableOperation, 'Accounting.ArchiveJournalEntryBatch')
 export class ArchiveJournalEntryBatchOperation extends BaseRemotableOperation<ArchiveJournalEntryBatchInput, ArchiveJournalEntryBatchOutput> {
@@ -450,7 +450,6 @@ export class ArchiveJournalEntryBatchOperation extends BaseRemotableOperation<Ar
   public readonly RequiredScope = 'accounting:write';
 
   protected async InternalExecute(input: ArchiveJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<ArchiveJournalEntryBatchOutput> {
-    requireBatchOperator(user, provider, 'ArchiveJournalEntryBatch');
     if (!input?.JournalEntryBatchID) throw new Error('The batch was not archived: no batch was given.');
     requireSqlGuid(input.JournalEntryBatchID, 'ArchiveJournalEntryBatch');
     if (!input?.Reason?.trim()) throw new Error('The batch was not archived: a reason is required, because it is the only record of why this batch will never post.');

@@ -194,3 +194,112 @@ describe('pendingCandidateFilter', () => {
     });
 });
 
+import { previewBatch } from '../JournalEntryBatchEngine.js';
+import type { IMetadataProvider } from '@memberjunction/core';
+
+describe('previewBatch — uncapped reads and chunked IN clauses for >1,000 entries (#488)', () => {
+    const COMPANY_ID = '11111111-0000-4000-8000-000000000001';
+    const SUMMARY_TYPE_ID = 'e9521aa3-f4ef-4ec5-a899-d9dd59f320b7';
+    const MANUAL_TYPE_ID = '684c06d4-55da-49d7-8453-e046fc82b895';
+    const GL_DEBIT_ID = 'aaaaaaaa-0000-4000-8000-000000000001';
+    const GL_CREDIT_ID = 'aaaaaaaa-0000-4000-8000-000000000002';
+    const DIM_ID = 'dddddddd-0000-4000-8000-000000000001';
+    const DIM_VAL_ID = 'dddddddd-0000-4000-8000-000000000002';
+    const mockUser = { ID: 'USER-1' } as UserInfo;
+
+    it('loads all 1,200 candidate entries, their 2,400 lines, and their dimension tags with IgnoreMaxRows: true and <=500-ID chunks', async () => {
+        const entryCount = 1200;
+        const entries = Array.from({ length: entryCount }, (_, i) => {
+            const hex = (i + 1).toString(16).padStart(12, '0');
+            return {
+                ID: `00000000-0000-4000-8000-${hex}`,
+                EntryNumber: `JE-${String(i + 1).padStart(4, '0')}`,
+                EffectiveDate: '2026-08-15',
+                EntryTypeID: MANUAL_TYPE_ID,
+                CompanyID: COMPANY_ID,
+                Description: `Entry ${i + 1}`,
+                ApprovalLevel: null,
+                ApprovedAt: null,
+                Status: 'Pending',
+            };
+        });
+        const linesByJe = new Map<string, Array<{ ID: string; JournalEntryID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>>();
+        const dimsByLine = new Map<string, Array<{ JournalEntryLineID: string; DimensionID: string; DimensionValueID: string }>>();
+        for (let i = 0; i < entries.length; i++) {
+            const je = entries[i];
+            const drId = `10000000-0000-4000-8000-${(i * 2 + 1).toString(16).padStart(12, '0')}`;
+            const crId = `10000000-0000-4000-8000-${(i * 2 + 2).toString(16).padStart(12, '0')}`;
+            linesByJe.set(je.ID, [
+                { ID: drId, JournalEntryID: je.ID, GLAccountID: GL_DEBIT_ID, DebitAmount: 10, CreditAmount: 0 },
+                { ID: crId, JournalEntryID: je.ID, GLAccountID: GL_CREDIT_ID, DebitAmount: 0, CreditAmount: 10 },
+            ]);
+            dimsByLine.set(drId, [{ JournalEntryLineID: drId, DimensionID: DIM_ID, DimensionValueID: DIM_VAL_ID }]);
+        }
+
+        const calls: Array<{ EntityName?: string; ExtraFilter?: string; IgnoreMaxRows?: boolean; ResultType?: string }> = [];
+        const runView = async (params: { EntityName?: string; ExtraFilter?: string; IgnoreMaxRows?: boolean; ResultType?: string }) => {
+            calls.push(params);
+            const filter = params.ExtraFilter ?? '';
+            if (params.EntityName === 'MJ_BizApps_Accounting: Journal Entry Types') {
+                return {
+                    Success: true,
+                    Results: filter.includes('IsJournalEntryBatchSummary=1')
+                        ? [{ ID: SUMMARY_TYPE_ID, Code: 'JournalEntryBatchSummary', IsJournalEntryBatchSummary: true }]
+                        : [{ ID: SUMMARY_TYPE_ID, Code: 'JournalEntryBatchSummary' }, { ID: MANUAL_TYPE_ID, Code: 'Manual' }],
+                };
+            }
+            if (params.EntityName === 'MJ_BizApps_Accounting: Accounting Company Profiles') {
+                return { Success: true, Results: [] };
+            }
+            if (params.EntityName === 'MJ_BizApps_Accounting: Journal Entries') {
+                if (filter.startsWith('ID IN (')) {
+                    const ids = [...filter.matchAll(/'([^']+)'/g)].map(m => m[1]);
+                    expect(ids.length).toBeLessThanOrEqual(500);
+                    const idSet = new Set(ids);
+                    return { Success: true, Results: entries.filter(e => idSet.has(e.ID)) };
+                }
+                // Simulate MJ's 1,000-row UserViewMaxRows cap whenever IgnoreMaxRows is not set.
+                const cap = params.IgnoreMaxRows ? entries.length : 1000;
+                return { Success: true, Results: entries.slice(0, cap) };
+            }
+            if (params.EntityName === 'MJ_BizApps_Accounting: Journal Entry Lines') {
+                const jeIds = [...filter.matchAll(/'([^']+)'/g)].map(m => m[1]);
+                expect(jeIds.length).toBeLessThanOrEqual(500);
+                const matched = jeIds.flatMap(id => linesByJe.get(id) ?? []);
+                const cap = params.IgnoreMaxRows ? matched.length : 1000;
+                return { Success: true, Results: matched.slice(0, cap) };
+            }
+            if (params.EntityName === 'MJ_BizApps_Accounting: Journal Entry Line Dimensions') {
+                const lineIds = [...filter.matchAll(/'([^']+)'/g)].map(m => m[1]);
+                expect(lineIds.length).toBeLessThanOrEqual(500);
+                const matched = lineIds.flatMap(id => dimsByLine.get(id) ?? []);
+                const cap = params.IgnoreMaxRows ? matched.length : 1000;
+                return { Success: true, Results: matched.slice(0, cap) };
+            }
+            if (params.EntityName === 'MJ_BizApps_Accounting: GL Accounts') {
+                return {
+                    Success: true,
+                    Results: [
+                        { ID: GL_DEBIT_ID, Code: '1100', Name: 'AR' },
+                        { ID: GL_CREDIT_ID, Code: '4000', Name: 'Revenue' },
+                    ],
+                };
+            }
+            return { Success: true, Results: [] };
+        };
+
+        const provider = { RunView: runView } as unknown as IMetadataProvider;
+        const preview = await previewBatch({ companyIds: [COMPANY_ID], postingDate: '2026-08-31' }, mockUser, provider);
+
+        expect(preview.Candidates).toHaveLength(1200);
+        expect(preview.Candidates.every(c => c.Amount === 10)).toBe(true);
+        expect(preview.TotalDebits).toBe(12000);
+        expect(preview.TotalCredits).toBe(12000);
+        expect(preview.GrossDebits).toBe(12000);
+        expect(preview.GrossCredits).toBe(12000);
+
+        const rowCalls = calls.filter(c => c.ResultType !== 'count_only' && c.EntityName !== 'MJ_BizApps_Accounting: Journal Entry Types');
+        expect(rowCalls.every(c => c.IgnoreMaxRows === true)).toBe(true);
+    });
+});
+

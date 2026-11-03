@@ -8,9 +8,15 @@
  * notes do not fit the batch's CancelReason (#307). Isolated unit test, no DB — the provider is a
  * stub that answers only the entity loads the guards reach.
  */
-import { describe, it, expect } from 'vitest';
-import type { IMetadataProvider, UserInfo } from '@memberjunction/core';
+import { describe, it, expect, vi } from 'vitest';
+import { LogError, type AuthorizationInfo, type IMetadataProvider, type UserInfo } from '@memberjunction/core';
+import { JOURNAL_ENTRY_BATCH_OPERATE_AUTH } from '@mj-biz-apps/accounting-engine-base';
 import { TasksAppApprovalGate } from '../TasksAppApprovalGate.js';
+
+vi.mock('@memberjunction/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@memberjunction/core')>();
+  return { ...actual, LogError: vi.fn() };
+});
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
@@ -143,10 +149,17 @@ interface CancelWorld {
  * not follow it.
  */
 function cancelProvider(
-  opts: { cfoUserId: string | null; approvalTaskId: string | null; hasPerson: boolean; loadableTaskIds?: string[]; status?: string }, world: CancelWorld,
+  opts: { cfoUserId: string | null; approvalTaskId: string | null; hasPerson: boolean; loadableTaskIds?: string[]; status?: string; operatorUserIds?: string[] }, world: CancelWorld,
 ): IMetadataProvider {
   const loadable = opts.loadableTaskIds ?? [TASK_ID, FORGED_TASK_ID];
+  const auth = {
+    ID: 'AUTH-OPERATE',
+    Name: JOURNAL_ENTRY_BATCH_OPERATE_AUTH,
+    ParentID: null,
+    UserCanExecute: (u: UserInfo) => (opts.operatorUserIds ?? []).includes(u.ID),
+  };
   return {
+    Authorizations: [auth] as unknown as AuthorizationInfo[],
     GetEntityObject: async (entityName: string) => {
       if (entityName === BATCH_ENTITY) {
         // Cancelled by default, as the batch reads when recordCancellation runs: after the cancel was saved, inside its transaction.
@@ -197,10 +210,25 @@ describe('TasksAppApprovalGate — who may cancel past approval', () => {
     await expect(gate.assertMayCancelApproved(BATCH_ID, { ID: APPROVER_USER_ID } as UserInfo)).resolves.toBeUndefined();
   });
 
-  // #212: recordCancellation needs the canceller's Person, so the refusal comes before the cancel starts.
-  it('refuses an allowed user with no linked Person when the batch has an approval Task', async () => {
+  // #212, #458: recordCancellation needs the canceller's Person, so the refusal comes before the cancel starts,
+  // without leaking email addresses or internal field names.
+  it('refuses an allowed user with no linked Person when the batch has an approval Task (#458)', async () => {
+    const logMock = vi.mocked(LogError);
+    logMock.mockClear();
     const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: TASK_ID, hasPerson: false }, world()));
-    await expect(gate.assertMayCancelApproved(BATCH_ID, cfo)).rejects.toThrow(/BATCH-0007: .*has no linked Person.*An administrator must link this user to a Person/);
+    const cfoWithEmail = { ID: CFO_USER_ID, Email: 'cfo@example.test' } as UserInfo;
+    let caught: Error | undefined;
+    try {
+      await gate.assertMayCancelApproved(BATCH_ID, cfoWithEmail);
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught?.message).toBe(
+      'Your account is not linked to a person record, so this action cannot check your approval rights. Ask an administrator to link it.',
+    );
+    expect(caught?.message).not.toMatch(/@|Email|LinkedEntityRecordID|LinkedUserID/);
+    expect(logMock).toHaveBeenCalledWith(expect.stringContaining(CFO_USER_ID));
+    expect(logMock.mock.calls.flat().join(' ')).not.toContain('cfo@example.test');
   });
 
   it('finds the Person through the user\'s link to a People subtype when LinkedUserID names no one', async () => {
@@ -297,7 +325,9 @@ describe('TasksAppApprovalGate.recordCancellation — the approval Task records 
   it('refuses when the cancelling user has no linked Person, so the cancel rolls back rather than going unrecorded', async () => {
     const w: CancelWorld = { comments: [] };
     const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: TASK_ID, hasPerson: false }, w));
-    await expect(gate.recordCancellation(BATCH_ID, { reason: 'Wrong posting period', fromStatus: 'Approved' }, cfo)).rejects.toThrow(/has no linked Person/);
+    await expect(gate.recordCancellation(BATCH_ID, { reason: 'Wrong posting period', fromStatus: 'Approved' }, cfo)).rejects.toThrow(
+      'Your account is not linked to a person record, so this action cannot check your approval rights. Ask an administrator to link it.',
+    );
     expect(w.comments).toHaveLength(0);
   });
 });
@@ -335,7 +365,7 @@ describe('TasksAppApprovalGate.recordArchive — the approval Task records an ar
     const w: CancelWorld = { comments: [] };
     const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: TASK_ID, hasPerson: false }, w));
     await expect(gate.recordArchive(BATCH_ID, { reason: 'Posted in the legacy system', fromStatus: 'Approved' }, cfo))
-      .rejects.toThrow(/BATCH-0007: the archive cannot be recorded .*has no linked Person.*before the batch can be archived after approval/);
+      .rejects.toThrow('Your account is not linked to a person record, so this action cannot check your approval rights. Ask an administrator to link it.');
     expect(w.comments).toHaveLength(0);
   });
 
@@ -493,24 +523,26 @@ describe('TasksAppApprovalGate.assertApproved — the stamped approval Task deci
   });
 });
 
-// ─── who may archive (#448) ─────────────────────────────────────────────────
+// ─── who may archive (#448, golive #325) ────────────────────────────────────
 
-describe('TasksAppApprovalGate.assertMayArchive — who may archive (#448)', () => {
+describe('TasksAppApprovalGate.assertMayArchive — who may archive (#448, golive #325)', () => {
+  const FINANCE_USER_ID = 'f1a2b3c4-0000-4000-8000-00000000f100';
   const world = (): CancelWorld => ({ comments: [] });
-  const gateFor = (status: string, hasPerson = true, cfoUserId: string | null = CFO_USER_ID) =>
-    new TasksAppApprovalGate(cancelProvider({ cfoUserId, approvalTaskId: TASK_ID, hasPerson, status }, world()));
+  const gateFor = (status: string, hasPerson = true, cfoUserId: string | null = CFO_USER_ID, operatorUserIds: string[] = [FINANCE_USER_ID]) =>
+    new TasksAppApprovalGate(cancelProvider({ cfoUserId, approvalTaskId: TASK_ID, hasPerson, status, operatorUserIds }, world()));
 
-  it('lets only the configured CFO archive a Pending batch', async () => {
+  it('lets the configured CFO or a Finance batch operator archive a Pending batch', async () => {
     await expect(gateFor('Pending').assertMayArchive(BATCH_ID, { ID: CFO_USER_ID } as UserInfo)).resolves.toBeUndefined();
+    await expect(gateFor('Pending').assertMayArchive(BATCH_ID, { ID: FINANCE_USER_ID } as UserInfo)).resolves.toBeUndefined();
   });
 
-  it.each([BUILDER_USER_ID, OTHER_USER_ID, APPROVER_USER_ID])('refuses anyone else on a Pending batch, the builder included (%s)', async (userId) => {
+  it.each([BUILDER_USER_ID, OTHER_USER_ID, APPROVER_USER_ID])('refuses anyone else without the Finance role on a Pending batch, the builder included (%s)', async (userId) => {
     await expect(gateFor('Pending').assertMayArchive(BATCH_ID, { ID: userId } as UserInfo)).rejects.toThrow(
-      /only the company's configured approver \(the Approval CFO on its Accounting Company Profile\) may archive it before approval/,
+      /only the company's configured approver \(the Approval CFO on its Accounting Company Profile\) or a user with the .* authorization \(the Finance role\) may archive it before approval/,
     );
   });
 
-  it('refuses the builder of a Pending batch even when the company has no CFO configured', async () => {
+  it('refuses a builder without the Finance role on a Pending batch even when the company has no CFO configured', async () => {
     await expect(gateFor('Pending', true, null).assertMayArchive(BATCH_ID, { ID: BUILDER_USER_ID } as UserInfo)).rejects.toThrow(/may archive it before approval/);
   });
 
@@ -523,17 +555,17 @@ describe('TasksAppApprovalGate.assertMayArchive — who may archive (#448)', () 
     await expect(gateFor(status).assertMayArchive(BATCH_ID, { ID: APPROVER_USER_ID } as UserInfo)).resolves.toBeUndefined();
   });
 
-  it.each(['Approved', 'Failed'])('refuses the builder and anyone else on a %s batch', async (status) => {
-    for (const userId of [BUILDER_USER_ID, OTHER_USER_ID]) {
+  it.each(['Approved', 'Failed'])('refuses the builder, Finance without approver authority, and anyone else on a %s batch', async (status) => {
+    for (const userId of [BUILDER_USER_ID, FINANCE_USER_ID, OTHER_USER_ID]) {
       await expect(gateFor(status).assertMayArchive(BATCH_ID, { ID: userId } as UserInfo)).rejects.toThrow(
         /or the user who approved this batch may archive it after approval/,
       );
     }
   });
 
-  it('refuses an allowed user with no linked Person past approval, naming the archive', async () => {
+  it('refuses an allowed user with no linked Person past approval (#458)', async () => {
     await expect(gateFor('Approved', false).assertMayArchive(BATCH_ID, { ID: CFO_USER_ID } as UserInfo)).rejects.toThrow(
-      /the archive cannot be recorded on its approval Task/,
+      'Your account is not linked to a person record, so this action cannot check your approval rights. Ask an administrator to link it.',
     );
   });
 });

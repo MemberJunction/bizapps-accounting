@@ -365,14 +365,14 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
   /**
    * Archive is offered wherever LEGAL_TRANSITIONS allows `→ Archived` (server-side: Pending / Approved /
    * Failed), except on a Failed batch carrying the ERP's reference, which the server refuses (#413), and
-   * only to the users the server would let archive it (#448): holders of the batch-operator Authorization
-   * who are, on a Pending batch, the company's approver, and past approval the company's approver or the
-   * user who approved it. The server check stays the authority.
+   * only to the users the server would let archive it (#448, golive #325): on a Pending batch the
+   * company's approver or a holder of the batch-operator Authorization, and past approval the company's
+   * approver or the user who approved it. The server check stays the authority.
    */
   public canArchive(row: BatchRow): boolean {
     if (IsErpAcceptedFailedBatch(row)) return false;
     if (!['Pending', 'Approved', 'Failed'].includes(row.Status) || row.Busy) return false;
-    return this.mayOperateBatches() && MayArchiveBatch(row, this.contextUser()?.ID, this.companyApprovers);
+    return MayArchiveBatch(row, this.contextUser()?.ID, this.companyApprovers, this.mayOperateBatches());
   }
 
   /**
