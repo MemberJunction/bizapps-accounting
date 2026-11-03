@@ -279,8 +279,8 @@ async function main(): Promise<void> {
       const msg = m.LatestResult?.CompleteMessage ?? '';
       // The point of layer 2 is the MESSAGE. Asserting only !ok would pass even if the save had
       // failed for an unrelated reason, which is exactly how a check ends up green for nothing.
-      assert(/SourceCompanyID/i.test(msg) && /swap/i.test(msg),
-        `expected a readable orientation message naming SourceCompanyID and suggesting a swap, got: ${msg}`);
+      assert(/source company/i.test(msg) && /swap/i.test(msg),
+        `expected a readable orientation message naming the source company and suggesting a swap, got: ${msg}`);
       assert(!/50024/.test(msg), `expected the entity layer to refuse BEFORE the trigger, but got the raw SQL error: ${msg}`);
     });
 
@@ -313,7 +313,7 @@ async function main(): Promise<void> {
       const ok = await m.Save();
       assert(!ok, 'a duplicate Active pair with the same StartedAt saved');
       const msg = m.LatestResult?.CompleteMessage ?? '';
-      assert(/StartedAt/i.test(msg), `expected a message about the StartedAt collision, got: ${msg}`);
+      assert(/start date/i.test(msg), `expected a message about the start date collision, got: ${msg}`);
     });
 
     await test('I12 a SUPERSEDING pair with a later StartedAt IS accepted (overlap is legal)', async () => {

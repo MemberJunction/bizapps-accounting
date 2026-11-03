@@ -215,7 +215,7 @@ describe('cancelling a Pending batch through the real TasksAppApprovalGate (#305
     const b = await buildPendingBatch('C2');
     const before = await taskStatus(b.taskId);
     await expect(cancelJournalEntryBatch(b.batchId, cfo.info, provider, {}))
-      .rejects.toThrow(/is Pending and was not rejected; a reason is required/);
+      .rejects.toThrow(/is Pending and was not rejected[,;] (so )?a reason is required/);
     await expect(cancelJournalEntryBatch(b.batchId, cfo.info, provider, { reason: '   ' }))
       .rejects.toThrow(/a reason is required/);
     await expectUntouched(b, before);
