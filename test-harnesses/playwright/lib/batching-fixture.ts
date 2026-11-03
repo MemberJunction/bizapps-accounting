@@ -22,6 +22,7 @@
  * finishAndExit.
  */
 import sql from 'mssql';
+import { randomUUID } from 'node:crypto';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 import '@memberjunction/server-bootstrap-lite';
@@ -152,15 +153,31 @@ async function setup(p: Pools): Promise<void> {
   const expected = { jeCount: 3, summaryLineCount: 3, totalDebits: 600, totalCredits: 600, grossDebits: 800, companyCount: 1 };
 
   // CFO on the company profile (the gate's precondition hard-fails the build without it).
-  // A4.6/Q17: the approver is an __mj User — the harness user doubles as the CFO.
+  // #440: create a second user as the company CFO (same pattern as pending-cancel-gate.live.test.ts)
+  // so the builder (User 1) and the approver/decider (User 2) are distinct users as separation of
+  // duties requires.
+  const cfoUserId = randomUUID();
+  const cfoPersonId = randomUUID();
+  const cfoEmail = `${RUN_TAG.toLowerCase()}-cfo@mjdev.local`;
+  await pool.request().query(
+    `INSERT INTO __mj.[User] (ID, Name, FirstName, LastName, Email, Type, IsActive, LinkedRecordType) ` +
+    `VALUES ('${cfoUserId}', '${RUN_TAG} CFO', 'CFO', '${RUN_TAG}', '${cfoEmail}', 'Owner', 1, 'None')`,
+  );
+  await pool.request().query(
+    `INSERT INTO __mj.UserRole (ID, UserID, RoleID) SELECT NEWID(), '${cfoUserId}', RoleID FROM __mj.UserRole WHERE UserID='${user.ID}'`,
+  );
+  await pool.request().query(
+    `INSERT INTO __mj_BizAppsCommon.Person (ID, FirstName, LastName, LinkedUserID) VALUES ('${cfoPersonId}', 'CFO', '${RUN_TAG}', '${cfoUserId}')`,
+  );
+  await UserCache.Instance.Refresh(pool);
+
   const acp2 = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, user);
   if (!(await acp2.Load(companyId))) throw new Error(`could not reload ACP ${companyId}`);
-  acp2.ApprovalCFOUserID = user.ID;
+  acp2.ApprovalCFOUserID = cfoUserId;
   if (!(await acp2.Save())) throw new Error(`set CFO failed: ${acp2.LatestResult?.CompleteMessage}`);
 
   // Machine-readable descriptor on the LAST stdout line for the spec/harness to parse.
-  // (cfoPersonId retired with the Person→User CFO change; key kept as '' for consumer compat.)
-  console.log(`FIXTURE_JSON ${JSON.stringify({ companyId, companyName: `${RUN_TAG} GUI Batch Co`, runTag: RUN_TAG, cfoPersonId: '', jeId: firstJeId, jeEntryNumber: firstJeNumber, expected })}`);
+  console.log(`FIXTURE_JSON ${JSON.stringify({ companyId, companyName: `${RUN_TAG} GUI Batch Co`, runTag: RUN_TAG, cfoUserId, cfoPersonId, cfoEmail, jeId: firstJeId, jeEntryNumber: firstJeNumber, expected })}`);
 }
 
 /**
@@ -227,7 +244,16 @@ async function teardown(p: Pools, companyId: string, cfoPersonId?: string): Prom
   await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${companyId}'`);
   await exec(`DELETE FROM __mj.Company WHERE ID='${companyId}'`);
-  if (cfoPersonId) await exec(`DELETE FROM __mj_BizAppsCommon.Person WHERE ID='${cfoPersonId}'`);
+  if (cfoPersonId) {
+    const uRes = await p.teardownPool.request().query(`SELECT LinkedUserID FROM __mj_BizAppsCommon.Person WHERE ID='${cfoPersonId}'`).catch(() => ({ recordset: [] }));
+    const cfoUserId = uRes.recordset?.[0]?.LinkedUserID as string | undefined;
+    await exec(`DELETE FROM __mj_BizAppsCommon.Person WHERE ID='${cfoPersonId}'`);
+    if (cfoUserId) {
+      await exec(`DELETE FROM __mj.UserRole WHERE UserID='${cfoUserId}'`);
+      await exec(`DELETE FROM __mj.UserApplication WHERE UserID='${cfoUserId}'`);
+      await exec(`DELETE FROM __mj.[User] WHERE ID='${cfoUserId}'`);
+    }
+  }
   console.log(`  teardown complete for company ${companyId}`);
 }
 

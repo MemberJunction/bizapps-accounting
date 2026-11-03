@@ -20,22 +20,10 @@
       "",
       "SHIPPED AS Pending, NOT Active. GenericDatabaseProvider dispatches only bindings whose",
       "EntityAction.Status AND EntityActionInvocation.Status are both 'Active', so a Pending row is",
-      "inert. It is Pending for two reasons, both of which an administrator must resolve first:",
-      "",
-      "  1. NO TRANSITION FILTER EXISTS YET. The adoption doc assumed MJ#3408 seeded reusable",
-      "     'field changed' / 'field changed to value' ActionFilters. It did NOT — that is plan text in",
-      "     MJ's plans/entity-action-workflow-extensions.md only, and MJ's ActionFilter table has no",
-      "     Name column, so such a row is not even expressible as a reusable lookup. The real",
-      "     mechanism landed later (MJ commit df76df876d, 2026-08-08) as a filter row GENERATED per",
-      "     trigger, whose Code embeds the field and value as literal arguments:",
-      "         DidFieldChangeToValue('Status', 'Sent')",
-      "     against an ActionFilterContext the installed @memberjunction/actions-base@6.1.0-edge.1",
-      "     does NOT ship (no EntityChangeContext.js in its dist). Until that engine lands, AfterUpdate",
-      "     fires on EVERY save of a batch, not just the Pending→Sent transition — which is exactly the",
-      "     re-firing failure the doc warns about. Do not set this Active before then.",
-      "",
-      "  2. To / From / Provider are deployment configuration, not app metadata. They are deliberately",
-      "     absent below rather than filled with placeholders that would look configured.",
+      "inert. It is Pending because To / From / Provider are deployment configuration, not app",
+      "metadata; they are deliberately absent below rather than filled with placeholders that would",
+      "look configured. ActionFilter is wired to DidFieldChangeToValue('Status','Sent') so once",
+      "enabled by an administrator it fires only when Status transitions to Sent.",
       "",
       "SCOPE IS DELIBERATELY UNSET. The doc calls for scoping to a Company, but ScopeRecordID must be a",
       "concrete Company UUID and CK_EntityAction_Scope requires ScopeEntityID and ScopeRecordID to be",
@@ -64,6 +52,19 @@
           },
           "primaryKey": {
             "ID": "283EAF55-CA5C-47BA-A722-8CFCDF5EBB99"
+          }
+        }
+      ],
+      "MJ: Entity Action Filters": [
+        {
+          "fields": {
+            "EntityActionID": "@parent:ID",
+            "ActionFilterID": "D4B839F1-6C2E-4A91-8E12-7A9F4D328166",
+            "Sequence": 1,
+            "Status": "Active"
+          },
+          "primaryKey": {
+            "ID": "E5C940A2-7D3F-4B82-9F23-8B0E5E439277"
           }
         }
       ],

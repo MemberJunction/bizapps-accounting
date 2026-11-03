@@ -184,6 +184,15 @@ refuses a draft that spans companies, checks balance, and writes atomically. Hoo
 - **Batch lifecycle (CH-3):** `Pending → Approved → Sent → Posted | Failed`, plus `Cancelled` and
   `Archived` (the full graph is `LEGAL_TRANSITIONS` in `JournalEntryBatchEntityServer.ts`) — see
   `JournalEntryBatchEngine.ts`; the ERP wire is **account numbers**.
+- **ERP journal batch code (#399):** `AccountingCompanyProfile.ERPJournalCode` is an optional ERP
+  general journal batch code (for example `DEFAULT` or `GENJNL` in Business Central). When configured on
+  a company profile, `AccountingERPEngine.PostJournalBatch` passes it as `JournalCode` on the ERP create
+  journal call (`CreateJournalEntry` / `CreateBusinessCentralJournalEntryWithDimensions`); when blank,
+  the connector falls back to the connection's configured default journal batch.
+- **Unconfirmed ERP posting timestamp (#414):** When an ERP post verb returns `POST_UNCONFIRMED_READBACK`
+  (the post succeeded or timed out before the posted ledger lines could be read back), the batch is
+  recorded with `ERPPostUnconfirmedAt` so operators and the batch detail panel can see that the ERP
+  posting was not verified at post time.
 - **Posting start date:** `AccountingCompanyProfile.PostingStartDate` is a per-company floor on the
   batch candidate pool. Entries dated before it (e.g. history brought in at cutover) never enter a
   batch: `pendingCandidateFilter` applies it to every build, preview and scheduled sweep, and the

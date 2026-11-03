@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.server.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "types": ["node"]
+  },
+  "include": ["./**/*.ts", "../harness-paths.mts"],
+  "exclude": ["node_modules"]
+}

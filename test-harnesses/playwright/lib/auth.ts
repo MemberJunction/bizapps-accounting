@@ -59,3 +59,44 @@ export async function loginViaMagicLink(page: Page): Promise<void> {
   // Let metadata + user bootstrap settle so the Accounting app is loaded before we navigate to it.
   await page.waitForTimeout(3500);
 }
+
+/**
+ * Mint a magic-link URL for a second persona by email (e.g., the fixture company's CFO user so
+ * build and approval happen under two distinct users per separation-of-duties #440) and restore
+ * the instance's original persona override afterward.
+ */
+export function mintMagicLinkUrlForEmail(email: string, displayName = 'Playwright CFO'): string {
+  const whoOut = execFileSync(MJDEV_BIN, ['whoami', SLUG, '--json'], { encoding: 'utf8', timeout: 60_000 });
+  const priorPersonaId: string | undefined = JSON.parse(whoOut)?.persona?.id;
+
+  const listOut = execFileSync(MJDEV_BIN, ['persona', 'list', '--json'], { encoding: 'utf8', timeout: 60_000 });
+  const existing = (JSON.parse(listOut)?.personas ?? []) as Array<{ id: string; email: string }>;
+  let personaId = existing.find((p) => p.email.toLowerCase() === email.toLowerCase())?.id;
+  if (!personaId) {
+    const addOut = execFileSync(
+      MJDEV_BIN,
+      ['persona', 'add', '--name', displayName, '--email', email, '--roles', 'Owner', '--json'],
+      { encoding: 'utf8', timeout: 60_000 },
+    );
+    personaId = JSON.parse(addOut)?.persona?.id;
+  }
+  if (!personaId) throw new Error(`Could not resolve or create mjdev persona for ${email}`);
+
+  try {
+    execFileSync(MJDEV_BIN, ['use-persona', SLUG, personaId], { encoding: 'utf8', timeout: 60_000 });
+    return mintMagicLinkUrl();
+  } finally {
+    const restoreArgs = priorPersonaId ? ['use-persona', SLUG, priorPersonaId] : ['use-persona', SLUG];
+    try { execFileSync(MJDEV_BIN, restoreArgs, { encoding: 'utf8', timeout: 60_000 }); } catch { /* best-effort */ }
+  }
+}
+
+/**
+ * Authenticate the given page as a specific email persona (e.g., the company CFO).
+ */
+export async function loginAsEmailViaMagicLink(page: Page, email: string): Promise<void> {
+  const url = mintMagicLinkUrlForEmail(email);
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  await page.waitForURL(/\/app\//, { timeout: 60_000 });
+  await page.waitForTimeout(3500);
+}

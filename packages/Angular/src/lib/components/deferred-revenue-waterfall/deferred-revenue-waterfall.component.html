@@ -101,7 +101,7 @@
                                 @if (cell.JournalEntry) {
                                     <div class="mja-month-entry-link">
                                         <i class="fa-solid fa-book-journal-whills"></i>
-                                        <span>JE-{{ cell.JournalEntry.EntryNumber || cell.JournalEntry.ID.slice(0, 8) }}</span>
+                                        <span>{{ cell.JournalEntry.EntryNumber || ('JE-' + cell.JournalEntry.ID.slice(0, 8)) }}</span>
                                         <i class="fa-solid fa-arrow-up-right-from-square"></i>
                                     </div>
                                 }

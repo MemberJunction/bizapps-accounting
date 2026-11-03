@@ -27,27 +27,29 @@ const ACCOUNT_TYPES: readonly AccountType[] = ['Asset', 'Liability', 'Equity', '
  * broken; they are surfaced as roots WITH a marker rather than dropped, because a dropped row is a
  * chart that silently lies about its own contents.
  */
-interface AccountRow {
-  ID: string;
-  CompanyID: string;
-  Company: string;
-  Code: string;
-  Name: string;
-  AccountType: AccountType;
-  ParentGLAccountID: ParentID;
+type AccountRow = Pick<
+  mjBizAppsAccountingGLAccountEntity,
+  | 'ID'
+  | 'CompanyID'
+  | 'Company'
+  | 'Code'
+  | 'Name'
+  | 'AccountType'
+  | 'ParentGLAccountID'
+  | 'CurrencyCode'
+  | 'ExternalSystem'
+  | 'ExternalAccountID'
+  | 'IsActive'
+  | 'IsSystemSeeded'
+  | 'Description'
+> & {
   ParentLabel: string | null;
-  CurrencyCode: string | null;
-  ExternalSystem: string | null;
-  ExternalAccountID: string | null;
-  IsActive: boolean;
-  IsSystemSeeded: boolean;
-  Description: string | null;
   Depth: number;
   /** Parent pointer names an account that isn't in this chart (or isn't visible). */
   IsOrphan: boolean;
   /** Parent chain loops back on itself — bad data; shown as a root so the page cannot hang. */
   InCycle: boolean;
-}
+};
 
 /** The editor's working copy. Kept separate from the entity so a cancel is a genuine no-op. */
 /** Filter option for the company drop-down. */

@@ -22,13 +22,9 @@ import { JournalEntryBatchDispatchModule } from './lib/custom/JournalEntryBatchD
 import { LoadJournalEntryBatchDispatchDashboard } from './lib/custom/JournalEntryBatchDispatch/journal-entry-batch-dispatch-dashboard.component';
 import { LoadJournalEntryBatchDispatchResource } from './lib/custom/JournalEntryBatchDispatch/journal-entry-batch-dispatch-resource.component';
 
-// Batch Status dashboard (embedded by the Batches category shell). Its former ReadModelsModule
-// siblings — TrialBalanceAR / RevenueTax / IntercompanyFlow / JEConsole — were DELETED 2026-07-29
-// (dead-code sweep): their vw_* backends were removed 2026-07-22 and the new category
-// shells replaced their nav items; git history keeps them if reporting (item f) resurrects one.
+// ReadModelsModule retained as an empty compatibility shell; the category shells and All Batches
+// page replaced the legacy read-model and batch-status dashboards.
 import { ReadModelsModule } from './lib/custom/shared/read-models.module';
-import { LoadJournalEntryBatchStatusDashboard } from './lib/custom/JournalEntryBatchStatus/journal-entry-batch-status-dashboard.component';
-import { LoadJournalEntryBatchStatusResource } from './lib/custom/JournalEntryBatchStatus/journal-entry-batch-status-resource.component';
 
 // Chart of Accounts tree + Company Setup hub. (The Approvals inbox was removed — redundant with Batches.)
 import { ChartOfAccountsModule } from './lib/custom/ChartOfAccounts/chart-of-accounts.module';
@@ -185,9 +181,7 @@ export function LoadBizAppsAccountingClient(): void {
     LoadJournalEntryBatchDispatchResource();
     void JournalEntryBatchDispatchModule;
 
-    // Batch Status (embedded by the Batches category shell).
-    LoadJournalEntryBatchStatusDashboard();
-    LoadJournalEntryBatchStatusResource();
+    // Retained compatibility module.
     void ReadModelsModule;
 
     // Custom forms (Journal Entry, GL Account).

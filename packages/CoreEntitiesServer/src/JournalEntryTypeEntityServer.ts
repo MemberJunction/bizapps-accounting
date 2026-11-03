@@ -11,16 +11,25 @@
  *   - An IsSystem row cannot be DELETED.
  *   - No row may GAIN IsSystem=1 after creation (system rows are seeded, not promoted).
  *
- * Consumer-owned rows (IsSystem=0) stay fully editable — they belong to their app.
+ * Consumer-owned rows (IsSystem=0) stay editable while unused, and once any JournalEntry
+ * references a row (`EntryTypeID = ID`), its `Code` cannot change and it cannot be deleted
+ * (deactivate it with `IsActive = false` instead).
  */
-import { BaseEntity, EntityDeleteOptions, ValidationResult, ValidationErrorInfo } from '@memberjunction/core';
+import { BaseEntity, EntityDeleteOptions, IRunViewProvider, ValidationResult, ValidationErrorInfo } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import { mjBizAppsAccountingJournalEntryTypeEntity } from '@mj-biz-apps/accounting-entities';
+import { isSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
 
 const JET_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Types';
+const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
 @RegisterClass(BaseEntity, JET_ENTITY)
 export class JournalEntryTypeEntityServer extends mjBizAppsAccountingJournalEntryTypeEntity {
+  /** BaseEntity skips ValidateAsync by default — opt in so the referenced-by-entries Code lock runs on Save. */
+  public override get DefaultSkipAsyncValidation(): boolean {
+    return false;
+  }
+
   public override Validate(): ValidationResult {
     const result = super.Validate();
 
@@ -57,15 +66,74 @@ export class JournalEntryTypeEntityServer extends mjBizAppsAccountingJournalEntr
     return result;
   }
 
-  public override async Delete(options?: EntityDeleteOptions): Promise<boolean> {
-    const isSystem = this.Fields.find(f => f.Name === 'IsSystem')?.Value === true;
-    if (isSystem) {
-      const code = this.Fields.find(f => f.Name === 'Code')?.Value ?? this.ID;
-      throw new Error(
-        `Journal entry type '${String(code)}' is a system type and cannot be deleted, because Accounting's database rules and batching depend on it.`,
+  public override async ValidateAsync(): Promise<ValidationResult> {
+    const result = await super.ValidateAsync();
+    if (!this.IsSaved || !this.ID) return result;
+
+    const codeField = this.Fields.find(f => f.Name === 'Code');
+    if (!codeField?.Dirty) return result;
+
+    const isSystemField = this.Fields.find(f => f.Name === 'IsSystem');
+    const wasSystem = isSystemField?.Dirty ? isSystemField.OldValue === true : this.IsSystem === true;
+    if (wasSystem) return result; // already refused by Validate()
+
+    const oldCode = String(codeField.OldValue ?? this.Code);
+    const count = await this.referencingJournalEntryCount(oldCode);
+    if (count > 0) {
+      result.Success = false;
+      result.Errors.push(
+        new ValidationErrorInfo(
+          'Code',
+          `Journal entry type '${oldCode}' is used by ${count} journal entr${count === 1 ? 'y' : 'ies'}, so its Code cannot change. Mark it inactive and create a new type if a different code is needed.`,
+          this.Code,
+        ),
       );
     }
+
+    return result;
+  }
+
+  public override async Delete(options?: EntityDeleteOptions): Promise<boolean> {
+    const isSystemField = this.Fields.find(f => f.Name === 'IsSystem');
+    const isSystem = isSystemField?.Dirty ? isSystemField.OldValue === true || isSystemField.Value === true : isSystemField?.Value === true;
+    const code = String(this.Fields.find(f => f.Name === 'Code')?.OldValue ?? this.Fields.find(f => f.Name === 'Code')?.Value ?? this.ID);
+    if (isSystem) {
+      throw new Error(
+        `Journal entry type '${code}' is a system type and cannot be deleted, because Accounting's database rules and batching depend on it.`,
+      );
+    }
+    if (this.IsSaved && this.ID) {
+      const count = await this.referencingJournalEntryCount(code);
+      if (count > 0) {
+        throw new Error(
+          `Journal entry type '${code}' is used by ${count} journal entr${count === 1 ? 'y' : 'ies'} and cannot be deleted. Mark it inactive (IsActive = false) instead.`,
+        );
+      }
+    }
     return super.Delete(options);
+  }
+
+  private async referencingJournalEntryCount(label: string): Promise<number> {
+    const provider = this.ProviderToUse as unknown as Partial<IRunViewProvider> | undefined;
+    if (!provider || typeof provider.RunView !== 'function') return 0;
+    const rawId: string = this.ID;
+    const filterId = isSqlGuid(rawId)
+      ? sqlGuidLiteral(rawId, 'JournalEntryType.ID')
+      : `'${String(rawId).replace(/'/g, "''")}'`;
+    const res = await provider.RunView<{ ID: string }>(
+      {
+        EntityName: JE_ENTITY,
+        ExtraFilter: `EntryTypeID=${filterId}`,
+        Fields: ['ID'],
+        ResultType: 'count_only',
+        BypassCache: true,
+      },
+      this.ContextCurrentUser,
+    );
+    if (!res.Success) {
+      throw new Error(`Could not check whether journal entries use type '${label}': ${res.ErrorMessage ?? 'unknown error'}`);
+    }
+    return res.TotalRowCount ?? res.Results?.length ?? 0;
   }
 }
 

@@ -1,14 +1,8 @@
 import { MJACheckDropdownComponent } from './check-dropdown.component';
 /**
- * ReadModelsModule — now hosts ONLY the Batch Status dashboard + its Explorer resource shim
- * (embedded by the Batches category shell).
- *
- * Its former siblings — TrialBalanceAR, RevenueTax, IntercompanyFlow — were DELETED 2026-07-29
- * (dead-code sweep): their vw_* read-model backends were removed 2026-07-22 as more than the app
- * needed (revisit if ever needed) and the category shells replaced their nav items. When reporting
- * returns (item f), each report is rebuilt as-needed on RunQuery (four-surface doctrine) — the old
- * dashboards live in git history as reference only. The module name is kept to avoid churning the
- * package surface; fold BatchStatus into another module and delete this one whenever convenient.
+ * ReadModelsModule — retained as an empty NgModule shell so external consumers importing
+ * `ReadModelsModule` from `@mj-biz-apps/accounting-ng-bootstrap` do not break when the legacy
+ * read-model and batch-status dashboards were retired in favour of the category shell pages.
  */
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -30,13 +24,8 @@ import {
   MJDialogComponent,
   MJDialogActionsComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
 
-import { JournalEntryBatchStatusDashboardComponent } from '../JournalEntryBatchStatus/journal-entry-batch-status-dashboard.component';
-import { JournalEntryBatchStatusResourceComponent } from '../JournalEntryBatchStatus/journal-entry-batch-status-resource.component';
-
 @NgModule({
-  declarations: [
-    JournalEntryBatchStatusDashboardComponent, JournalEntryBatchStatusResourceComponent,
-  ],
+  declarations: [],
   imports: [MJDropdownComponent, MJACheckDropdownComponent, 
     CommonModule,
     FormsModule,
@@ -52,8 +41,6 @@ import { JournalEntryBatchStatusResourceComponent } from '../JournalEntryBatchSt
     MJDialogComponent,
     MJDialogActionsComponent,
   ],
-  exports: [
-    JournalEntryBatchStatusDashboardComponent, JournalEntryBatchStatusResourceComponent,
-  ],
+  exports: [],
 })
 export class ReadModelsModule {}

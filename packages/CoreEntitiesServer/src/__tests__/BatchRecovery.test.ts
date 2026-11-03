@@ -138,6 +138,7 @@ function world(status: string, entries: Record<string, JournalEntryRow>, opts: {
                 if (opts.missingEntryIds?.includes(id)) return false;
                 je.ID = id; Object.assign(je, entries[id]); return true;
             },
+            LoadHeader: async (id: string) => je.Load(id),
             Save: async () => {
                 if (opts.failingEntryIds?.includes(je.ID)) return false;
                 Object.assign(entries[je.ID], { Status: je.Status, GLPostedAt: je.GLPostedAt, GLReferenceID: je.GLReferenceID });

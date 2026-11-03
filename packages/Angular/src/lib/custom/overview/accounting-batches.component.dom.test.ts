@@ -585,6 +585,44 @@ describe('AccountingBatchesPageComponent — Build Batch selection after Clear A
     await click(fixture, revRecFilter);
     expect(screen(fixture)).toMatchObject({ Including: '5 of 5 JEs', EntryTotals: 'Dr $670.00 Cr $670.00', Build: 'Build Batch (5)' });
   });
+
+  it('bounds the preview pool by the posting date and sends only the ticked entries on Build (#402)', async () => {
+    const futureEntry: PreviewEntryWire = entry(6, 'Invoice', '2026-09-05', 999);
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockImplementation(async (options) => {
+      previewCalls.push(options ?? {});
+      const end = options?.PostingDate ?? BUSINESS_DAY;
+      const excludedTypes = new Set(options?.ExcludeEntryTypeCodes ?? []);
+      const rows = [...POOL, futureEntry].filter(
+        e => !excludedTypes.has(e.EntryTypeCode) && e.EffectiveDate.slice(0, 10) <= end,
+      );
+      const included = new Set(options?.IncludedJournalEntryIDs ?? rows.map(r => r.ID));
+      const total = rows.filter(r => included.has(r.ID)).reduce((sum, r) => sum + r.Amount, 0);
+      return {
+        Success: true,
+        Candidates: rows,
+        TotalDebits: total,
+        TotalCredits: total,
+        GrossDebits: total,
+        GrossCredits: total,
+        OutOfOrderSkipCount: outOfOrderSkipCount(rows, included),
+        BeforePostingStartCount: 0,
+      };
+    });
+
+    const fixture = await openModal();
+    expect(previewCalls.at(-1)?.PostingDate).toBe(BUSINESS_DAY);
+    // JE-6 (2026-09-05) is dated after the posting date (2026-08-31) and is not offered in the pool.
+    expect(fixture.componentInstance.PreviewEntries.map(c => c.ID)).toEqual(['je-1', 'je-3', 'je-5']);
+
+    // Untick JE-3 so only JE-1 and JE-5 remain ticked, then build.
+    await click(fixture, row(3));
+    await fixture.componentInstance.ExecuteBuildBatch();
+    expect(buildCalls).toHaveLength(1);
+    expect(buildCalls[0]).toMatchObject({
+      PostingDate: BUSINESS_DAY,
+      JournalEntryIDs: ['je-1', 'je-5'],
+    });
+  });
 });
 
 describe('AccountingBatchesPageComponent — Cancel a batch (#183, golive #302)', () => {

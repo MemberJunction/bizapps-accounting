@@ -14,7 +14,8 @@
     "@memberjunction/core": "^6.1.6",
     "@memberjunction/global": "^6.1.6",
     "@memberjunction/testing-integration": "^6.1.6",
-    "@mj-biz-apps/accounting-entities": ">=0.25.0"
+    "@mj-biz-apps/accounting-entities": ">=0.25.0",
+    "dotenv": "^16.4.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

@@ -31,8 +31,11 @@
  * Requires: the live instance DB (mj/.env creds); packages built (imports their dist).
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { Metadata, IMetadataProvider } from '@memberjunction/core';
 import { MJGlobal } from '@memberjunction/global';
+import { ActionEngineServer, BaseAction } from '@memberjunction/actions';
+import { UserCache } from '@memberjunction/sqlserver-dataprovider';
 import {
   JournalEntryEntityServer,
   JournalEntryBatchEntityServer,
@@ -43,6 +46,8 @@ import {
   buildJournalEntryBatch,
   approveJournalEntryBatch,
   sendJournalEntryBatch,
+  autoPostJournalEntryBatch,
+  defaultAccountingVerbRunner,
   AutoApproveGate,
   TasksAppApprovalGate,
   mockErpPoster,
@@ -124,6 +129,8 @@ const PendingRejectedCancelGate: JournalEntryBatchCancelGate = {
   async assertMayCancelPending() { throw new Error('phase2 harness: every Pending batch here reads as rejected'); },
   async assertMayCancelApproved() { throw new Error('phase2 harness: no test cancels past approval'); },
   async recordCancellation() { throw new Error('phase2 harness: no test cancels past approval'); },
+  async assertMayArchive() { throw new Error('phase2 harness: no test archives via this gate'); },
+  async recordArchive() { throw new Error('phase2 harness: no test archives via this gate'); },
 };
 
 /** Send a batch with this gate and poster. The queue push and the send's resolve happen in one tick. */
@@ -419,38 +426,51 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
   });
 
   it('L13 — real gate: approval Task raised + ApprovalTaskID/RaisedAt stamped in the SAME build transaction', async () => {
-    // Configure the CFO on the fixture company (the harness user doubles as the approver).
-    const acp = await provider.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(
-      'MJ_BizApps_Accounting: Accounting Company Profiles', ctx.user);
-    expect(await acp.Load(ctx.company.id)).toBe(true);
-    acp.ApprovalCFOUserID = ctx.user.ID;
-    expect(await acp.Save(), `CFO config save: ${acp.LatestResult?.CompleteMessage}`).toBe(true);
-
-    const result = await buildJournalEntryBatch(
-      ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, new TasksAppApprovalGate(provider));
-    ctx.createdBatchIds.push(result.batchId);
+    // Configure the CFO on the fixture company (the harness user doubles as the approver) and ensure a linked Person exists.
+    const existingPerson = Number(await scalar(ctx.pool,
+      `SELECT COUNT(*) FROM __mj_BizAppsCommon.Person WHERE LinkedUserID='${ctx.user.ID}' AND Status='Active'`));
+    const tempPersonId = existingPerson === 0 ? randomUUID() : null;
+    if (tempPersonId) {
+      await ctx.pool.request().query(
+        `INSERT INTO __mj_BizAppsCommon.Person (ID, FirstName, LastName, LinkedUserID, Status) VALUES ('${tempPersonId}', 'Harness', '${ctx.runTag}', '${ctx.user.ID}', 'Active')`);
+    }
     try {
-      expect(result.approvalTaskId).toBeTruthy();
+      const acp = await provider.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(
+        'MJ_BizApps_Accounting: Accounting Company Profiles', ctx.user);
+      expect(await acp.Load(ctx.company.id)).toBe(true);
+      acp.ApprovalCFOUserID = ctx.user.ID;
+      expect(await acp.Save(), `CFO config save: ${acp.LatestResult?.CompleteMessage}`).toBe(true);
 
-      // The stamp is on the batch row (raw SQL), matching the raised Task, with RaisedAt set.
-      const row = (await ctx.pool.request().query(
-        `SELECT ApprovalTaskID, ApprovalTaskRaisedAt FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${result.batchId}'`)).recordset[0];
-      expect(String(row.ApprovalTaskID).toLowerCase()).toBe(String(result.approvalTaskId).toLowerCase());
-      expect(row.ApprovalTaskRaisedAt).toBeTruthy();
+      const result = await buildJournalEntryBatch(
+        ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, new TasksAppApprovalGate(provider));
+      ctx.createdBatchIds.push(result.batchId);
+      try {
+        expect(result.approvalTaskId).toBeTruthy();
 
-      // The Task genuinely exists in the tasks schema (committed with the batch — one transaction).
-      const taskCount = Number(await scalar(ctx.pool,
-        `SELECT COUNT(*) FROM __mj_BizAppsTasks.Task WHERE ID='${result.approvalTaskId}'`));
-      expect(taskCount).toBe(1);
+        // The stamp is on the batch row (raw SQL), matching the raised Task, with RaisedAt set.
+        const row = (await ctx.pool.request().query(
+          `SELECT ApprovalTaskID, ApprovalTaskRaisedAt FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${result.batchId}'`)).recordset[0];
+        expect(String(row.ApprovalTaskID).toLowerCase()).toBe(String(result.approvalTaskId).toLowerCase());
+        expect(row.ApprovalTaskRaisedAt).toBeTruthy();
+
+        // The Task genuinely exists in the tasks schema (committed with the batch — one transaction).
+        const taskCount = Number(await scalar(ctx.pool,
+          `SELECT COUNT(*) FROM __mj_BizAppsTasks.Task WHERE ID='${result.approvalTaskId}'`));
+        expect(taskCount).toBe(1);
+      } finally {
+        // Tasks-side rows are not company-rooted — clean them here (FK-aware order), best-effort.
+        const tid = result.approvalTaskId;
+        if (tid) {
+          await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskActivity WHERE TaskID='${tid}'`).catch(() => undefined);
+          await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskAssignment WHERE TaskID='${tid}'`).catch(() => undefined);
+          await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskLink WHERE TaskID='${tid}'`).catch(() => undefined);
+          await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskDecision WHERE TaskID='${tid}'`).catch(() => undefined);
+          await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.Task WHERE ID='${tid}'`).catch(() => undefined);
+        }
+      }
     } finally {
-      // Tasks-side rows are not company-rooted — clean them here (FK-aware order), best-effort.
-      const tid = result.approvalTaskId;
-      if (tid) {
-        await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskActivity WHERE TaskID='${tid}'`).catch(() => undefined);
-        await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskAssignment WHERE TaskID='${tid}'`).catch(() => undefined);
-        await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskLink WHERE TaskID='${tid}'`).catch(() => undefined);
-        await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskDecision WHERE TaskID='${tid}'`).catch(() => undefined);
-        await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.Task WHERE ID='${tid}'`).catch(() => undefined);
+      if (tempPersonId) {
+        await ctx.pool.request().query(`DELETE FROM __mj_BizAppsCommon.Person WHERE ID='${tempPersonId}'`).catch(() => undefined);
       }
     }
   });
@@ -533,16 +553,14 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
 
     const batch = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, ctx.user);
     expect(await batch.Load(result.batchId)).toBe(true);
-    batch.Status = 'Approved';
-    expect(await batch.Save()).toBe(false);
+    expect(await batch.Approve(ctx.user)).toBe(false);
     expect(batch.LatestResult?.CompleteMessage ?? '').toMatch(/do not foot/);
 
-    // Un-tamper → approval proceeds, and the auto-stamp fills the audit pair from context (L18 rolled in).
+    // Un-tamper → approval proceeds, and Approve() fills the audit pair from context (L18 rolled in).
     await ctx.pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET TotalDebits = TotalDebits - 999 WHERE ID='${result.batchId}'`);
     const batch2 = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, ctx.user);
     expect(await batch2.Load(result.batchId)).toBe(true);
-    batch2.Status = 'Approved'; // note: NOT setting ApprovedAt/ApprovedByUserID — the Save hook must
-    expect(await batch2.Save(), `approve after un-tamper: ${batch2.LatestResult?.CompleteMessage}`).toBe(true);
+    expect(await batch2.Approve(ctx.user), `approve after un-tamper: ${batch2.LatestResult?.CompleteMessage}`).toBe(true);
     const row = (await ctx.pool.request().query(
       `SELECT ApprovedAt, ApprovedByUserID FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${result.batchId}'`)).recordset[0];
     expect(row.ApprovedAt).toBeTruthy();
@@ -759,5 +777,92 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     )).rejects.toThrow(locked);
 
     expect(Number(await scalar(ctx.pool, `SELECT COUNT(*) ${tagsOf(built.summaryJournalEntryId)}`))).toBe(before);
+  });
+
+  it('L24 — defaultAccountingVerbRunner dispatches through the live ActionEngine and surfaces SUCCESS and PROVIDER_NOT_REGISTERED (#410)', async () => {
+    const engine = ActionEngineServer.Instance;
+    if (!engine.Loaded) {
+      await engine.Config(false, ctx.user);
+    }
+    const verbName = 'QuickBooks - Create Journal Entry';
+    const action = engine.GetActionByName(verbName);
+    expect(action, `expected ${verbName} action in ActionEngine cache`).toBeTruthy();
+    const driverClass = action!.DriverClass || verbName;
+
+    let simulateUnregistered = false;
+    class FakeVerbAction extends BaseAction {
+      protected override async InternalRunAction(params: { Params: Array<{ Name: string; Value?: unknown }> }): Promise<{ Success: boolean; ResultCode: string; Message?: string }> {
+        const companyId = params.Params.find((p) => p.Name === 'CompanyID')?.Value;
+        if (!companyId) return { Success: false, ResultCode: 'MISSING_COMPANY' };
+        if (simulateUnregistered) {
+          return { Success: false, ResultCode: 'PROVIDER_NOT_REGISTERED', Message: 'No ERP provider registered' };
+        }
+        return { Success: true, ResultCode: 'SUCCESS', Message: 'Posted via fake action' };
+      }
+    }
+    MJGlobal.Instance.ClassFactory.Register(BaseAction, FakeVerbAction, driverClass, 9999, true);
+
+    const ok = await defaultAccountingVerbRunner({
+      Verb: verbName,
+      CompanyID: ctx.company.id,
+      Params: { JournalCode: 'GENJNL' },
+      User: ctx.user,
+    });
+    expect(ok.Success).toBe(true);
+    expect(ok.ResultCode).toBe('SUCCESS');
+
+    simulateUnregistered = true;
+    const missing = await defaultAccountingVerbRunner({
+      Verb: verbName,
+      CompanyID: ctx.company.id,
+      Params: {},
+      User: ctx.user,
+    });
+    expect(missing.Success).toBe(false);
+    expect(missing.ResultCode).toBe('PROVIDER_NOT_REGISTERED');
+  });
+
+  it('L25 — autoPostJournalEntryBatch builds, approves as the system user, and sends to Posted without an approval Task (#433)', async () => {
+    const sysUser = UserCache.Instance.GetSystemUser() ?? ctx.user;
+    const je = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, ctx.user);
+    je.NewRecord();
+    je.CompanyID = ctx.company.id;
+    je.EffectiveDate = new Date();
+    je.EntryTypeID = ctx.entryTypes.get('OrderBooking')!;
+    je.Status = 'Pending';
+    je.Description = `${ctx.runTag} L25 auto-post`;
+    const l1 = await je.CreateLine(ctx.user);
+    l1.GLAccountID = ctx.company.arGL;
+    l1.DebitAmount = 88;
+    const l2 = await je.CreateLine(ctx.user);
+    l2.GLAccountID = ctx.company.revGL;
+    l2.CreditAmount = 88;
+    expect(await je.Save(), `L25 JE save failed: ${je.LatestResult?.CompleteMessage}`).toBe(true);
+    ctx.createdJEIds.push(je.ID);
+
+    const out = await autoPostJournalEntryBatch(
+      ctx.company.id,
+      'BusinessCentral',
+      sysUser,
+      provider,
+      { entryTypeCodes: ['OrderBooking'] },
+    );
+    ctx.createdBatchIds.push(out.build.batchId);
+
+    expect(out.build.approvalTaskId).toBeNull();
+    expect(out.batch.Status).toBe('Posted');
+    expect(out.batch.ApprovedByUserID?.toLowerCase()).toBe(sysUser.ID.toLowerCase());
+
+    const row = (await ctx.pool.request().query(
+      `SELECT Status, ApprovedByUserID FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${out.build.batchId}'`,
+    )).recordset[0] as { Status: string; ApprovedByUserID: string };
+    expect(row.Status).toBe('Posted');
+    expect(row.ApprovedByUserID.toLowerCase()).toBe(sysUser.ID.toLowerCase());
+
+    const taskLinks = Number(await scalar(
+      ctx.pool,
+      `SELECT COUNT(*) FROM __mj_BizAppsTasks.TaskLink WHERE LOWER(RecordID)=LOWER('${out.build.batchId}')`,
+    ));
+    expect(taskLinks).toBe(0);
   });
 });

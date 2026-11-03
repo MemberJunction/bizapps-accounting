@@ -5,7 +5,8 @@
   "license": "BUSL-1.1",
   "description": "BizApps Accounting - AR subsidiary ledger of record and journal entry primitives built on MemberJunction",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "test-harnesses/server"
   ],
   "scripts": {
     "prebuild": "node -e \"try { require.resolve('turbo') } catch (e) { console.error('\\n\u274c Dependencies not installed. Run: pnpm install\\n'); process.exit(1); }\"",
@@ -24,7 +25,7 @@
     "version:prepare": "changeset version && node ci/sync-mj-app-version.mjs && pnpm install --lockfile-only",
     "db:rebuild": "scripts/rebuild-db.sh",
     "demo:load": "mj sync push --dir demo-data",
-    "test:integration": "node test-harnesses/integration.mjs"
+    "test:integration": "node packages/IntegrationTests/integration.mjs"
   },
   "repository": {
     "type": "git",
@@ -32,7 +33,7 @@
   },
   "packageManager": "pnpm@10.33.0",
   "devDependencies": {
-    "@changesets/cli": "^2.29.8",
+    "@changesets/cli": "^3.0.0",
     "@memberjunction/cli": "^6.1.6",
     "beasties": "0.3.5",
     "mrmime": "2.0.1",
