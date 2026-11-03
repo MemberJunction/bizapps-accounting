@@ -15,6 +15,8 @@
 --      entity actions, and action descriptions.
 -- =============================================================================
 SET NOCOUNT ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 GO
 
 -- -----------------------------------------------------------------------------
@@ -1570,9 +1572,28 @@ UPDATE [${mjSchema}].[Action]
 SET [Description] = N'Pulls chart of accounts, dimensions, and dimension values from every credentialed Company Integration via AccountingERPEngine.SyncMasterData. When all three objects are requested for a connector-wired integration with active entity maps, delegates to MJ IntegrationEngine.RunSync; otherwise (subset Objects filter or custom provider) falls back to the direct BaseAccountingERPProvider pull. One job, all companies. Hosts disable the scheduled job rather than deleting this action.'
 WHERE [ID] = 'A839FB12-5813-4B85-8022-DF8943729BA2';
 
-UPDATE [${mjSchema}].[EntityAction]
-SET [ActionFilter] = N'DidFieldChangeToValue(''Status'',''Sent'')'
-WHERE [ID] = '5C44B19D-8CE3-489D-A354-507A3B67A1C9';
+IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[ActionFilter] WHERE [ID] = 'D4B839F1-6C2E-4A91-8E12-7A9F4D328166')
+BEGIN
+    INSERT INTO [${mjSchema}].[ActionFilter] ([ID], [UserDescription], [Code], [CodeExplanation])
+    VALUES (
+        'D4B839F1-6C2E-4A91-8E12-7A9F4D328166',
+        N'JournalEntryBatch Status transitioned to Sent',
+        N'const { OldValues, NewValues, DidFieldChange, DidFieldChangeToValue } = ActionFilterContext;' + CHAR(10) + N'return (DidFieldChangeToValue(''Status'', ''Sent''));',
+        N'Fires only when JournalEntryBatch.Status transitions to ''Sent''.'
+    );
+END
+
+IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityActionFilter] WHERE [ID] = 'E5C940A2-7D3F-4B82-9F23-8B0E5E439277')
+BEGIN
+    INSERT INTO [${mjSchema}].[EntityActionFilter] ([ID], [EntityActionID], [ActionFilterID], [Sequence], [Status])
+    VALUES (
+        'E5C940A2-7D3F-4B82-9F23-8B0E5E439277',
+        '5C44B19D-8CE3-489D-A354-507A3B67A1C9',
+        'D4B839F1-6C2E-4A91-8E12-7A9F4D328166',
+        1,
+        N'Active'
+    );
+END
 
 /* SQL text to update existing entity fields from schema */
 EXEC [${mjSchema}].[spUpdateExistingEntityFieldsFromSchema] @ExcludedSchemaNames='', @IncludedSchemaNames='${flyway:defaultSchema}';

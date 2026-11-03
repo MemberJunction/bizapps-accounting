@@ -141,9 +141,18 @@ describe('metadata/entity-actions — authored bindings', () => {
   });
 
   it('guards the JournalEntryBatch AfterUpdate binding with DidFieldChangeToValue(Status, Sent)', () => {
+    const actionFiltersFile = resolve(HERE, '../../../../metadata/action-filters/.action-filters.json');
+    const actionFilters: MetadataRecord[] = JSON.parse(readFileSync(actionFiltersFile, 'utf8'));
     const batchBinding = BINDINGS.find(
       b => b.fields.EntityID === '@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entry Batches',
     );
-    expect(batchBinding?.fields.ActionFilter).toBe("DidFieldChangeToValue('Status','Sent')");
+    const filterLinks = batchBinding?.relatedEntities?.['MJ: Entity Action Filters'] ?? [];
+    expect(filterLinks).toHaveLength(1);
+    expect(filterLinks[0].fields.EntityActionID).toBe('@parent:ID');
+    expect(filterLinks[0].fields.Status).toBe('Active');
+    const filter = actionFilters.find(f => f.primaryKey?.ID === filterLinks[0].fields.ActionFilterID);
+    expect(filter).toBeDefined();
+    expect(String(filter?.fields.Code)).toContain("DidFieldChangeToValue('Status', 'Sent')");
+    expect(() => new Function('ActionFilterContext', String(filter?.fields.Code))).not.toThrow();
   });
 });

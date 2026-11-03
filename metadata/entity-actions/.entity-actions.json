@@ -38,7 +38,6 @@
     "fields": {
       "EntityID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entry Batches",
       "ActionID": "@lookup:MJ: Actions.Name=Send Single Message",
-      "ActionFilter": "DidFieldChangeToValue('Status','Sent')",
       "Status": "Pending",
       "Sequence": 10,
       "LoggingMode": "FailuresOnly"
@@ -53,6 +52,19 @@
           },
           "primaryKey": {
             "ID": "283EAF55-CA5C-47BA-A722-8CFCDF5EBB99"
+          }
+        }
+      ],
+      "MJ: Entity Action Filters": [
+        {
+          "fields": {
+            "EntityActionID": "@parent:ID",
+            "ActionFilterID": "D4B839F1-6C2E-4A91-8E12-7A9F4D328166",
+            "Sequence": 1,
+            "Status": "Active"
+          },
+          "primaryKey": {
+            "ID": "E5C940A2-7D3F-4B82-9F23-8B0E5E439277"
           }
         }
       ],

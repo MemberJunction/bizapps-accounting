@@ -19,6 +19,7 @@
     "applications",
     "action-categories",
     "actions",
+    "action-filters",
     "entity-actions",
     "entity-relationships",
     "scheduled-jobs",

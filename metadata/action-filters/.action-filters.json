@@ -1,0 +1,12 @@
+[
+  {
+    "fields": {
+      "UserDescription": "JournalEntryBatch Status transitioned to Sent",
+      "Code": "const { OldValues, NewValues, DidFieldChange, DidFieldChangeToValue } = ActionFilterContext;\nreturn (DidFieldChangeToValue('Status', 'Sent'));",
+      "CodeExplanation": "Fires only when JournalEntryBatch.Status transitions to 'Sent'."
+    },
+    "primaryKey": {
+      "ID": "D4B839F1-6C2E-4A91-8E12-7A9F4D328166"
+    }
+  }
+]
