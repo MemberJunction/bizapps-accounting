@@ -14,10 +14,27 @@
  * decorators fire at startup.
  */
 export { AccountingCompanyProfileEntityServer } from './AccountingCompanyProfileEntityServer.js';
-export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
-export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
+export {
+  JournalEntryEntityServer,
+  JOURNAL_ENTRY_LIFECYCLE_POLICY,
+  registerJournalEntryLifecyclePolicy,
+} from './JournalEntryEntityServer.js';
+export {
+  JournalEntryLineEntityServer,
+  JOURNAL_ENTRY_LINE_CROSS_ENTITY_POLICY,
+  JOURNAL_ENTRY_PARENT_CACHE_NAMESPACE,
+  registerJournalEntryLineCrossEntityPolicy,
+  type ParentJournalEntrySnapshot,
+} from './JournalEntryLineEntityServer.js';
 export { JournalEntryLineDimensionEntityServer, LoadJournalEntryLineDimensionEntityServer } from './JournalEntryLineDimensionEntityServer.js';
-export { JournalEntryBatchEntityServer, type ApprovedContentCheck, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
+export {
+  JournalEntryBatchEntityServer,
+  JOURNAL_ENTRY_BATCH_LIFECYCLE_POLICY,
+  registerJournalEntryBatchLifecyclePolicy,
+  type ApprovedContentCheck,
+  type ERPNotPostedBasis,
+  type JournalEntryBatchCancelOptions,
+} from './JournalEntryBatchEntityServer.js';
 export { GLAccountEntityServer, BusinessCentralAccountNumberError, BUSINESS_CENTRAL_ACCOUNT_NUMBER_MAX_LENGTH } from './GLAccountEntityServer.js';
 export { DimensionEntityServer, LoadDimensionEntityServer } from './DimensionEntityServer.js';
 export { DimensionValueEntityServer, LoadDimensionValueEntityServer } from './DimensionValueEntityServer.js';
@@ -35,7 +52,15 @@ export {
   DEFAULT_GL_ACCOUNT_REFS,
 } from './SeedData.js';
 export type { SeededGLAccount } from './SeedData.js';
-export { getNextJournalEntryNumber, getNextJournalEntryBatchNumber } from './SequenceService.js';
+export {
+  getNextJournalEntryNumber,
+  getNextJournalEntryBatchNumber,
+  CustomRoutineDocumentSequenceStore,
+  JOURNAL_ENTRY_NUMBER_POLICY,
+  JOURNAL_ENTRY_BATCH_NUMBER_POLICY,
+  JOURNAL_ENTRY_BATCH_NUMBER_ALIAS_POLICY,
+  registerAccountingNumberingPolicies,
+} from './SequenceService.js';
 // Validate-don't-escape UUID guards for SQL predicate interpolation (2026-09-05 security sweep) —
 // use these anywhere a client-supplied id reaches an ExtraFilter string.
 export { isSqlGuid, requireSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
