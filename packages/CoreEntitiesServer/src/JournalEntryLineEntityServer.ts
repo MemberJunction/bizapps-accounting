@@ -19,8 +19,15 @@
  */
 import {
   BaseEntity,
+  type CrossEntityBatchItem,
+  type CrossEntityEvaluationScope,
+  CrossEntityPolicyEngine,
+  type CrossEntityPolicyItemContext,
+  type CrossEntityPolicyVerdict,
   EntityDeleteOptions,
   EntitySaveOptions,
+  type EntityWriteOperation,
+  type ICrossEntityPolicy,
   IMetadataProvider,
   IRunViewProvider,
   LogError,
@@ -30,6 +37,7 @@ import {
 } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import {
+  type JournalEntryEntity,
   JournalEntryLineEntity,
   mjBizAppsAccountingJournalEntryLineDimensionEntity,
 } from '@mj-biz-apps/accounting-entities';
@@ -37,14 +45,216 @@ import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 
 import { WithDimensionsSavedThroughLine } from './JournalEntryLineDimensionEntityServer.js';
 import { ManualJournalEntryApprovalService } from './ManualJournalEntryApproval.js';
+import { isSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
 
+const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
+
+export const JOURNAL_ENTRY_PARENT_CACHE_NAMESPACE = `entity:${JE_ENTITY.toLowerCase()}`;
+
+export interface ParentJournalEntrySnapshot {
+  readonly exists: boolean;
+  readonly status: string;
+  readonly companyId: string;
+}
+
+interface ParentJournalEntryViewRow {
+  ID: string;
+  Status: string | null;
+  CompanyID: string | null;
+}
+
+function isRunViewProvider(provider: IMetadataProvider): provider is IMetadataProvider & IRunViewProvider {
+  return typeof (provider as IMetadataProvider & Partial<IRunViewProvider>).RunView === 'function';
+}
+
+async function resolveParentJournalEntrySnapshot(
+  line: BaseEntity,
+  scope: CrossEntityEvaluationScope,
+): Promise<ParentJournalEntrySnapshot | null> {
+  const rawJeId = line.GetFieldByName('JournalEntryID')?.Value;
+  const journalEntryId = rawJeId !== null && rawJeId !== undefined ? String(rawJeId).trim() : '';
+  const lineWithParent = line as JournalEntryLineEntityServer;
+  const inMemoryParent = lineWithParent.ParentJournalEntry;
+
+  if (inMemoryParent && (inMemoryParent.Status || inMemoryParent.CompanyID)) {
+    const snap: ParentJournalEntrySnapshot = {
+      exists: true,
+      status: String(inMemoryParent.Status ?? 'Pending').trim(),
+      companyId: String(inMemoryParent.CompanyID ?? '').trim(),
+    };
+    if (journalEntryId) {
+      scope.Prime(JOURNAL_ENTRY_PARENT_CACHE_NAMESPACE, journalEntryId, snap);
+    }
+    return snap;
+  }
+
+  if (!journalEntryId || !isSqlGuid(journalEntryId) || !isRunViewProvider(scope.Provider)) {
+    return null;
+  }
+
+  const runViewProvider = scope.Provider;
+  return scope.GetOrLoad<ParentJournalEntrySnapshot>(
+    JOURNAL_ENTRY_PARENT_CACHE_NAMESPACE,
+    journalEntryId,
+    async (): Promise<ParentJournalEntrySnapshot> => {
+      const rv = await runViewProvider.RunView<ParentJournalEntryViewRow>(
+        {
+          EntityName: JE_ENTITY,
+          ExtraFilter: `ID=${sqlGuidLiteral(journalEntryId, 'JournalEntryLine.ParentJournalEntryPolicy')}`,
+          Fields: ['ID', 'Status', 'CompanyID'],
+          MaxRows: 1,
+          ResultType: 'simple',
+          BypassCache: true,
+        },
+        scope.ContextUser,
+      );
+      if (!rv.Success) {
+        throw new Error(
+          `Could not check parent journal entry ${journalEntryId} for line: ${rv.ErrorMessage ?? 'unknown error'}`,
+        );
+      }
+      const row = rv.Results?.[0];
+      if (!row) {
+        return { exists: false, status: '', companyId: '' };
+      }
+      return {
+        exists: true,
+        status: String(row.Status ?? '').trim(),
+        companyId: String(row.CompanyID ?? '').trim(),
+      };
+    },
+  );
+}
+
+function evaluateLineAgainstParentSnapshot(
+  line: BaseEntity,
+  operation: EntityWriteOperation,
+  snapshot: ParentJournalEntrySnapshot | null,
+): CrossEntityPolicyVerdict {
+  if (!snapshot || !snapshot.exists) {
+    return { Allowed: true };
+  }
+
+  if (snapshot.status && snapshot.status !== 'Pending') {
+    return {
+      Allowed: false,
+      FieldName: 'JournalEntryID',
+      ErrorMessage: `Cannot ${operation.toLowerCase()} ${JEL_ENTITY} while parent ${JE_ENTITY} Status is '${snapshot.status}' (allowed: [Pending]).`,
+    };
+  }
+
+  if (operation !== 'Delete' && snapshot.companyId) {
+    const rawGlId = line.GetFieldByName('GLAccountID')?.Value;
+    const glAccountId = rawGlId !== null && rawGlId !== undefined ? String(rawGlId).trim() : '';
+    if (glAccountId) {
+      const gl = AccountingEngineBase.Instance.GLAccountByID(glAccountId);
+      if (gl?.CompanyID && gl.CompanyID.toLowerCase() !== snapshot.companyId.toLowerCase()) {
+        return {
+          Allowed: false,
+          FieldName: 'GLAccountID',
+          ErrorMessage: `Line GL account ${gl.Code || gl.ID} belongs to company ${gl.CompanyID}, but parent journal entry belongs to company ${snapshot.companyId}.`,
+        };
+      }
+    }
+  }
+
+  return { Allowed: true };
+}
+
+export const JOURNAL_ENTRY_LINE_CROSS_ENTITY_POLICY: ICrossEntityPolicy = {
+  PolicyKey: 'MJ_BizApps_Accounting.JournalEntryLine.ParentJournalEntryPolicy',
+  TargetEntityNames: [JEL_ENTITY],
+  async EvaluateBeforeSave(ctx: CrossEntityPolicyItemContext): Promise<CrossEntityPolicyVerdict> {
+    const snapshot = await resolveParentJournalEntrySnapshot(ctx.Entity, ctx.Scope);
+    return evaluateLineAgainstParentSnapshot(ctx.Entity, ctx.Operation, snapshot);
+  },
+  async EvaluateBeforeDelete(ctx: CrossEntityPolicyItemContext): Promise<CrossEntityPolicyVerdict> {
+    const snapshot = await resolveParentJournalEntrySnapshot(ctx.Entity, ctx.Scope);
+    return evaluateLineAgainstParentSnapshot(ctx.Entity, 'Delete', snapshot);
+  },
+  async EvaluateBatch(
+    items: ReadonlyArray<CrossEntityBatchItem>,
+    scope: CrossEntityEvaluationScope,
+  ): Promise<Map<BaseEntity, CrossEntityPolicyVerdict>> {
+    const verdicts = new Map<BaseEntity, CrossEntityPolicyVerdict>();
+    const unprimedParentIds = new Set<string>();
+
+    for (const item of items) {
+      const lineWithParent = item.Entity as JournalEntryLineEntityServer;
+      const rawJeId = item.Entity.GetFieldByName('JournalEntryID')?.Value;
+      const jeId = rawJeId !== null && rawJeId !== undefined ? String(rawJeId).trim() : '';
+      if (lineWithParent.ParentJournalEntry && jeId) {
+        scope.Prime(JOURNAL_ENTRY_PARENT_CACHE_NAMESPACE, jeId, {
+          exists: true,
+          status: String(lineWithParent.ParentJournalEntry.Status ?? 'Pending').trim(),
+          companyId: String(lineWithParent.ParentJournalEntry.CompanyID ?? '').trim(),
+        });
+      } else if (jeId && isSqlGuid(jeId)) {
+        unprimedParentIds.add(jeId);
+      }
+    }
+
+    if (unprimedParentIds.size > 0 && isRunViewProvider(scope.Provider)) {
+      const ids = Array.from(unprimedParentIds);
+      const inList = ids
+        .map((id) => sqlGuidLiteral(id, 'JournalEntryLine.ParentJournalEntryPolicy.EvaluateBatch'))
+        .join(', ');
+      const rv = await scope.Provider.RunView<ParentJournalEntryViewRow>(
+        {
+          EntityName: JE_ENTITY,
+          ExtraFilter: `ID IN (${inList})`,
+          Fields: ['ID', 'Status', 'CompanyID'],
+          ResultType: 'simple',
+          BypassCache: true,
+        },
+        scope.ContextUser,
+      );
+      if (rv.Success) {
+        const foundIds = new Set<string>();
+        for (const row of rv.Results ?? []) {
+          const rowId = String(row.ID ?? '').trim();
+          if (rowId) {
+            foundIds.add(rowId.toLowerCase());
+            scope.Prime(JOURNAL_ENTRY_PARENT_CACHE_NAMESPACE, rowId, {
+              exists: true,
+              status: String(row.Status ?? '').trim(),
+              companyId: String(row.CompanyID ?? '').trim(),
+            });
+          }
+        }
+        for (const requestedId of ids) {
+          if (!foundIds.has(requestedId.toLowerCase())) {
+            scope.Prime(JOURNAL_ENTRY_PARENT_CACHE_NAMESPACE, requestedId, {
+              exists: false,
+              status: '',
+              companyId: '',
+            });
+          }
+        }
+      }
+    }
+
+    for (const item of items) {
+      const snapshot = await resolveParentJournalEntrySnapshot(item.Entity, scope);
+      verdicts.set(item.Entity, evaluateLineAgainstParentSnapshot(item.Entity, item.Operation, snapshot));
+    }
+
+    return verdicts;
+  },
+};
+
+export function registerJournalEntryLineCrossEntityPolicy(): void {
+  CrossEntityPolicyEngine.Instance.RegisterPolicy(JOURNAL_ENTRY_LINE_CROSS_ENTITY_POLICY);
+}
+
+registerJournalEntryLineCrossEntityPolicy();
 
 @RegisterClass(BaseEntity, JEL_ENTITY)
 export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
   /** Optional reference to the parent JournalEntryEntityServer object in memory. */
-  public ParentJournalEntry?: any;
+  public ParentJournalEntry?: JournalEntryEntity;
 
   /**
    * Set by JournalEntryEntityServer while it saves or deletes this line as part of the entry, so the

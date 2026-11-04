@@ -24,7 +24,10 @@ import {
   BaseEntity,
   DatabaseProviderBase,
   EntityDeleteOptions,
+  EntityLifecyclePolicyEngine,
   EntitySaveOptions,
+  type IEntityLifecyclePolicy,
+  type IStateTransitionRule,
   IMetadataProvider,
   IRunViewProvider,
   LogError,
@@ -94,8 +97,43 @@ const JE_LEGAL_TRANSITIONS: Record<string, ReadonlyArray<string>> = {
   GLPosted: ['GLPosted'],
 };
 
+const JE_TRANSITION_RULES: IStateTransitionRule[] = Object.entries(JE_LEGAL_TRANSITIONS).flatMap(
+  ([from, targets]) =>
+    targets
+      .filter((to) => to !== from)
+      .map((to): IStateTransitionRule =>
+        from === 'Batched' && to === 'Pending'
+          ? { from, to, clearedFieldsOnTransition: ['JournalEntryBatchID'] }
+          : { from, to },
+      ),
+);
+
+export const JOURNAL_ENTRY_LIFECYCLE_POLICY: IEntityLifecyclePolicy = {
+  stateMachine: {
+    statusField: 'Status',
+    initialStates: ['Pending'],
+    transitions: JE_TRANSITION_RULES,
+    terminalStates: ['GLPosted'],
+    freezeAllFieldsInTerminalStates: false,
+    immutableAfterCreateFields: [...ORIGIN_PAIR_FIELDS],
+  },
+};
+
+export function registerJournalEntryLifecyclePolicy(): void {
+  EntityLifecyclePolicyEngine.Instance.RegisterPolicy(JE_ENTITY, JOURNAL_ENTRY_LIFECYCLE_POLICY);
+}
+
+registerJournalEntryLifecyclePolicy();
+
 @RegisterClass(BaseEntity, JE_ENTITY)
 export class JournalEntryEntityServer extends JournalEntryEntity {
+  public override NewRecord(): boolean {
+    const ok = super.NewRecord();
+    if (!this.Status) {
+      this.Status = 'Pending';
+    }
+    return ok;
+  }
   // `_lines` and `_deletedLines` are gone. `Lines` is a RelatedRecordCollection on the GENERATED
   // class, emitted from the RelatedRecordCollection metadata on the
   // 'Journal Entries -> Journal Entry Lines' relationship, so it exists on BOTH tiers — which is
