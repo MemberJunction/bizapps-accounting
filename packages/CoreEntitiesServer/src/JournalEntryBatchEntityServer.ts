@@ -122,7 +122,7 @@ export const JOURNAL_ENTRY_BATCH_LIFECYCLE_POLICY: IEntityLifecyclePolicy = {
 };
 
 export function registerJournalEntryBatchLifecyclePolicy(): void {
-  EntityLifecyclePolicyEngine.Instance.RegisterPolicy(BATCH_ENTITY, JOURNAL_ENTRY_BATCH_LIFECYCLE_POLICY);
+  EntityLifecyclePolicyEngine?.Instance?.RegisterPolicy(BATCH_ENTITY, JOURNAL_ENTRY_BATCH_LIFECYCLE_POLICY);
 }
 
 registerJournalEntryBatchLifecyclePolicy();

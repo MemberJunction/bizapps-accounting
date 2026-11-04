@@ -62,6 +62,7 @@ function createEntityInfo(name: string, fieldNames: ReadonlyArray<string>, nonNu
         CodeName: fn,
         Type: fn === 'ID' || fn.endsWith('ID') ? 'uniqueidentifier' : 'nvarchar',
         TSType: 'string',
+        MaxLength: 50,
         IsPrimaryKey: fn === 'ID',
         IsVirtual: false,
         IsSpecialDateField: false,
@@ -243,12 +244,11 @@ describe('Platform Primitives Adoption (PR #6203) — bizapps-accounting', () =>
       });
 
       const batchPolicies = DocumentNumberingEngine.Instance.ResolvePolicies(batchInfo);
-      expect(batchPolicies.map((p) => p.targetField)).toEqual(['JournalEntryBatchNumber', 'BatchNumber']);
+      expect(batchPolicies.map((p) => p.targetField)).toEqual(['JournalEntryBatchNumber']);
       expect(batchPolicies[0].pattern).toBe(JOURNAL_ENTRY_BATCH_NUMBER_POLICY.pattern);
 
       expect(DocumentNumberingEngine.Instance.WillAutoPopulateOnCreate(jeInfo, 'EntryNumber')).toBe(true);
       expect(DocumentNumberingEngine.Instance.WillAutoPopulateOnCreate(batchInfo, 'JournalEntryBatchNumber')).toBe(true);
-      expect(DocumentNumberingEngine.Instance.WillAutoPopulateOnCreate(batchInfo, 'BatchNumber')).toBe(true);
     });
 
     it('allocates formatted EntryNumber and JournalEntryBatchNumber via DocumentNumberingEngine', async () => {
@@ -420,6 +420,47 @@ describe('Platform Primitives Adoption (PR #6203) — bizapps-accounting', () =>
       } finally {
         glSpy.mockRestore();
       }
+    });
+
+    it('vetoes reassigning JournalEntryID away from a locked (Batched) JournalEntry', async () => {
+      const PENDING_JE_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+      const runView = vi.fn(async (params: { ExtraFilter?: string }) => {
+        if (params.ExtraFilter?.includes(JE_ID)) {
+          return {
+            Success: true,
+            Results: [{ ID: JE_ID, Status: 'Batched', CompanyID: COMPANY_ID }],
+          };
+        }
+        return {
+          Success: true,
+          Results: [{ ID: PENDING_JE_ID, Status: 'Pending', CompanyID: COMPANY_ID }],
+        };
+      });
+
+      const reassignProvider = Object.assign(Object.create(null) as IMetadataProvider, {
+        Entities: [jeInfo, jelInfo],
+        FindEntityByName: (n: string) => [jeInfo, jelInfo].find((e) => e.Name.toLowerCase() === n.toLowerCase()),
+        Config: { ActiveStatusAssertions: false },
+        TransactionScopeCacheKey: 'tx-epoch-reassign',
+        RunView: runView,
+      });
+
+      const savedLine = new JournalEntryLineEntityServer(jelInfo);
+      savedLine.SetMany(
+        {
+          ID: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+          JournalEntryID: JE_ID,
+          LineNumber: 1,
+          GLAccountID: GL_MATCH_ID,
+          DebitAmount: 25,
+        },
+        true,
+        true,
+      );
+      savedLine.JournalEntryID = PENDING_JE_ID;
+
+      const err = await CrossEntityPolicyEngine.Instance.EnforceBeforeSave(savedLine, USER, reassignProvider);
+      expect(err).toContain("while parent MJ_BizApps_Accounting: Journal Entries Status is 'Batched'");
     });
   });
 });

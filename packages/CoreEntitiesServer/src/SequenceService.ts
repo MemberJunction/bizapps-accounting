@@ -204,16 +204,17 @@ async function resolveJournalEntryNumberScope(
  * `JournalEntryBatch.JournalEntryBatchNumber` / `BatchNumber`) on {@link DocumentNumberingEngine.Instance}.
  */
 export function registerAccountingNumberingPolicies(): void {
-  DocumentNumberingEngine.Instance.RegisterPolicy(JE_ENTITY, JOURNAL_ENTRY_NUMBER_POLICY);
-  DocumentNumberingEngine.Instance.RegisterScopeResolver(
+  const engine = DocumentNumberingEngine?.Instance;
+  if (!engine) {
+    return;
+  }
+  engine.RegisterPolicy(JE_ENTITY, JOURNAL_ENTRY_NUMBER_POLICY);
+  engine.RegisterScopeResolver(
     `${JE_ENTITY}.EntryNumber`,
     resolveJournalEntryNumberScope,
   );
-  DocumentNumberingEngine.Instance.RegisterScopeResolver(JE_ENTITY, resolveJournalEntryNumberScope);
-  DocumentNumberingEngine.Instance.RegisterPolicy(BATCH_ENTITY, [
-    JOURNAL_ENTRY_BATCH_NUMBER_POLICY,
-    JOURNAL_ENTRY_BATCH_NUMBER_ALIAS_POLICY,
-  ]);
+  engine.RegisterScopeResolver(JE_ENTITY, resolveJournalEntryNumberScope);
+  engine.RegisterPolicy(BATCH_ENTITY, JOURNAL_ENTRY_BATCH_NUMBER_POLICY);
 }
 
 registerAccountingNumberingPolicies();
