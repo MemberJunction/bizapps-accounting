@@ -69,16 +69,39 @@ function isRunViewProvider(provider: IMetadataProvider): provider is IMetadataPr
   return typeof (provider as IMetadataProvider & Partial<IRunViewProvider>).RunView === 'function';
 }
 
-async function resolveParentJournalEntrySnapshot(
+function parentJournalEntryIdsOf(line: BaseEntity): string[] {
+  const field = line.GetFieldByName('JournalEntryID');
+  if (!field) {
+    return [];
+  }
+  const currentId = field.Value !== null && field.Value !== undefined ? String(field.Value).trim() : '';
+  const ids: string[] = [];
+  if (currentId) {
+    ids.push(currentId);
+  }
+  if (line.IsSaved) {
+    const oldId = field.OldValue !== null && field.OldValue !== undefined ? String(field.OldValue).trim() : '';
+    if (oldId && oldId.toLowerCase() !== currentId.toLowerCase()) {
+      ids.push(oldId);
+    }
+  }
+  return ids;
+}
+
+async function resolveParentJournalEntrySnapshotById(
+  journalEntryId: string,
   line: BaseEntity,
   scope: CrossEntityEvaluationScope,
 ): Promise<ParentJournalEntrySnapshot | null> {
-  const rawJeId = line.GetFieldByName('JournalEntryID')?.Value;
-  const journalEntryId = rawJeId !== null && rawJeId !== undefined ? String(rawJeId).trim() : '';
   const lineWithParent = line as JournalEntryLineEntityServer;
   const inMemoryParent = lineWithParent.ParentJournalEntry;
+  const inMemoryParentId = inMemoryParent?.ID ? String(inMemoryParent.ID).trim() : '';
 
-  if (inMemoryParent && (inMemoryParent.Status || inMemoryParent.CompanyID)) {
+  if (
+    inMemoryParent &&
+    (inMemoryParent.Status || inMemoryParent.CompanyID) &&
+    (!inMemoryParentId || inMemoryParentId.toLowerCase() === journalEntryId.toLowerCase())
+  ) {
     const snap: ParentJournalEntrySnapshot = {
       exists: true,
       status: String(inMemoryParent.Status ?? 'Pending').trim(),
@@ -128,6 +151,26 @@ async function resolveParentJournalEntrySnapshot(
   );
 }
 
+async function evaluateLineWithScope(
+  line: BaseEntity,
+  operation: EntityWriteOperation,
+  scope: CrossEntityEvaluationScope,
+): Promise<CrossEntityPolicyVerdict> {
+  const parentIds = parentJournalEntryIdsOf(line);
+  if (parentIds.length === 0) {
+    const inMemorySnap = await resolveParentJournalEntrySnapshotById('', line, scope);
+    return evaluateLineAgainstParentSnapshot(line, operation, inMemorySnap);
+  }
+  for (const parentId of parentIds) {
+    const snapshot = await resolveParentJournalEntrySnapshotById(parentId, line, scope);
+    const verdict = evaluateLineAgainstParentSnapshot(line, operation, snapshot);
+    if (!verdict.Allowed) {
+      return verdict;
+    }
+  }
+  return { Allowed: true };
+}
+
 function evaluateLineAgainstParentSnapshot(
   line: BaseEntity,
   operation: EntityWriteOperation,
@@ -167,12 +210,10 @@ export const JOURNAL_ENTRY_LINE_CROSS_ENTITY_POLICY: ICrossEntityPolicy = {
   PolicyKey: 'MJ_BizApps_Accounting.JournalEntryLine.ParentJournalEntryPolicy',
   TargetEntityNames: [JEL_ENTITY],
   async EvaluateBeforeSave(ctx: CrossEntityPolicyItemContext): Promise<CrossEntityPolicyVerdict> {
-    const snapshot = await resolveParentJournalEntrySnapshot(ctx.Entity, ctx.Scope);
-    return evaluateLineAgainstParentSnapshot(ctx.Entity, ctx.Operation, snapshot);
+    return evaluateLineWithScope(ctx.Entity, ctx.Operation, ctx.Scope);
   },
   async EvaluateBeforeDelete(ctx: CrossEntityPolicyItemContext): Promise<CrossEntityPolicyVerdict> {
-    const snapshot = await resolveParentJournalEntrySnapshot(ctx.Entity, ctx.Scope);
-    return evaluateLineAgainstParentSnapshot(ctx.Entity, 'Delete', snapshot);
+    return evaluateLineWithScope(ctx.Entity, 'Delete', ctx.Scope);
   },
   async EvaluateBatch(
     items: ReadonlyArray<CrossEntityBatchItem>,
@@ -183,16 +224,24 @@ export const JOURNAL_ENTRY_LINE_CROSS_ENTITY_POLICY: ICrossEntityPolicy = {
 
     for (const item of items) {
       const lineWithParent = item.Entity as JournalEntryLineEntityServer;
-      const rawJeId = item.Entity.GetFieldByName('JournalEntryID')?.Value;
-      const jeId = rawJeId !== null && rawJeId !== undefined ? String(rawJeId).trim() : '';
-      if (lineWithParent.ParentJournalEntry && jeId) {
-        scope.Prime(JOURNAL_ENTRY_PARENT_CACHE_NAMESPACE, jeId, {
-          exists: true,
-          status: String(lineWithParent.ParentJournalEntry.Status ?? 'Pending').trim(),
-          companyId: String(lineWithParent.ParentJournalEntry.CompanyID ?? '').trim(),
-        });
-      } else if (jeId && isSqlGuid(jeId)) {
-        unprimedParentIds.add(jeId);
+      const parentIds = parentJournalEntryIdsOf(item.Entity);
+      const inMemoryParentId = lineWithParent.ParentJournalEntry?.ID
+        ? String(lineWithParent.ParentJournalEntry.ID).trim()
+        : '';
+      for (const jeId of parentIds) {
+        if (
+          lineWithParent.ParentJournalEntry &&
+          jeId &&
+          (!inMemoryParentId || inMemoryParentId.toLowerCase() === jeId.toLowerCase())
+        ) {
+          scope.Prime(JOURNAL_ENTRY_PARENT_CACHE_NAMESPACE, jeId, {
+            exists: true,
+            status: String(lineWithParent.ParentJournalEntry.Status ?? 'Pending').trim(),
+            companyId: String(lineWithParent.ParentJournalEntry.CompanyID ?? '').trim(),
+          });
+        } else if (jeId && isSqlGuid(jeId)) {
+          unprimedParentIds.add(jeId);
+        }
       }
     }
 
@@ -237,8 +286,7 @@ export const JOURNAL_ENTRY_LINE_CROSS_ENTITY_POLICY: ICrossEntityPolicy = {
     }
 
     for (const item of items) {
-      const snapshot = await resolveParentJournalEntrySnapshot(item.Entity, scope);
-      verdicts.set(item.Entity, evaluateLineAgainstParentSnapshot(item.Entity, item.Operation, snapshot));
+      verdicts.set(item.Entity, await evaluateLineWithScope(item.Entity, item.Operation, scope));
     }
 
     return verdicts;
@@ -246,7 +294,7 @@ export const JOURNAL_ENTRY_LINE_CROSS_ENTITY_POLICY: ICrossEntityPolicy = {
 };
 
 export function registerJournalEntryLineCrossEntityPolicy(): void {
-  CrossEntityPolicyEngine.Instance.RegisterPolicy(JOURNAL_ENTRY_LINE_CROSS_ENTITY_POLICY);
+  CrossEntityPolicyEngine?.Instance?.RegisterPolicy(JOURNAL_ENTRY_LINE_CROSS_ENTITY_POLICY);
 }
 
 registerJournalEntryLineCrossEntityPolicy();
