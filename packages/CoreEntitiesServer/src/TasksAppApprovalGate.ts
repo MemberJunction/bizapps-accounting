@@ -542,7 +542,8 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
       `user ${contextUser.ID} resolved to no active Person record via user entity link or People user link.`,
     );
     return new Error(
-      'Your account is not linked to a person record, so this action cannot check your approval rights. Ask an administrator to link it.',
+      `Your account is not linked to a person record, so this ${action} cannot be recorded on the batch's approval request. ` +
+      'Ask an administrator to link your account, then try again.',
     );
   }
 

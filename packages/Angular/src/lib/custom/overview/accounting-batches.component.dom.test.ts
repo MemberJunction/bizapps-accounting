@@ -1121,7 +1121,7 @@ describe('AccountingBatchesPageComponent — Single-company Build Batch dialog (
     });
   });
 
-  it('requires selecting a company when multiple companies exist and sends CompanyIDs / CompanyID (#366)', async () => {
+  it('requires selecting a company when multiple companies exist and previews only that company (#366)', async () => {
     const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
     fixture.detectChanges();
     await fixture.whenStable();
@@ -1150,7 +1150,29 @@ describe('AccountingBatchesPageComponent — Single-company Build Batch dialog (
 
     await page.ExecuteBuildBatch();
     expect(buildCalls).toHaveLength(1);
-    expect(buildCalls[0].CompanyID).toBe(COMPANY_TWO_ID);
+    expect(buildCalls[0].Source).toBe('Explicit');
+    expect(buildCalls[0].JournalEntryIDs).toEqual(['je-1']);
+    expect(buildCalls[0].CompanyID).toBeUndefined();
+  });
+
+  it('starts from every entry again when the company changes, so a hand-ticked set does not strand the build', async () => {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+
+    const page = fixture.componentInstance;
+    await page.OpenBuildBatchModal();
+    page.BuildCompanyID = COMPANY_ID;
+    await page.OnBuildCompanyChange();
+    await page.ToggleEntry('je-1');
+    expect(page.IncludedCount).toBe(0);
+
+    page.BuildCompanyID = COMPANY_TWO_ID;
+    await page.OnBuildCompanyChange();
+    expect(page.IncludedCount).toBe(1);
+    expect(page.IncludedEntryIDs).toEqual(['je-1']);
+    expect(page.BuildBlockedReason).toBeNull();
   });
 });
 

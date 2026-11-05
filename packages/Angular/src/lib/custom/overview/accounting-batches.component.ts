@@ -2,6 +2,7 @@ import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef, inject }
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CompositeKey, Metadata, RunView } from '@memberjunction/core';
+import { NormalizeUUID } from '@memberjunction/global';
 import { UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { NavigationService } from '@memberjunction/ng-shared';
@@ -28,7 +29,7 @@ import { BatchAction, BatchActionDialogState } from '../JournalEntryBatchDispatc
 import { BatchActionDialogComponent } from '../JournalEntryBatchDispatch/batch-action-dialog/batch-action-dialog.component';
 import { RetryConfirmState } from '../JournalEntryBatchDispatch/retry-confirm-dialog/retry-confirm-dialog.state';
 import { RetryConfirmDialogComponent } from '../JournalEntryBatchDispatch/retry-confirm-dialog/retry-confirm-dialog.component';
-import { CompanyApprovers, IsErpAcceptedFailedBatch, LoadCompanyApprovers, MayArchiveBatch, MayCancelApprovedBatch, MayCancelPendingBatch, MayDecideBatch } from '../JournalEntryBatchDispatch/batch-action-permission';
+import { CompanyApprovers, IsErpAcceptedFailedBatch, MayArchiveBatch, MayCancelApprovedBatch, MayCancelPendingBatch, MayDecideBatch } from '../JournalEntryBatchDispatch/batch-action-permission';
 
 /**
  * The batch fields this page reads, PICKED from the generated entity class rather than
@@ -70,6 +71,9 @@ interface StageCount {
 }
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
+
+/** The company-profile fields the Build dialog and the Archive rule read. */
+type CompanyProfileRow = { ID: string; Name?: string | null; ApprovalCFOUserID?: string | null };
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
 /**
@@ -335,7 +339,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                 ValueField="Value"
                                 [ValuePrimitive]="true"
                                 [(ngModel)]="BuildCompanyID"
-                                (ngModelChange)="OnBuildPreviewFilterChange()"
+                                (ngModelChange)="OnBuildCompanyChange()"
                                 Placeholder="Choose a company…"
                                 aria-label="Company">
                             </mj-dropdown>
@@ -1351,7 +1355,8 @@ export class AccountingBatchesPageComponent implements OnInit {
 
     /**
      * Whether the signed-in user holds the batch-operator Authorization (the Finance role) that Build
-     * and Archive require on the server (#448). The server stays the authority.
+     * requires on the server (#448), and that also lets a user archive a Pending batch (golive #325).
+     * The server stays the authority.
      */
     public get MayOperateBatches(): boolean {
         return UserCanOperateJournalEntryBatches(Metadata.Provider?.CurrentUser, Metadata.Provider?.Authorizations);
@@ -1511,29 +1516,14 @@ export class AccountingBatchesPageComponent implements OnInit {
                     ResultType: 'simple',
                     MaxRows: 1,
                 }),
-                rv.RunView<{ ID: string; Name?: string | null; ApprovalCFOUserID?: string | null }>({
+                rv.RunView<CompanyProfileRow>({
                     EntityName: 'MJ_BizApps_Accounting: Accounting Company Profiles',
                     Fields: ['ID', 'Name', 'ApprovalCFOUserID'],
                     OrderBy: 'Name ASC',
                     ResultType: 'simple',
                 }),
             ]);
-            const approvers = new Map<string, string>();
-            if (profileRes.Success) {
-                for (const p of profileRes.Results ?? []) {
-                    if (p.ApprovalCFOUserID) approvers.set(p.ID.trim().toLowerCase(), p.ApprovalCFOUserID);
-                }
-                this.CompanyOptions = (profileRes.Results ?? []).map(p => ({
-                    Label: p.Name?.trim() || p.ID,
-                    Value: p.ID,
-                }));
-                if (this.CompanyOptions.length === 1 && !this.BuildCompanyID) {
-                    this.BuildCompanyID = this.CompanyOptions[0].Value;
-                }
-            } else {
-                this.CompanyOptions = [];
-            }
-            this.companyApprovers = approvers;
+            this.applyCompanyProfiles(profileRes.Success ? profileRes.Results ?? [] : []);
 
             if (batchRes.Success && batchRes.Results) {
                 this.Batches = batchRes.Results;
@@ -1549,6 +1539,19 @@ export class AccountingBatchesPageComponent implements OnInit {
         } finally {
             this.IsLoading = false;
             this.cdr.markForCheck();
+        }
+    }
+
+    /** The Build dialog's company choices and each company's approver, from one read of the profiles (#366, golive #325). */
+    private applyCompanyProfiles(profiles: readonly CompanyProfileRow[]): void {
+        const approvers = new Map<string, string>();
+        for (const p of profiles) {
+            if (p.ApprovalCFOUserID) approvers.set(NormalizeUUID(p.ID), p.ApprovalCFOUserID);
+        }
+        this.companyApprovers = approvers;
+        this.CompanyOptions = profiles.map(p => ({ Label: p.Name?.trim() || p.ID, Value: p.ID }));
+        if (this.CompanyOptions.length === 1 && !this.BuildCompanyID) {
+            this.BuildCompanyID = this.CompanyOptions[0].Value;
         }
     }
 
@@ -1751,6 +1754,15 @@ export class AccountingBatchesPageComponent implements OnInit {
         await this.LoadBuildPreview();
     }
 
+    /**
+     * A new company swaps the whole candidate pool, so a hand-ticked set from the old company would
+     * leave nothing included. Start from every entry, as opening the dialog does.
+     */
+    public async OnBuildCompanyChange(): Promise<void> {
+        this.Selection = ALL_ENTRIES;
+        await this.LoadBuildPreview();
+    }
+
     public async LoadBuildPreview(): Promise<void> {
         const seq = ++this.previewRequestSeq;
         this.IsPreviewLoading = true;
@@ -1831,8 +1843,9 @@ export class AccountingBatchesPageComponent implements OnInit {
             // Build EXACTLY the ticked set. Source='Explicit' re-validates server-side that every
             // id is still Pending and loud-rejects a stale selection — the preview is a snapshot.
             // With nothing unticked this is the same set the criteria sweep would have taken.
+            // No CompanyID: an Explicit build groups the ids by each entry's own company, and the
+            // preview already limited them to the chosen one.
             const buildRes = await this.dispatchClient.BuildJournalEntryBatch({
-                CompanyID: this.BuildCompanyID,
                 TargetSystem: this.BuildTarget,
                 Cutoff: this.BuildCutoffDate || null,
                 PostingDate: this.BuildPostingDate || null,

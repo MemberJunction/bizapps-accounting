@@ -241,10 +241,10 @@ export class JournalEntryBatchPostingDateError extends Error {
   }
 }
 
-const IN_CLAUSE_CHUNK_SIZE = 500;
+export const IN_CLAUSE_CHUNK_SIZE = 500;
 
 /** Split `items` into chunks of at most `size` so SQL `IN (...)` clauses and `RunView` row caps stay bounded (#488). */
-function chunkArray<T>(items: readonly T[], size = IN_CLAUSE_CHUNK_SIZE): T[][] {
+export function chunkArray<T>(items: readonly T[], size = IN_CLAUSE_CHUNK_SIZE): T[][] {
   const chunks: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
     chunks.push(items.slice(i, i + size));
@@ -1091,8 +1091,9 @@ export interface JournalEntryBatchCancelGate {
   assertMayCancelPending(batchId: string, contextUser: UserInfo): Promise<void>;
   assertMayCancelApproved(batchId: string, contextUser: UserInfo): Promise<void>;
   /**
-   * Throw unless the user may archive the batch (#448): before approval only the company's CFO; past
-   * approval the CFO or the batch's approver, as for a cancel.
+   * Throw unless the user may archive the batch (#448, golive #325): before approval the company's CFO
+   * or a holder of the batch-operator Authorization; past approval the CFO or the batch's approver, as
+   * for a cancel.
    */
   assertMayArchive(batchId: string, contextUser: UserInfo): Promise<void>;
   recordCancellation(batchId: string, cancellation: RecordedCancellation, contextUser: UserInfo): Promise<void>;

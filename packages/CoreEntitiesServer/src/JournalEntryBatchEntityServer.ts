@@ -42,6 +42,7 @@ import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 import { JournalEntryBatchDispatchServices } from './JournalEntryBatchDispatchServices.js';
 import {
   checkFailedBatchBeforeCancel,
+  chunkArray,
   JournalEntryBatchMismatchDuringCancelError,
   JournalEntryBatchPostedDuringCancelError,
   recordFailedBatchPosted,
@@ -635,8 +636,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     if (lines.length === 0) return { lines, dimensions: [] };
 
     const dimensions: SummaryLineDimensionContent[] = [];
-    for (let i = 0; i < lines.length; i += 500) {
-      const chunk = lines.slice(i, i + 500);
+    for (const chunk of chunkArray(lines)) {
       const lineIds = chunk.map(l => sqlGuidLiteral(l.ID, 'summary journal entry line')).join(', ');
       const dimRes = await rv.RunView<SummaryLineDimensionContent>(
         { EntityName: JELD_ENTITY, ExtraFilter: `JournalEntryLineID IN (${lineIds})`, Fields: ['JournalEntryLineID', 'DimensionID', 'DimensionValueID'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
@@ -947,10 +947,11 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    * trg_JournalEntry_Immutability's unlock (it sanctions Batched→Pending only while the owning batch
    * is Pending or Cancelled).
    *
-   * Who may archive is checked first, before anything is written (#448): before approval only the
-   * company's configured approver, past approval the configured approver or the batch's approver.
-   * Archiving keeps the member entries out of every future batch for good, so unlike a cancel, which
-   * can be undone by rebuilding, the builder may not archive a Pending batch.
+   * Who may archive is checked first, before anything is written (#448, golive #325): before approval
+   * the company's configured approver or a holder of the batch-operator Authorization (the Finance
+   * role), past approval the configured approver or the batch's approver. Archiving keeps the member
+   * entries out of every future batch for good, so unlike a cancel, which can be undone by rebuilding,
+   * a builder without that Authorization may not archive a Pending batch.
    *
    * The archive is recorded on the batch's approval Task in the same transaction (golive #325):
    * a Pending batch's Task is closed, so the approver is no longer asked to decide on it; past

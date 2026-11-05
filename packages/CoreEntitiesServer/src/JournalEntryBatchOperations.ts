@@ -78,8 +78,9 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 
 /**
  * Refuse a caller who does not hold the batch-operator Authorization (#448), before anything is read.
- * Build, Regenerate, Dispatch and Archive change what reaches the ERP or keep entries out of it for
- * good, so beyond entity permissions they need the Finance role's grant. Checked inside the operation,
+ * Build, Regenerate and Dispatch change what reaches the ERP, so beyond entity permissions they need
+ * the Finance role's grant. Archive does not call this: `Archive()` applies its own rule, which lets the
+ * company's CFO archive without the grant (golive #325). Checked inside the operation,
  * where the request's provider (and its Authorization catalog) is in hand, as ClearFinanceException does.
  * The scheduled build and auto-post call the engine directly, not these operations, so they are unaffected.
  */

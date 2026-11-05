@@ -341,7 +341,8 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
 
   /**
    * Whether the signed-in user holds the batch-operator Authorization (the Finance role) that
-   * Dispatch, Regenerate and Archive require on the server (#448). The server stays the authority.
+   * Dispatch and Regenerate require on the server (#448), and that also lets a user archive a Pending
+   * batch (golive #325). The server stays the authority.
    */
   private mayOperateBatches(): boolean {
     return UserCanOperateJournalEntryBatches(this.contextUser(), this.ProviderToUse.Authorizations);
