@@ -78,8 +78,9 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 
 /**
  * Refuse a caller who does not hold the batch-operator Authorization (#448), before anything is read.
- * Build, Regenerate, Dispatch and Archive change what reaches the ERP or keep entries out of it for
- * good, so beyond entity permissions they need the Finance role's grant. Checked inside the operation,
+ * Build, Regenerate and Dispatch change what reaches the ERP, so beyond entity permissions they need
+ * the Finance role's grant. Archive does not call this: `Archive()` applies its own rule, which lets the
+ * company's CFO archive without the grant (golive #325). Checked inside the operation,
  * where the request's provider (and its Authorization catalog) is in hand, as ClearFinanceException does.
  * The scheduled build and auto-post call the engine directly, not these operations, so they are unaffected.
  */
@@ -441,8 +442,8 @@ export interface ArchiveJournalEntryBatchOutput { Status: string; ArchivedAt: st
  * Archive a batch that must never post to the ERP (golive #214). Terminal, makes NO ERP call, and
  * leaves the member journal entries locked at `Batched` — the opposite of a reject/cancel, which
  * returns them to the candidate pool. The legal-from statuses, the required reason and who may
- * archive (#448) are the entity's invariants (JournalEntryBatchEntityServer.Archive); this operation
- * only marshals.
+ * archive (#448, golive #325) are the entity's invariants (JournalEntryBatchEntityServer.Archive);
+ * this operation only marshals.
  */
 @RegisterClass(BaseRemotableOperation, 'Accounting.ArchiveJournalEntryBatch')
 export class ArchiveJournalEntryBatchOperation extends BaseRemotableOperation<ArchiveJournalEntryBatchInput, ArchiveJournalEntryBatchOutput> {
@@ -450,7 +451,6 @@ export class ArchiveJournalEntryBatchOperation extends BaseRemotableOperation<Ar
   public readonly RequiredScope = 'accounting:write';
 
   protected async InternalExecute(input: ArchiveJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<ArchiveJournalEntryBatchOutput> {
-    requireBatchOperator(user, provider, 'ArchiveJournalEntryBatch');
     if (!input?.JournalEntryBatchID) throw new Error('The batch was not archived: no batch was given.');
     requireSqlGuid(input.JournalEntryBatchID, 'ArchiveJournalEntryBatch');
     if (!input?.Reason?.trim()) throw new Error('The batch was not archived: a reason is required, because it is the only record of why this batch will never post.');

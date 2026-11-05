@@ -160,18 +160,20 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   back what it loaded passes. The fields stay `AllowUpdateAPI = 1` on purpose: MJ leaves a field with it
   off out of the create and update procedures, so the server's own stamps would not persist either.
 - **`JournalEntryBatchEntityServer.Archive()` authorizes itself (#448)** through the resolved cancel gate's
-  `assertMayArchive`, before anything is written and before the status checks (whose messages name the ERP's reference): before approval only the company's `ApprovalCFOUserID`
-  (the builder may cancel a Pending batch but not archive it, since an archive cannot be undone), past
-  approval the CFO or the batch's approver (who must then have a linked Person). The batch pages show
-  Archive only to those users (`MayArchiveBatch`).
-- **Build, Regenerate, Dispatch and Archive require the Finance role (#448).** Each of the four Remote
+  `assertMayArchive`, before anything is written and before the status checks (whose messages name the ERP's reference): before approval the company's `ApprovalCFOUserID` or a holder
+  of the batch-operator Authorization (the Finance role; a builder without it may cancel a Pending batch but
+  not archive it, since an archive cannot be undone), past approval the CFO or the batch's approver (who must
+  then have a linked Person), with no Authorization required (golive #325). The batch pages show Archive
+  only to those users (`MayArchiveBatch`).
+- **Build, Regenerate and Dispatch require the Finance role (#448).** Each of the three Remote
   Operations first checks the `MJ.BizApps.Accounting.JournalEntryBatches.Operate` Authorization, granted to
   the Finance role in `metadata/authorizations/` and `metadata/authorization-roles/`, through
   `UserCanOperateJournalEntryBatches` (accounting-engine-base, shared with the pages), before reading anything.
   It fails closed: an Authorization missing from the catalog is held by nobody. The scheduled build and
   auto-post (`Accounting.BuildJournalEntryBatches`) call the engine directly as the system user, not these
-  operations, so they are unaffected. The batch pages hide Dispatch, Regenerate, Archive, Build and Retry
-  from users without the grant.
+  operations, so they are unaffected. The batch pages hide Dispatch, Regenerate, Build and Retry
+  from users without the grant. Archive is not one of these operations: `Archive()` applies its own rule
+  above, so the CFO may archive without the grant (golive #325).
 - **`TasksAppApprovalGate.assertApproved` re-checks who approved (#446).** Besides a terminal approval on
   the stamped Task, the batch must record an approver (written only by `Approve()`) who is not its builder,
   and the approval must not be attributed to anyone else: Task Decisions are writable through the tasks
