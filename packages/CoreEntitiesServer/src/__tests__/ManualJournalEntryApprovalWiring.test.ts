@@ -383,3 +383,57 @@ describe('the dimension-tag guard (not blocking finding)', () => {
     expect(d.SavingThroughLine).toBe(false);
   });
 });
+
+/** Reads the re-date allowance (golive #448) the way a rule inside the entity would. */
+class RedateProbe extends JournalEntryEntityServer {
+  public get Allowed(): boolean {
+    return this.EffectiveDateChangeAllowed;
+  }
+}
+
+function savedProbe(header: Record<string, unknown> = {}): RedateProbe {
+  const je = new RedateProbe(jeInfo);
+  je.ContextCurrentUser = user;
+  je.SetMany({
+    ID: JE_ID, CompanyID: 'CO-1', EffectiveDate: new Date('2026-11-02T00:00:00Z'), EntryTypeID: 'JET_MANUAL', Status: 'Pending',
+    EntryNumber: 'JE-9', Description: 'Wire', JournalEntryBatchID: null, LinkedEntityID: null, LinkedRecordID: null,
+    ApprovalLevel: null, ApprovalRequestedByUserID: null, ApprovalTaskID: null, ApprovedAt: null, ApprovedByUserID: null,
+    ...header,
+  }, true, true);
+  const lines = [line('aaaaaaaa-0000-4000-8000-000000000001', GL_A, 45000, null), line('aaaaaaaa-0000-4000-8000-000000000002', GL_B, null, 45000)];
+  je.Lines.SetLoadedItems(lines);
+  for (const l of lines) l.ParentJournalEntry = je;
+  return je;
+}
+
+describe('SaveRedatedEffectiveDate — the one save that may move a saved entry (golive #448)', () => {
+  it('writes the new day with the allowance open during the save, and closes it after', async () => {
+    const je = savedProbe();
+    let allowedDuringSave: boolean | null = null;
+    vi.mocked(BaseEntity.prototype.Save).mockImplementation(async function (this: BaseEntity) {
+      allowedDuringSave = (this as RedateProbe).Allowed;
+      writes.push({ row: this.GetAll(), ok: true, errors: [] });
+      return true;
+    });
+    expect(await je.SaveRedatedEffectiveDate('2026-10-30')).toBe(true);
+    expect(allowedDuringSave).toBe(true);
+    expect((writes[0].row.EffectiveDate as Date).toISOString()).toBe('2026-10-30T00:00:00.000Z');
+    expect(je.Allowed).toBe(false);
+  });
+
+  it('is closed to an ordinary save that changes the date', () => {
+    const je = savedProbe();
+    je.EffectiveDate = new Date('2026-10-30T00:00:00Z');
+    expect(je.Allowed).toBe(false);
+  });
+
+  it.each([
+    ['Batched', { Status: 'Batched', JournalEntryBatchID: 'bbbbbbbb-0000-4000-8000-000000000001' }, /in a batch/],
+    ['GLPosted', { Status: 'GLPosted' }, /is GLPosted/],
+    ['in a batch but still Pending', { JournalEntryBatchID: 'bbbbbbbb-0000-4000-8000-000000000001' }, /in a batch/],
+  ])('refuses an entry that is %s, writing nothing', async (_label, header, message) => {
+    const je = savedProbe(header);
+    await expect(je.SaveRedatedEffectiveDate('2026-10-30')).rejects.toThrow(message);
+    expect(writes).toHaveLength(0);
+  });
+});

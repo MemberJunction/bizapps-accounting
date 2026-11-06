@@ -73,6 +73,21 @@ export interface BatchPreview {
   OutOfOrderSkipCount: number;
   /** Entries dated before their company's posting start date: held back, and left Pending, by every build. */
   BeforePostingStartCount: number;
+  /** Entries dated after the posting date (golive #448): held back until a batch posts on or after their date. */
+  AfterPostingDateCount: number;
+  /** The oldest of those (the server lists at most 50), each with the reason it is held back. */
+  AfterPostingDateEntries: HeldBackEntry[];
+}
+
+/** An entry the preview reports as held back, and why. */
+export interface HeldBackEntry {
+  ID: string;
+  EntryNumber: string;
+  EffectiveDate: string;
+  EntryTypeCode: string;
+  CompanyID: string;
+  Description: string | null;
+  Reason: string;
 }
 
 export interface BuildOutcome {

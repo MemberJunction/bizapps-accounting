@@ -473,23 +473,39 @@ export function IsAwaitingManualApproval(row: { ApprovalLevel?: string | null; A
 }
 
 /**
- * The candidate filter in three parts: `criteria` (status, type, date window, scope),
- * `postingStart` (one clause per company whose PostingStartDate is later than the per-call
- * startDate) and `approval` (manual entries awaiting approval stay out, golive #353). The preview
- * counts what the second and third parts remove.
+ * The candidate filter's parts: `criteria` (status, type, date window, scope), `postingStart` (one
+ * clause per company whose PostingStartDate is later than the per-call startDate) and `approval`
+ * (manual entries awaiting approval stay out, golive #353). The preview counts what the second and
+ * third parts remove. `afterPostingDate` is the criteria with the posting date's upper bound
+ * swapped for "after the posting date" (still inside any later cutoff), or null when the cutoff is
+ * the tighter bound: the preview lists what the posting date alone holds back (golive #448).
  */
+interface CandidateFilterParts {
+  criteria: string[];
+  postingStart: string[];
+  approval: string[];
+  afterPostingDate: string[] | null;
+  postingDay: CalendarDay;
+}
+
 async function candidateFilterParts(
   options: BuildJournalEntryBatchOptions,
   contextUser: UserInfo,
   p: Providers,
-): Promise<{ criteria: string[]; postingStart: string[]; approval: string[] }> {
+): Promise<CandidateFilterParts> {
   // The start day is resolved once and shared by both halves: a date-time StartDate names its
   // BUSINESS day, and the PostingStartDate comparison must use that same day, not the instant's UTC day.
   const startDay = options.startDate
     ? await loadBoundDay(options.startDate, 'Batch criteria StartDate', contextUser, p.md, scopeCompanyId(options))
     : null;
-  const [criteria, floors] = await Promise.all([criteriaClauses(options, startDay, contextUser, p), loadPostingStartDates(contextUser, p)]);
-  return { criteria, postingStart: postingStartClauses(floors, startDay), approval: [APPROVED_OR_NO_APPROVAL_NEEDED_CLAUSE] };
+  const [window, floors] = await Promise.all([criteriaClauses(options, startDay, contextUser, p), loadPostingStartDates(contextUser, p)]);
+  return {
+    criteria: window.criteria,
+    postingStart: postingStartClauses(floors, startDay),
+    approval: [APPROVED_OR_NO_APPROVAL_NEEDED_CLAUSE],
+    afterPostingDate: window.afterPostingDate,
+    postingDay: window.postingDay,
+  };
 }
 
 /** With exactly one company in scope its zone applies once the engine carries per-company zones;
@@ -503,18 +519,29 @@ async function criteriaClauses(
   startDay: string | null,
   contextUser: UserInfo,
   p: Providers,
-): Promise<string[]> {
+): Promise<{ criteria: string[]; afterPostingDate: string[] | null; postingDay: CalendarDay }> {
   const summaryType = await GetJournalEntryBatchSummaryEntryType(contextUser, p.md);
-  const clauses = [`Status='Pending'`, `EntryTypeID<>'${summaryType.ID}'`];
-  if (startDay) clauses.push(`EffectiveDate >= '${startDay}'`);
+  const base = [`Status='Pending'`, `EntryTypeID<>'${summaryType.ID}'`];
+  if (startDay) base.push(`EffectiveDate >= '${startDay}'`);
   // The pool ends at the earlier of the cutoff and the posting date: an entry dated after the posting
   // date would reach the ERP before it happened (golive #315), so it waits for a later batch.
   const postingDay = await loadPostingDay(options.postingDate, contextUser, p.md, scopeCompanyId(options));
   const cutoffDay = options.cutoff ? await loadBoundDay(options.cutoff, 'Batch criteria Cutoff', contextUser, p.md, scopeCompanyId(options)) : null;
-  const throughDay = cutoffDay && IsBeforeDay(cutoffDay, postingDay) ? cutoffDay : postingDay;
-  clauses.push(`EffectiveDate < '${AddDays(throughDay, 1)}'`); // inclusive whole day
-  // Empty/omitted scope = NO clause (all companies / all types) — never `IN ()`, which is a SQL
-  // syntax error AND would silently mean "nothing".
+  const cutoffIsTighter = !!cutoffDay && !IsBeforeDay(postingDay, cutoffDay);
+  const throughDay = cutoffIsTighter && cutoffDay ? cutoffDay : postingDay;
+  const scope = await scopeClauses(options, contextUser, p);
+  const criteria = [...base, `EffectiveDate < '${AddDays(throughDay, 1)}'`, ...scope]; // inclusive whole day
+  // What the posting date alone holds back: after it, and still on or before a later cutoff.
+  const afterPostingDate = cutoffIsTighter
+    ? null
+    : [...base, `EffectiveDate >= '${AddDays(postingDay, 1)}'`, ...(cutoffDay ? [`EffectiveDate < '${AddDays(cutoffDay, 1)}'`] : []), ...scope];
+  return { criteria, afterPostingDate, postingDay };
+}
+
+/** Company and entry-type scope. Empty/omitted scope = NO clause (all companies / all types) — never
+ *  `IN ()`, which is a SQL syntax error AND would silently mean "nothing". */
+async function scopeClauses(options: BuildJournalEntryBatchOptions, contextUser: UserInfo, p: Providers): Promise<string[]> {
+  const clauses: string[] = [];
   if (options.companyIds?.length) {
     clauses.push(`CompanyID IN (${options.companyIds.map(sqlGuid).join(',')})`);
   }
@@ -2145,6 +2172,37 @@ export interface JournalEntryBatchPreviewResult {
    * awaiting approval (golive #353). They are not in `Candidates` and no build takes them.
    */
   AwaitingApprovalCount: number;
+  /**
+   * How many entries matching the other criteria were left out because they are dated after the
+   * batch's posting date (golive #448): they would reach the ERP before they happened, so they wait
+   * for a batch posted on or after their own date. Entries a cutoff already leaves out are not counted.
+   */
+  AfterPostingDateCount: number;
+  /**
+   * The oldest of those entries (at most {@link AFTER_POSTING_DATE_LIST_LIMIT}), each with the reason
+   * it is held back. The oldest are listed because they are the ones just past the posting date: the
+   * late-entered payment, not next year's recognition schedule.
+   */
+  AfterPostingDateEntries: JournalEntryBatchHeldBackEntry[];
+}
+
+/** An entry the preview reports as held back, and why. */
+export interface JournalEntryBatchHeldBackEntry {
+  ID: string;
+  EntryNumber: string;
+  EffectiveDate: Date;
+  EntryTypeCode: string;
+  CompanyID: string;
+  Description: string | null;
+  Reason: string;
+}
+
+/** How many held-back entries dated after the posting date the preview lists by name. */
+export const AFTER_POSTING_DATE_LIST_LIMIT = 50;
+
+/** Why an entry dated `effectiveDay` is not in a batch posted on `postingDay` — pure. */
+export function AfterPostingDateReason(effectiveDay: string, postingDay: string): string {
+  return `Dated ${effectiveDay}, after the posting date ${postingDay}: it waits for a batch posted on or after ${effectiveDay}.`;
 }
 
 /**
@@ -2282,6 +2340,51 @@ export async function previewBatch(
     OutOfOrderSkipCount: outOfOrderSkipCount(rows, included),
     BeforePostingStartCount: await countBeforePostingStart(filter, contextUser, p),
     AwaitingApprovalCount: matching.length - rows.length,
+    ...(await loadAfterPostingDate(filter, codeByTypeId, contextUser, p)),
+  };
+}
+
+/**
+ * Entries the posting date alone holds back (golive #448): the other criteria, the posting start
+ * floors and the approval rule admit them, but they are dated after the posting date. One read of
+ * the oldest {@link AFTER_POSTING_DATE_LIST_LIMIT}, which also carries the full count; no read at all
+ * when a cutoff on or before the posting date is the tighter bound.
+ */
+async function loadAfterPostingDate(
+  filter: CandidateFilterParts,
+  codeByTypeId: Map<string, string>,
+  contextUser: UserInfo,
+  p: Providers,
+): Promise<{ AfterPostingDateCount: number; AfterPostingDateEntries: JournalEntryBatchHeldBackEntry[] }> {
+  if (!filter.afterPostingDate) return { AfterPostingDateCount: 0, AfterPostingDateEntries: [] };
+  // One read: with MaxRows set, the provider counts every match into TotalRowCount when the page fills.
+  const list = await p.rv.RunView<{ ID: string; EntryNumber: string; EffectiveDate: string; EntryTypeID: string; CompanyID: string; Description: string | null }>(
+    {
+      EntityName: JE_ENTITY,
+      ExtraFilter: [...filter.afterPostingDate, ...filter.postingStart, ...filter.approval].join(' AND '),
+      OrderBy: 'EffectiveDate ASC, EntryNumber ASC',
+      Fields: ['ID', 'EntryNumber', 'EffectiveDate', 'EntryTypeID', 'CompanyID', 'Description'],
+      MaxRows: AFTER_POSTING_DATE_LIST_LIMIT,
+      ResultType: 'simple',
+      BypassCache: true,
+    },
+    contextUser,
+  );
+  if (!list.Success) {
+    throw new Error(`Could not load the entries dated after the posting date for the batch preview: ${list.ErrorMessage ?? 'unknown error'}`);
+  }
+  const rows = list.Results ?? [];
+  return {
+    AfterPostingDateCount: Math.max(list.TotalRowCount ?? 0, rows.length),
+    AfterPostingDateEntries: rows.slice(0, AFTER_POSTING_DATE_LIST_LIMIT).map(r => ({
+      ID: r.ID,
+      EntryNumber: r.EntryNumber,
+      EffectiveDate: new Date(r.EffectiveDate),
+      EntryTypeCode: codeByTypeId.get(r.EntryTypeID?.toLowerCase()) ?? '',
+      CompanyID: r.CompanyID,
+      Description: r.Description,
+      Reason: AfterPostingDateReason(ToCalendarDay(r.EffectiveDate) ?? String(r.EffectiveDate), filter.postingDay),
+    })),
   };
 }
 
