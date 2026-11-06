@@ -1,5 +1,13 @@
 # @mj-biz-apps/accounting-ng
 
+## 0.25.1
+
+### Patch Changes
+
+- a2783f1: Uncap journal entry batch `RunView` reads and chunk `IN` clauses for >1,000 entries, require single-company selection in the Build Batch dialog, restore Archive permissions for the company approver and Finance on Pending batches, remove email addresses from person-link approval gate errors, and compact the Batches overview action column at 1024px viewports.
+  - @mj-biz-apps/accounting-engine-base@0.25.1
+  - @mj-biz-apps/accounting-entities@0.25.1
+
 ## 0.25.0
 
 ### Patch Changes
