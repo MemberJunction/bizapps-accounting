@@ -32,3 +32,39 @@ export function ClosedBooksPostingDateProblem(postingDate: string, closedThrough
   return `The posting date ${postingDate} is in a month finance has closed: the books are closed through ${closedThrough}. ` +
     `Choose ${FirstOpenDay(closedThrough)} or later, or ask finance to reopen the month.`;
 }
+
+// ─── closing and reopening a month (bc-aidp-next-golive#447) ─────────────────
+
+/** The last day of the month `offset` months from the month `day` falls in. */
+function monthEnd(day: string, offset: number): string {
+  const m = CALENDAR_DAY.exec(day);
+  if (!m) throw new Error(`monthEnd: '${day}' is not a YYYY-MM-DD calendar day`);
+  // Day 0 of the following month is the last day of the target month.
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) + offset, 0)).toISOString().slice(0, 10);
+}
+
+/**
+ * The date that closing one more month sets BooksClosedThroughDate to: the end of the first month
+ * not yet closed, which is the month the first open day falls in. With nothing closed it is the end
+ * of the month before `today`'s, the latest month that has finished. A date left mid-month by hand
+ * closes the rest of that month.
+ */
+export function CloseMonthThrough(closedThrough: string | null | undefined, today: string): string {
+  return closedThrough ? monthEnd(FirstOpenDay(closedThrough), 0) : monthEnd(today, -1);
+}
+
+/**
+ * The date that reopening the latest closed month sets BooksClosedThroughDate to: the end of the
+ * month before the one `closedThrough` falls in.
+ */
+export function ReopenMonthThrough(closedThrough: string): string {
+  return monthEnd(closedThrough, -1);
+}
+
+/**
+ * True when the month that closing would close has finished by `today`: its last day is before
+ * today. A month still under way cannot be closed, because entries are still being dated into it.
+ */
+export function CanCloseMonth(closedThrough: string | null | undefined, today: string): boolean {
+  return CloseMonthThrough(closedThrough, today) < today;
+}

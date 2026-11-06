@@ -11,10 +11,8 @@
  */
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { AuthorizationEvaluator, EntityInfo, type IMetadataProvider, type UserInfo } from '@memberjunction/core';
-import {
-  AccountingCompanyProfileEntityServer,
-  BOOKS_CLOSED_THROUGH_SET_AUTH,
-} from '../AccountingCompanyProfileEntityServer.js';
+import { BOOKS_CLOSED_THROUGH_SET_AUTH } from '@mj-biz-apps/accounting-engine-base';
+import { AccountingCompanyProfileEntityServer } from '../AccountingCompanyProfileEntityServer.js';
 import {
   buildJournalEntryBatch,
   buildJournalEntryBatchFromExplicitIds,

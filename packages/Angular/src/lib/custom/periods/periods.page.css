@@ -1,0 +1,151 @@
+:host {
+  display: block;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--mj-bg-surface);
+}
+
+.mja-periods {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mj-space-4, 16px);
+  padding: var(--mj-space-4, 16px);
+}
+
+.mja-periods-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--mj-space-3, 12px);
+}
+
+.mja-periods-title {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--mj-text-primary);
+}
+
+.mja-periods-sub {
+  margin: 4px 0 0;
+  max-width: 70ch;
+  color: var(--mj-text-secondary);
+}
+
+.mja-periods-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--mj-space-2, 8px);
+  padding: var(--mj-space-2, 8px) var(--mj-space-3, 12px);
+  border: 1px solid var(--mj-border-default);
+  border-radius: var(--mj-radius-md, 8px);
+  background: var(--mj-bg-surface-card);
+  color: var(--mj-text-primary);
+}
+
+.mja-periods-banner--error {
+  border-color: var(--mj-status-error-border);
+  color: var(--mj-status-error-text);
+}
+
+.mja-periods-banner-close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.mja-periods-error {
+  color: var(--mj-status-error-text);
+}
+
+.mja-periods-empty {
+  color: var(--mj-text-muted);
+}
+
+.mja-periods-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--mj-border-default);
+  background: var(--mj-bg-surface-card);
+}
+
+.mja-periods-table th,
+.mja-periods-table td {
+  padding: var(--mj-space-3, 12px);
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--mj-border-subtle);
+}
+
+.mja-periods-table th {
+  color: var(--mj-text-secondary);
+  font-weight: var(--mj-font-bold, 600);
+}
+
+.mja-periods-name,
+.mja-periods-date {
+  display: block;
+  color: var(--mj-text-primary);
+  font-weight: var(--mj-font-bold, 600);
+}
+
+.mja-periods-date {
+  font-family: var(--mj-font-family-mono);
+}
+
+.mja-periods-note {
+  display: block;
+  margin-top: 2px;
+  color: var(--mj-text-muted);
+  font-size: var(--mj-text-xs, 0.8rem);
+}
+
+.mja-periods-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--mj-brand-primary);
+  cursor: pointer;
+}
+
+.mja-periods-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mj-space-2, 8px);
+  margin-top: var(--mj-space-2, 8px);
+}
+
+.mja-periods-edit-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--mj-text-secondary);
+}
+
+.mja-periods-input {
+  max-width: 12rem;
+  padding: 4px 8px;
+  border: 1px solid var(--mj-border-default);
+  border-radius: var(--mj-radius-md, 8px);
+  background: var(--mj-bg-surface);
+  color: var(--mj-text-primary);
+}
+
+.mja-periods-confirm-text {
+  margin: 0;
+  color: var(--mj-text-primary);
+}
+
+@media (max-width: 640px) {
+  .mja-periods-table thead {
+    display: none;
+  }
+
+  .mja-periods-table tr,
+  .mja-periods-company,
+  .mja-periods-closed,
+  .mja-periods-start {
+    display: block;
+  }
+}
