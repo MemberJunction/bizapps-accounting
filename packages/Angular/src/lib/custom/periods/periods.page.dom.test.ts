@@ -55,7 +55,7 @@ function signInHolding(held: string[]): void {
 }
 
 function previewAnswer(count: number): PreviewJournalEntryBatchResult {
-  return { Success: true, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: count };
+  return { Success: true, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: count, AfterPostingDateCount: 0, AfterPostingDateEntries: [] };
 }
 
 describe('PeriodsPageComponent (DOM)', () => {
