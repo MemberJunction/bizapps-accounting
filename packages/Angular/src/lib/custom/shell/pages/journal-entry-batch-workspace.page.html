@@ -282,6 +282,7 @@
               </th>
               <th>Entry №</th>
               <th>Date</th>
+              <th>Source</th>
               <th>Memo</th>
               <th>Company</th>
               <th class="bw-num">Amount</th>
@@ -303,6 +304,13 @@
                 <td class="bw-mono">{{ e.EntryNumber }}</td>
                 <!-- DATE column (no zone) — render UTC or it shifts a day for any user west of UTC. -->
                 <td>{{ e.EffectiveDate | date: 'yyyy-MM-dd' : 'UTC' }}</td>
+                <td class="bw-source">
+                  @if (SourceOf(e.ID); as src) {
+                    <button type="button" class="bw-source-link" (click)="OpenSource(src)" [title]="'Open the ' + src.EntityLabel + ' record that created this entry'">{{ SourceText(src) }}</button>
+                  } @else if (!e.LinkedEntity) {
+                    <span class="bw-source-none" title="Manual entry — no source record">Manual</span>
+                  }
+                </td>
                 <td>{{ e.Description || '—' }}</td>
                 <td>{{ CompanyName(e.CompanyID) }}</td>
                 <td class="bw-num">{{ e.Amount | currency }}</td>
@@ -310,7 +318,7 @@
               </tr>
             } @empty {
               <tr>
-                <td colspan="7" class="bw-empty">Nothing matches these criteria.</td>
+                <td colspan="8" class="bw-empty">Nothing matches these criteria.</td>
               </tr>
             }
           </tbody>
