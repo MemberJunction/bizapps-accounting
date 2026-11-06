@@ -56,6 +56,9 @@ company.
 **Validates (bc-aidp-next-golive#316):** setting, moving or clearing `BooksClosedThroughDate` is
 refused unless the saving user holds `MJ.BizApps.Accounting.BooksClosedThroughDate.Set` (the Finance
 role). An authorization missing from the catalog is held by nobody. Other edits are not checked.
+**Validates (bc-aidp-next-golive#447):** the same rule for `PostingStartDate`, behind its own
+authorization, `MJ.BizApps.Accounting.PostingStartDate.Set` (the Finance role). Both checks share
+`profile-date-authorizations.ts` in the engine base with the Periods page, which hides the buttons.
 - *(The profile's 5 default GL-account refs were RETIRED 2026-07-23 — role/link model replaces them.)*
 - *(Period generation was REMOVED 2026-07-06 — no `AccountingPeriod` rows exist to create.)*
 

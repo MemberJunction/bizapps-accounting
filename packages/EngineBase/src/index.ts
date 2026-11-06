@@ -11,3 +11,4 @@ export * from './erp-sync-contract.js';
 export * from './fiscal-year.js';
 export * from './books-closed.js';
 export * from './batch-operator.js';
+export * from './profile-date-authorizations.js';
