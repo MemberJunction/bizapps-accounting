@@ -236,8 +236,8 @@ describe('previewBatch — uncapped reads and chunked IN clauses for >1,000 entr
             dimsByLine.set(drId, [{ JournalEntryLineID: drId, DimensionID: DIM_ID, DimensionValueID: DIM_VAL_ID }]);
         }
 
-        const calls: Array<{ EntityName?: string; ExtraFilter?: string; IgnoreMaxRows?: boolean; ResultType?: string }> = [];
-        const runView = async (params: { EntityName?: string; ExtraFilter?: string; IgnoreMaxRows?: boolean; ResultType?: string }) => {
+        const calls: Array<{ EntityName?: string; ExtraFilter?: string; IgnoreMaxRows?: boolean; MaxRows?: number; ResultType?: string }> = [];
+        const runView = async (params: { EntityName?: string; ExtraFilter?: string; IgnoreMaxRows?: boolean; MaxRows?: number; ResultType?: string }) => {
             calls.push(params);
             const filter = params.ExtraFilter ?? '';
             if (params.EntityName === 'MJ_BizApps_Accounting: Journal Entry Types') {
@@ -298,7 +298,9 @@ describe('previewBatch — uncapped reads and chunked IN clauses for >1,000 entr
         expect(preview.GrossDebits).toBe(12000);
         expect(preview.GrossCredits).toBe(12000);
 
-        const rowCalls = calls.filter(c => c.ResultType !== 'count_only' && c.EntityName !== 'MJ_BizApps_Accounting: Journal Entry Types');
+        // A read with its own MaxRows is capped on purpose: the list of entries held back by the posting
+        // date names the oldest few and takes the full count from TotalRowCount (golive #448).
+        const rowCalls = calls.filter(c => c.ResultType !== 'count_only' && !c.MaxRows && c.EntityName !== 'MJ_BizApps_Accounting: Journal Entry Types');
         expect(rowCalls.every(c => c.IgnoreMaxRows === true)).toBe(true);
     });
 });
