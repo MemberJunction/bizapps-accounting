@@ -1,7 +1,12 @@
 <section class="erp-sync">
   <header class="erp-sync__head">
-    <h3>Master data pull</h3>
-    <p>Chart of accounts, dimensions, and dimension values. Posting a journal batch is a separate verb.</p>
+    <h3>Pull accounts and dimensions from the ERP</h3>
+    <p>Brings the chart of accounts, dimensions and dimension values into Accounting. It does not send journal entry batches.</p>
+    <!-- golive #451: finance ran this expecting an approved batch to post. Posting is on the Batches page. -->
+    <p class="erp-sync__posting">
+      <i class="fa-solid fa-paper-plane" aria-hidden="true"></i>
+      To post approved batches to the ERP, open <strong>Batches</strong> in the Accounting app and use <strong>Send approved batches</strong>, or a batch's Dispatch button.
+    </p>
   </header>
   <div class="erp-sync__objects">
     <label><input type="checkbox" [(ngModel)]="WantAccounts" /> Accounts</label>
@@ -10,11 +15,11 @@
   </div>
   <div class="erp-sync__actions">
     <button mjButton variant="primary" type="button" [disabled]="Running" (click)="OnRun()">
-      @if (Running) { Syncing… } @else { Run ERP sync }
+      @if (Running) { Pulling… } @else { Pull accounts and dimensions from ERP }
     </button>
   </div>
   @if (Running) {
-    <mj-loading text="Syncing credentialed companies…"></mj-loading>
+    <mj-loading text="Pulling accounts and dimensions from each connected company…"></mj-loading>
   }
   @if (Results.length > 0) {
     <ul class="erp-sync__results">
