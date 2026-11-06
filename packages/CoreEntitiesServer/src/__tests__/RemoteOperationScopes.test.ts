@@ -53,6 +53,7 @@ function serverScopes(): Map<string, string | undefined> {
  * key holding accounting:write does not have, so a key that only books entries cannot dispatch (#329).
  */
 const ERP_OPERATIONS = [
+    'Accounting.DispatchApprovedJournalEntryBatches',
     'Accounting.DispatchJournalEntryBatch',
     'Accounting.ResumeJournalEntryBatchPosting',
     'Accounting.RunERPSync',

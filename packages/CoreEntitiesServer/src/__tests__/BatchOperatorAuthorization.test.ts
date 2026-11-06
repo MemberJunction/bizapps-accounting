@@ -80,20 +80,14 @@ describe('batch operations require the batch-operator Authorization (#448)', () 
     expect(reached()).toHaveBeenCalledTimes(1);
   });
 
-  describe('Archive', () => {
+  describe('Archive (golive #325)', () => {
     const archive = (p: IMetadataProvider, u: UserInfo) => new (class extends ArchiveJournalEntryBatchOperation {
       public Run() { return this.InternalExecute({ JournalEntryBatchID: BATCH_ID, Reason: 'Posted in the legacy system' }, p, u); }
     })().Run();
 
-    it('refuses a user without it, before loading the batch', async () => {
+    it('delegates authorization to batch.Archive() so the company CFO (without the Finance role) can archive', async () => {
       const { provider, getEntityObject } = providerFor();
-      await expect(archive(provider, OTHER_USER)).rejects.toThrow(`requires the ${JOURNAL_ENTRY_BATCH_OPERATE_AUTH} authorization`);
-      expect(getEntityObject).not.toHaveBeenCalled();
-    });
-
-    it('lets a holder through to the batch, whose Archive() then checks who may archive it', async () => {
-      const { provider, getEntityObject } = providerFor();
-      await expect(archive(provider, FINANCE_USER)).resolves.toEqual({ Status: 'Archived', ArchivedAt: '2026-10-18T12:00:00.000Z' });
+      await expect(archive(provider, OTHER_USER)).resolves.toEqual({ Status: 'Archived', ArchivedAt: '2026-10-18T12:00:00.000Z' });
       expect(getEntityObject).toHaveBeenCalledTimes(1);
     });
   });

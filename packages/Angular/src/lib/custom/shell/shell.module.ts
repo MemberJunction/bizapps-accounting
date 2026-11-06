@@ -66,6 +66,7 @@ import { MJAListToolbarComponent } from '../shared/list-toolbar.component';
 import { AccountingOverviewResourceComponent } from '../resources/accounting-overview-resource.component';
 import { JournalEntriesResourceComponent } from '../resources/journal-entries-resource.component';
 import { BatchesResourceComponent } from '../resources/batches-resource.component';
+import { PeriodsResourceComponent } from '../resources/periods-resource.component';
 import { ApprovalsResourceComponent } from '../resources/approvals-resource.component';
 import { DimensionsResourceComponent } from '../resources/dimensions-resource.component';
 
@@ -108,6 +109,7 @@ import { DimensionsResourceComponent } from '../resources/dimensions-resource.co
   imports: [
     AccountingOverviewResourceComponent,
     BatchesResourceComponent,
+    PeriodsResourceComponent,
     MJDropdownComponent, MJACheckDropdownComponent, 
     ShellPagePendingComponent, // standalone — shared with orders' shell
     MJASummaryStripComponent, // standalone — the orders-idiom stats bubble (list-page standard)
@@ -170,6 +172,7 @@ import { DimensionsResourceComponent } from '../resources/dimensions-resource.co
     JournalEntryDetailPanelComponent,
     JournalEntriesResourceComponent,
     BatchesResourceComponent,
+    PeriodsResourceComponent,
     ApprovalsResourceComponent,
     DimensionsResourceComponent,
   ],

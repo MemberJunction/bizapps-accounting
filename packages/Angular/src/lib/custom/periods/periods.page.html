@@ -1,0 +1,111 @@
+<div class="mja-periods">
+  <header class="mja-periods-head">
+    <div class="mja-periods-titles">
+      <h1 class="mja-periods-title"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i> Periods</h1>
+      <p class="mja-periods-sub">
+        Close a month once the ERP has closed it: no batch can then post on or before the books-closed date.
+        The posting start date keeps entries dated before it out of every batch.
+      </p>
+    </div>
+    <button mjButton variant="flat" size="sm" type="button" [disabled]="IsLoading" (click)="Load()" title="Re-read the companies">
+      <i class="fa-solid fa-rotate" aria-hidden="true"></i> Refresh
+    </button>
+  </header>
+
+  @if (Message) {
+    <div class="mja-periods-banner" [class.mja-periods-banner--error]="MessageIsError" role="status">
+      <span>{{ Message }}</span>
+      <button type="button" class="mja-periods-banner-close" (click)="Message = null" aria-label="Dismiss">
+        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+      </button>
+    </div>
+  }
+
+  @if (IsLoading) {
+    <mj-loading text="Loading companies…"></mj-loading>
+  } @else if (LoadError) {
+    <p class="mja-periods-error" role="alert">{{ LoadError }}</p>
+  } @else if (Profiles.length === 0) {
+    <p class="mja-periods-empty">No active companies have an accounting profile yet.</p>
+  } @else {
+    <table class="mja-periods-table">
+      <thead>
+        <tr>
+          <th scope="col">Company</th>
+          <th scope="col">Books closed through</th>
+          <th scope="col">Posting start date</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (p of Profiles; track p.ID) {
+          <tr [attr.data-company-id]="p.ID">
+            <td class="mja-periods-company">
+              <span class="mja-periods-name">{{ p.Name }}</span>
+              <button type="button" class="mja-periods-link" (click)="OpenProfile(p)" title="Open the profile; its history lists every change to both dates">
+                Open profile
+              </button>
+            </td>
+
+            <td class="mja-periods-closed">
+              <span class="mja-periods-date">{{ ClosedThroughDay(p) ?? 'Nothing closed' }}</span>
+              <span class="mja-periods-note">
+                @if (ClosedThroughDay(p)) { Batches cannot post on or before this date. } @else { Batches can post on any date. }
+              </span>
+              @if (MayCloseBooks) {
+                <div class="mja-periods-actions">
+                  <button mjButton variant="primary" size="sm" type="button" class="mja-close-month"
+                    [disabled]="!CanClose(p) || IsBusy(p)"
+                    [title]="CanClose(p) ? 'Close ' + NextMonthToClose(p) : NextMonthToClose(p) + ' has not finished yet'"
+                    (click)="AskClose(p)">
+                    Close {{ NextMonthToClose(p) }}
+                  </button>
+                  <button mjButton variant="secondary" size="sm" type="button" class="mja-reopen-month"
+                    [disabled]="!CanReopen(p) || IsBusy(p)" (click)="AskReopen(p)">
+                    Reopen month
+                  </button>
+                </div>
+              }
+            </td>
+
+            <td class="mja-periods-start">
+              @if (EditingStartFor === p.ID) {
+                <div class="mja-periods-edit">
+                  <label class="mja-periods-edit-label">
+                    <span>New posting start date (empty clears it)</span>
+                    <input type="date" class="mja-periods-input" [(ngModel)]="EditStartValue" />
+                  </label>
+                  <div class="mja-periods-actions">
+                    <button mjButton variant="primary" size="sm" type="button" class="mja-save-start" [disabled]="IsBusy(p)" (click)="SavePostingStart(p)">Save</button>
+                    <button mjButton variant="flat" size="sm" type="button" [disabled]="IsBusy(p)" (click)="CancelEditPostingStart()">Cancel</button>
+                  </div>
+                </div>
+              } @else {
+                <span class="mja-periods-date">{{ PostingStartDay(p) ?? 'None' }}</span>
+                <span class="mja-periods-note mja-held-back">
+                  @if (PostingStartDay(p)) { {{ HeldBackText(p) }} } @else { Every pending entry can be batched. }
+                </span>
+                @if (MayEditPostingStart) {
+                  <div class="mja-periods-actions">
+                    <button mjButton variant="flat" size="sm" type="button" class="mja-edit-start" [disabled]="IsBusy(p)" (click)="AskEditPostingStart(p)">
+                      <i class="fa-solid fa-pen" aria-hidden="true"></i> Edit
+                    </button>
+                  </div>
+                }
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+
+  <mj-dialog [Visible]="Confirmation !== null" [Title]="Confirmation?.Title ?? ''" [Width]="520" (Close)="CancelConfirmation()">
+    <p class="mja-periods-confirm-text">{{ Confirmation?.Message }}</p>
+    <mj-dialog-actions>
+      <button mjButton variant="primary" size="sm" type="button" class="mja-confirm" (click)="Confirm()">
+        @if (Confirmation?.Kind === 'edit-start') { Continue } @else { {{ Confirmation?.Title }} }
+      </button>
+      <button mjButton variant="flat" size="sm" type="button" (click)="CancelConfirmation()">Cancel</button>
+    </mj-dialog-actions>
+  </mj-dialog>
+</div>

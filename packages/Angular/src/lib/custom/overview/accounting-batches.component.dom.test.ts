@@ -69,9 +69,11 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
     // The page's batch list (ngOnInit) reads through the global RunView. One batch comes back so
     // the spec can see the list render: LoadBatches swallows its own errors, so an empty page is
     // not evidence that it loaded.
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
-      p.EntityName === BATCH_ENTITY ? viewResult([LISTED_BATCH]) : viewResult([], 0),
-    );
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName === BATCH_ENTITY) return viewResult([LISTED_BATCH]);
+      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, Name: 'Test Company', ApprovalCFOUserID: APPROVER_USER_ID }]);
+      return viewResult([], 0);
+    });
     previewCalls = [];
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockImplementation(async (options) => {
       previewCalls.push(options ?? {});
@@ -224,9 +226,11 @@ describe('AccountingBatchesPageComponent — DATE columns read as the stored day
   beforeEach(() => {
     // Building needs the batch-operator grant (#448); the signed-in user holds it.
     signInAs(APPROVER_USER_ID);
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
-      p.EntityName === BATCH_ENTITY ? viewResult([LISTED_BATCH]) : viewResult([], 0),
-    );
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName === BATCH_ENTITY) return viewResult([LISTED_BATCH]);
+      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, Name: 'Test Company', ApprovalCFOUserID: APPROVER_USER_ID }]);
+      return viewResult([], 0);
+    });
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockResolvedValue({
       Success: true,
       Candidates: CANDIDATES,
@@ -462,7 +466,11 @@ describe('AccountingBatchesPageComponent — Build Batch selection after Clear A
   beforeEach(() => {
     // Building needs the batch-operator grant (#448); the signed-in user holds it.
     signInAs(APPROVER_USER_ID);
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async () => viewResult([], 0));
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
+      p.EntityName === COMPANY_PROFILE_ENTITY
+        ? viewResult([{ ID: 'co-1', Name: 'Company One', ApprovalCFOUserID: APPROVER_USER_ID }])
+        : viewResult([], 0),
+    );
     previewCalls = [];
     buildCalls = [];
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockImplementation(async (options) => {
@@ -890,9 +898,11 @@ describe('AccountingBatchesPageComponent — who sees Cancel (#308, #339, DOM)',
 
 describe('AccountingBatchesPageComponent — Build Batch needs the batch-operator grant (#448, DOM)', () => {
   beforeEach(() => {
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
-      p.EntityName === BATCH_ENTITY ? viewResult([LISTED_BATCH]) : viewResult([], 0),
-    );
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName === BATCH_ENTITY) return viewResult([LISTED_BATCH]);
+      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, Name: 'Test Company', ApprovalCFOUserID: APPROVER_USER_ID }]);
+      return viewResult([], 0);
+    });
   });
 
   /** The page rendered for a user who holds the grant, or not. */
@@ -1069,5 +1079,241 @@ describe('AccountingBatchesPageComponent — Approve, Reject, Dispatch and Retry
     expect(confirms).toEqual([false, true]);
     expect(page.RetryConfirm.IsOpen).toBe(false);
     expect(page.ActionMessage).toBe('Dispatched batch JEB-TEST-0003 to BusinessCentral: Posted (ref BC-1).');
+  });
+});
+
+describe('AccountingBatchesPageComponent — Single-company Build Batch dialog (#366, DOM)', () => {
+  useBusinessClock(AUGUST_CLOSE_IN_CHICAGO);
+  const COMPANY_TWO_ID = '00000000-0000-0000-0000-0000000000c2';
+  let previewCalls: PreviewJournalEntryBatchOptionsInput[];
+  let buildCalls: BuildJournalEntryBatchOptionsInput[];
+
+  beforeEach(() => {
+    signInAs(BUILDER_USER_ID);
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName === BATCH_ENTITY) return viewResult([LISTED_BATCH]);
+      if (p.EntityName === COMPANY_PROFILE_ENTITY) {
+        return viewResult([
+          { ID: COMPANY_ID, Name: 'Alpha Co', ApprovalCFOUserID: APPROVER_USER_ID },
+          { ID: COMPANY_TWO_ID, Name: 'Beta Co', ApprovalCFOUserID: APPROVER_USER_ID },
+        ]);
+      }
+      return viewResult([], 0);
+    });
+    previewCalls = [];
+    buildCalls = [];
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockImplementation(async (options) => {
+      previewCalls.push(options ?? {});
+      return {
+        Success: true,
+        Candidates: [{ ID: 'je-1', EntryNumber: 'JE-1', EffectiveDate: '2026-08-15T00:00:00.000Z', EntryTypeCode: 'Manual', CompanyID: COMPANY_TWO_ID, Description: null, Amount: 100 }],
+        TotalDebits: 100,
+        TotalCredits: 100,
+        GrossDebits: 100,
+        GrossCredits: 100,
+        OutOfOrderSkipCount: 0,
+        BeforePostingStartCount: 0,
+      };
+    });
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'BuildJournalEntryBatch').mockImplementation(async (options) => {
+      buildCalls.push(options as BuildJournalEntryBatchOptionsInput);
+      return { Success: true, SummaryLineCount: 1, TotalDebits: 100, TotalCredits: 100, JECount: 1, CompanyCount: 1, NothingToBatch: false };
+    });
+  });
+
+  it('requires selecting a company when multiple companies exist and previews only that company (#366)', async () => {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+
+    const page = fixture.componentInstance;
+    expect(page.CompanyOptions).toEqual([
+      { Label: 'Alpha Co', Value: COMPANY_ID },
+      { Label: 'Beta Co', Value: COMPANY_TWO_ID },
+    ]);
+
+    await page.OpenBuildBatchModal();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('mj-dropdown[aria-label="Company"]')).not.toBeNull();
+    expect(page.BuildCompanyID).toBe('');
+    expect(page.BuildBlockedReason).toBe('Choose a company.');
+    expect(page.CanBuild).toBe(false);
+
+    page.BuildCompanyID = COMPANY_TWO_ID;
+    await page.OnBuildPreviewFilterChange();
+    fixture.detectChanges();
+
+    expect(previewCalls.at(-1)?.CompanyIDs).toEqual([COMPANY_TWO_ID]);
+    expect(page.BuildBlockedReason).toBeNull();
+    expect(page.CanBuild).toBe(true);
+
+    await page.ExecuteBuildBatch();
+    expect(buildCalls).toHaveLength(1);
+    expect(buildCalls[0].Source).toBe('Explicit');
+    expect(buildCalls[0].JournalEntryIDs).toEqual(['je-1']);
+    expect(buildCalls[0].CompanyID).toBeUndefined();
+  });
+
+  it('starts from every entry again when the company changes, so a hand-ticked set does not strand the build', async () => {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+
+    const page = fixture.componentInstance;
+    await page.OpenBuildBatchModal();
+    page.BuildCompanyID = COMPANY_ID;
+    await page.OnBuildCompanyChange();
+    await page.ToggleEntry('je-1');
+    expect(page.IncludedCount).toBe(0);
+
+    page.BuildCompanyID = COMPANY_TWO_ID;
+    await page.OnBuildCompanyChange();
+    expect(page.IncludedCount).toBe(1);
+    expect(page.IncludedEntryIDs).toEqual(['je-1']);
+    expect(page.BuildBlockedReason).toBeNull();
+  });
+});
+
+describe('AccountingBatchesPageComponent — Archive permissions (#325) and 1024px action cell (#457, DOM)', () => {
+  const PENDING = LISTED_BATCH;
+  const APPROVED: BatchItem = {
+    ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000002', JournalEntryBatchNumber: 'JEB-TEST-0002', Status: 'Approved', ApprovedByUserID: APPROVED_BY_USER_ID,
+  };
+  const FAILED: BatchItem = {
+    ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000003', JournalEntryBatchNumber: 'JEB-TEST-0003', Status: 'Failed', ApprovedByUserID: APPROVED_BY_USER_ID,
+  };
+
+  beforeEach(() => {
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName === BATCH_ENTITY) return viewResult([PENDING, APPROVED, FAILED]);
+      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, Name: 'Test Company', ApprovalCFOUserID: APPROVER_USER_ID }]);
+      return viewResult([], 0);
+    });
+  });
+
+  function signInHolding(userId: string, holdsGrant: boolean): void {
+    const user = new UserInfo();
+    user.ID = userId;
+    const provider = {
+      CurrentUser: user,
+      Authorizations: BatchOperatorCatalog(holdsGrant ? [userId] : []),
+    };
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue(provider as unknown as IMetadataProvider);
+  }
+
+  async function render(): Promise<ComponentFixture<AccountingBatchesPageComponent>> {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('offers Archive on Pending to Finance or the company approver, and past approval to the company approver or recorded approver even without Finance (#325)', async () => {
+    // Company approver (CFO) without the Finance role can archive Pending, Approved, and Failed.
+    signInHolding(APPROVER_USER_ID, false);
+    let page = (await render()).componentInstance;
+    expect(page.CanArchive(PENDING)).toBe(true);
+    expect(page.CanArchive(APPROVED)).toBe(true);
+    expect(page.CanArchive(FAILED)).toBe(true);
+
+    // Finance operator (not CFO, not recorded approver) can archive Pending, but not Approved or Failed.
+    signInHolding(BUILDER_USER_ID, true);
+    page = (await render()).componentInstance;
+    expect(page.CanArchive(PENDING)).toBe(true);
+    expect(page.CanArchive(APPROVED)).toBe(false);
+    expect(page.CanArchive(FAILED)).toBe(false);
+
+    // Builder without Finance role cannot archive Pending (may only cancel it).
+    signInHolding(BUILDER_USER_ID, false);
+    page = (await render()).componentInstance;
+    expect(page.CanArchive(PENDING)).toBe(false);
+    expect(page.CanCancel(PENDING)).toBe(true);
+  });
+
+  it('removes the redundant external-link icon and provides aria-label and .mja-btn-label on every row action button (#457)', async () => {
+    signInHolding(APPROVER_USER_ID, true);
+    const fixture = await render();
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(root.querySelector('.mja-td-action .fa-arrow-up-right-from-square')).toBeNull();
+    const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>('.mja-row-actions button'));
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const btn of buttons) {
+      const labelSpan = btn.querySelector('.mja-btn-label');
+      expect(labelSpan, 'every row action button wraps its label in .mja-btn-label').not.toBeNull();
+      expect(btn.getAttribute('aria-label')).toBe(labelSpan?.textContent?.trim());
+    }
+  });
+});
+
+describe('AccountingBatchesPageComponent — Send approved batches (golive #451, DOM)', () => {
+  const APPROVED_ONE: BatchItem = { ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000011', JournalEntryBatchNumber: 'JEB-TEST-0011', Status: 'Approved' };
+  const APPROVED_TWO: BatchItem = { ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000012', JournalEntryBatchNumber: 'JEB-TEST-0012', Status: 'Approved' };
+  let batchReads: number;
+
+  beforeEach(() => {
+    batchReads = 0;
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName === BATCH_ENTITY) {
+        batchReads++;
+        return viewResult([LISTED_BATCH, APPROVED_ONE, APPROVED_TWO]);
+      }
+      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, Name: 'Test Company', ApprovalCFOUserID: APPROVER_USER_ID }]);
+      return viewResult([], 0);
+    });
+  });
+
+  function signInHolding(holdsGrant: boolean): void {
+    const user = new UserInfo();
+    user.ID = BUILDER_USER_ID;
+    const provider = { CurrentUser: user, Authorizations: BatchOperatorCatalog(holdsGrant ? [BUILDER_USER_ID] : []) };
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue(provider as unknown as IMetadataProvider);
+  }
+
+  async function render(): Promise<ComponentFixture<AccountingBatchesPageComponent>> {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  function sendButton(fixture: ComponentFixture<AccountingBatchesPageComponent>): HTMLButtonElement | null {
+    return (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.mja-actions button.sab-open');
+  }
+
+  it('shows to a holder of the batch-operator grant, counting the Approved batches', async () => {
+    signInHolding(true);
+    const fixture = await render();
+
+    expect(sendButton(fixture)?.textContent).toContain('Send approved batches (2)');
+    expect(sendButton(fixture)?.disabled).toBe(false);
+  });
+
+  it('is hidden from a user without the grant', async () => {
+    signInHolding(false);
+    const fixture = await render();
+
+    expect(sendButton(fixture)).toBeNull();
+  });
+
+  it('reloads the batch list after the send', async () => {
+    signInHolding(true);
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'DispatchApprovedJournalEntryBatches')
+      .mockResolvedValue({ Success: true, Batches: [], PostedCount: 0 });
+    const fixture = await render();
+    const readsBefore = batchReads;
+
+    sendButton(fixture)!.click();
+    fixture.detectChanges();
+    const confirm = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('mja-send-approved-batches mj-dialog-actions button'))[0];
+    confirm.click();
+
+    await vi.waitFor(() => expect(batchReads).toBe(readsBefore + 1));
   });
 });

@@ -563,24 +563,25 @@ describe('JournalEntryBatchDispatchDashboardComponent — who sees Cancel on a P
     expect(await actionsFor(APPROVER_USER_ID)).toContain('Cancel');
   });
 
-  it('shows anyone else no Cancel and no Archive (#448), and still the other actions', async () => {
+  it('shows a batch-operator who did not build the batch Archive and Regenerate, and no Cancel', async () => {
     const actions = await actionsFor(OTHER_USER_ID);
     expect(actions).not.toContain('Cancel');
-    expect(actions).not.toContain('Archive');
+    expect(actions).toContain('Archive');
     expect(actions).toContain('Regenerate');
   });
 
-  it('shows only the approver Archive on a Pending batch; the builder may cancel it, not archive it (#448)', async () => {
+  it('shows the approver or a batch-operator Archive on a Pending batch; the builder without the grant may cancel it, not archive it', async () => {
     expect(await actionsFor(APPROVER_USER_ID)).toContain('Archive');
-    const builder = await actionsFor(BUILDER_USER_ID);
-    expect(builder).not.toContain('Archive');
-    expect(builder).toContain('Cancel');
+    expect(await actionsFor(BUILDER_USER_ID)).toContain('Archive');
+    const builderWithoutOperator = await actionsFor(BUILDER_USER_ID, []);
+    expect(builderWithoutOperator).not.toContain('Archive');
+    expect(builderWithoutOperator).toContain('Cancel');
   });
 
-  it('shows no Regenerate or Archive to a user without the batch-operator grant, even the approver (#448)', async () => {
+  it('shows the approver Archive and Cancel without the batch-operator grant, while hiding Regenerate', async () => {
     const actions = await actionsFor(APPROVER_USER_ID, []);
     expect(actions).not.toContain('Regenerate');
-    expect(actions).not.toContain('Archive');
+    expect(actions).toContain('Archive');
     expect(actions, 'Cancel follows the approver rule alone').toContain('Cancel');
   });
 
