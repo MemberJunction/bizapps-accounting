@@ -3,14 +3,15 @@ import { CommonModule } from '@angular/common';
 import { combineLatest } from 'rxjs';
 import { distinctUntilChanged, skip } from 'rxjs/operators';
 import { CompositeKey, Metadata, RunView, type RunViewParams, type RunViewResult } from '@memberjunction/core';
-import { UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
+import { UUIDsEqual } from '@memberjunction/global';
+import { AccountingEngineBase, UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
 import { NavigationService } from '@memberjunction/ng-shared';
 import { SharedGenericModule } from '@memberjunction/ng-shared-generic';
 import { MJAlertComponent, MJButtonDirective } from '@memberjunction/ng-ui-components';
-import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
+import { mjBizAppsAccountingJournalEntryBatchEntity, mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
 import { FormatWindow, PeriodPhrase, PeriodSqlFilter, SameIDs, type PeriodWindow } from '@mj-biz-apps/common-ng';
-import { ToCalendarDay } from '@mj-biz-apps/common-entities';
-import { CompanyScopeService } from '../shared/company-scope.service';
+import { BusinessTimeZoneEngine, ToCalendarDay } from '@mj-biz-apps/common-entities';
+import { CompanyScopeService, type ScopeCompany } from '../shared/company-scope.service';
 import { DashboardPeriodService } from '../shared/dashboard-period.service';
 import { AccountingDashboardFiltersComponent } from '../shared/dashboard-filters.component';
 import { MAX_CHART_MONTHS, MonthBarLabel, MonthsBetween, type ChartMonth } from './overview-months';
@@ -27,12 +28,40 @@ interface BatchStageMetric {
 /** Picked from the generated schema type, not re-declared — see BatchItem in accounting-batches. */
 type RecentBatchRow = Pick<
     mjBizAppsAccountingJournalEntryBatchEntity,
-    'ID' | 'JournalEntryBatchNumber' | 'Status' | 'TargetSystem' | 'PostingDate' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'Company'
+    'ID' | 'JournalEntryBatchNumber' | 'Status' | 'TargetSystem' | 'PostingDate' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'Company' | 'CompanyID'
 >;
 
 const RECENT_BATCH_FIELDS: (keyof RecentBatchRow)[] = [
-    'ID', 'JournalEntryBatchNumber', 'Status', 'TargetSystem', 'PostingDate', 'TotalEntries', 'TotalDebits', 'TotalCredits', 'Company',
+    'ID', 'JournalEntryBatchNumber', 'Status', 'TargetSystem', 'PostingDate', 'TotalEntries', 'TotalDebits', 'TotalCredits', 'Company', 'CompanyID',
 ];
+
+/** Picked from the generated JournalEntry schema type for the unbatched-past-cutoff click-through list. */
+export type UnbatchedEntryRow = Pick<
+    mjBizAppsAccountingJournalEntryEntity,
+    'ID' | 'EntryNumber' | 'EffectiveDate' | 'EntryType' | 'Description' | 'Company' | 'CompanyID' | 'Status'
+>;
+
+const UNBATCHED_ENTRY_FIELDS: (keyof UnbatchedEntryRow)[] = [
+    'ID', 'EntryNumber', 'EffectiveDate', 'EntryType', 'Description', 'Company', 'CompanyID', 'Status',
+];
+
+export type ActionTileKind = 'Pending' | 'Approved' | 'Failed' | 'UnbatchedPastCutoff';
+
+export interface CompanyActionTileRow {
+    CompanyID: string;
+    CompanyName: string;
+    CompanyCode: string;
+    PendingBatches: number | null;
+    ApprovedBatches: number | null;
+    FailedBatches: number | null;
+    UnbatchedPastCutoff: number | null;
+}
+
+export interface ActiveActionTile {
+    CompanyID: string;
+    CompanyName: string;
+    Kind: ActionTileKind;
+}
 
 /** A one-row journal-entry read: the first or last effective date in the period. */
 interface EntryEdgeRow {
@@ -81,6 +110,8 @@ const NO_KPIS: AccountingOverviewKPIs = {
 /** The period's batches, every row (not a sample), and the journal-entry reads that frame the chart. */
 interface OverviewReads {
     batches: RecentBatchRow[];
+    actionBatches: RecentBatchRow[];
+    unbatchedByCompany: Map<string, number>;
     pendingEntries: number;
     entriesInPeriod: number;
     firstEntryDay: string | null;
@@ -173,6 +204,82 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                 </div>
             </header>
 
+            <!-- Action Queues by Company (golive #368, #369) -->
+            @if (CompanyActionRows.length > 0) {
+                <section class="mja-card" data-testid="overview-action-tiles">
+                    <div class="mja-card-header">
+                        <div class="mja-card-title-group">
+                            <h2 class="mja-card-title"><i class="fa-solid fa-bell"></i> What Needs Action by Company</h2>
+                            <span class="mja-card-subtitle">Click a tile to inspect its batches or unbatched journal entries through {{ CutoffDay }}.</span>
+                        </div>
+                        @if (ActiveTile) {
+                            <button mjButton variant="flat" size="sm" type="button" data-testid="overview-clear-tile-filter" (click)="ClearActionTile()">
+                                <i class="fa-solid fa-xmark"></i> Clear filter
+                            </button>
+                        }
+                    </div>
+
+                    <div class="mja-company-action-list">
+                        @for (row of CompanyActionRows; track row.CompanyID) {
+                            <div class="mja-company-action-row" [attr.data-company-id]="row.CompanyID">
+                                <div class="mja-company-action-header">
+                                    <strong class="mja-company-name">{{ row.CompanyName }}</strong>
+                                    @if (row.CompanyCode) {
+                                        <span class="mja-company-code">{{ row.CompanyCode }}</span>
+                                    }
+                                </div>
+                                <div class="mja-company-tiles-grid">
+                                    <button
+                                        type="button"
+                                        class="mja-action-tile"
+                                        [class.mja-action-tile--active]="IsTileActive(row.CompanyID, 'Pending')"
+                                        [class.mja-action-tile--warn]="(row.PendingBatches ?? 0) > 0"
+                                        [attr.aria-pressed]="IsTileActive(row.CompanyID, 'Pending')"
+                                        [attr.data-testid]="'action-tile-pending-' + row.CompanyID"
+                                        (click)="SelectActionTile(row.CompanyID, 'Pending')">
+                                        <span class="mja-action-tile-label"><i class="fa-solid fa-clock"></i> Pending approval</span>
+                                        <span class="mja-action-tile-count">{{ Figure(row.PendingBatches) }}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="mja-action-tile"
+                                        [class.mja-action-tile--active]="IsTileActive(row.CompanyID, 'Approved')"
+                                        [class.mja-action-tile--info]="(row.ApprovedBatches ?? 0) > 0"
+                                        [attr.aria-pressed]="IsTileActive(row.CompanyID, 'Approved')"
+                                        [attr.data-testid]="'action-tile-approved-' + row.CompanyID"
+                                        (click)="SelectActionTile(row.CompanyID, 'Approved')">
+                                        <span class="mja-action-tile-label"><i class="fa-solid fa-user-check"></i> Approved not sent</span>
+                                        <span class="mja-action-tile-count">{{ Figure(row.ApprovedBatches) }}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="mja-action-tile"
+                                        [class.mja-action-tile--active]="IsTileActive(row.CompanyID, 'Failed')"
+                                        [class.mja-action-tile--danger]="(row.FailedBatches ?? 0) > 0"
+                                        [attr.aria-pressed]="IsTileActive(row.CompanyID, 'Failed')"
+                                        [attr.data-testid]="'action-tile-failed-' + row.CompanyID"
+                                        (click)="SelectActionTile(row.CompanyID, 'Failed')">
+                                        <span class="mja-action-tile-label"><i class="fa-solid fa-triangle-exclamation"></i> Failed</span>
+                                        <span class="mja-action-tile-count">{{ Figure(row.FailedBatches) }}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="mja-action-tile"
+                                        [class.mja-action-tile--active]="IsTileActive(row.CompanyID, 'UnbatchedPastCutoff')"
+                                        [class.mja-action-tile--warn]="(row.UnbatchedPastCutoff ?? 0) > 0"
+                                        [attr.aria-pressed]="IsTileActive(row.CompanyID, 'UnbatchedPastCutoff')"
+                                        [attr.data-testid]="'action-tile-unbatched-' + row.CompanyID"
+                                        (click)="SelectActionTile(row.CompanyID, 'UnbatchedPastCutoff')">
+                                        <span class="mja-action-tile-label"><i class="fa-solid fa-inbox"></i> Unbatched past cutoff</span>
+                                        <span class="mja-action-tile-count">{{ Figure(row.UnbatchedPastCutoff) }}</span>
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </section>
+            }
+
             <!-- 2-Column Grid: Batch Stages Funnel + JE Volume Chart -->
             <div class="mja-two-col">
                 <!-- Batch Pipeline Stages Funnel -->
@@ -245,34 +352,102 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                 </section>
             </div>
 
-            <!-- Recent Batches Ledger -->
-            <section class="mja-card">
+            <!-- Recent Batches Ledger or Filtered Action Queue -->
+            <section class="mja-card" data-testid="overview-filtered-list">
                 <div class="mja-card-header">
                     <div class="mja-card-title-group">
-                        <h2 class="mja-card-title"><i class="fa-solid fa-layer-group"></i> Recent Journal Entry Batches</h2>
-                        <span class="mja-card-subtitle">Latest batches posting in {{ PeriodText }}</span>
+                        @if (ActiveTile) {
+                            <h2 class="mja-card-title" data-testid="overview-filtered-title"><i class="fa-solid fa-filter"></i> {{ ActiveTile.CompanyName }} — {{ ActiveTileLabel }}</h2>
+                            <span class="mja-card-subtitle">{{ ActiveTileSubtitle }}</span>
+                        } @else {
+                            <h2 class="mja-card-title"><i class="fa-solid fa-layer-group"></i> Recent Journal Entry Batches</h2>
+                            <span class="mja-card-subtitle">Latest batches posting in {{ PeriodText }}</span>
+                        }
                     </div>
-                    @if (MayBuild) {
-                        <button mjButton variant="primary" size="sm" type="button" (click)="CreateNewBatch()">
-                            <i class="fa-solid fa-plus"></i> Build Batch
-                        </button>
-                    }
+                    <div class="mja-actions">
+                        @if (ActiveTile) {
+                            <button mjButton variant="flat" size="sm" type="button" (click)="ClearActionTile()">
+                                <i class="fa-solid fa-rotate-left"></i> Show recent batches
+                            </button>
+                        }
+                        @if (MayBuild) {
+                            <button mjButton variant="primary" size="sm" type="button" (click)="CreateNewBatch()">
+                                <i class="fa-solid fa-plus"></i> Build Batch
+                            </button>
+                        }
+                    </div>
                 </div>
 
-                @if (IsLoading) {
-                    <mj-loading text="Loading recent batches…"></mj-loading>
+                @if (IsLoading || IsLoadingUnbatched) {
+                    <mj-loading text="Loading records…"></mj-loading>
                 } @else if (LoadError) {
                     <p class="mja-error-note">Recent batches could not be loaded.</p>
-                } @else if (RecentBatches.length === 0) {
+                } @else if (ActiveTile?.Kind === 'UnbatchedPastCutoff') {
+                    @if (UnbatchedEntries.length === 0) {
+                        <div class="mja-empty-box">
+                            <div class="mja-empty-box-icon">
+                                <i class="fa-solid fa-inbox"></i>
+                            </div>
+                            <div class="mja-empty-box-text">
+                                <h4>No Unbatched Entries Past Cutoff</h4>
+                                <p>Every pending journal entry for {{ ActiveTile?.CompanyName }} through {{ CutoffDay }} has been batched.</p>
+                            </div>
+                        </div>
+                    } @else {
+                        <div class="mja-table-wrap">
+                            <table class="mja-table" data-testid="overview-unbatched-table">
+                                <thead>
+                                    <tr>
+                                        <th>Entry №</th>
+                                        <th>Effective Date</th>
+                                        <th>Type</th>
+                                        <th>Company</th>
+                                        <th>Description</th>
+                                        <th>Status</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @for (entry of UnbatchedEntries; track entry.ID) {
+                                        <tr (click)="OpenJournalEntry(entry.ID)">
+                                            <td>
+                                                <strong class="mja-batch-num">{{ entry.EntryNumber }}</strong>
+                                            </td>
+                                            <td>{{ entry.EffectiveDate | date:'mediumDate':'UTC' }}</td>
+                                            <td>
+                                                <span class="mja-target-pill">{{ entry.EntryType }}</span>
+                                            </td>
+                                            <td>{{ entry.Company || ActiveTile?.CompanyName || '—' }}</td>
+                                            <td>{{ entry.Description || '—' }}</td>
+                                            <td>
+                                                <span class="mja-status-pill" [attr.data-status]="entry.Status">
+                                                    {{ entry.Status }}
+                                                </span>
+                                            </td>
+                                            <td class="mja-td-action">
+                                                <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                } @else if (DisplayedBatches.length === 0) {
                     <div class="mja-empty-box">
                         <div class="mja-empty-box-icon">
                             <i class="fa-solid fa-layer-group"></i>
                         </div>
                         <div class="mja-empty-box-text">
-                            <h4>No Batches in This Period</h4>
-                            <p>There are <strong>{{ Figure(KPIs.PendingJournalEntries) }} Pending Journal Entries</strong> in the subledger ready to be consolidated into posting batches.</p>
+                            @if (ActiveTile) {
+                                <h4>No Matching Batches</h4>
+                                <p>No {{ ActiveTile.Kind }} batches for {{ ActiveTile.CompanyName }}.</p>
+                            } @else {
+                                <h4>No Batches in This Period</h4>
+                                <p>There are <strong>{{ Figure(KPIs.PendingJournalEntries) }} Pending Journal Entries</strong> in the subledger ready to be consolidated into posting batches.</p>
+                            }
                         </div>
-                        @if (MayBuild) {
+                        @if (MayBuild && !ActiveTile) {
                             <button mjButton variant="primary" size="sm" type="button" (click)="CreateNewBatch()">
                                 <i class="fa-solid fa-plus"></i> Build Batch Now
                             </button>
@@ -280,7 +455,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                     </div>
                 } @else {
                     <div class="mja-table-wrap">
-                        <table class="mja-table">
+                        <table class="mja-table" data-testid="overview-batches-table">
                             <thead>
                                 <tr>
                                     <th>Batch №</th>
@@ -294,7 +469,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                 </tr>
                             </thead>
                             <tbody>
-                                @for (batch of RecentBatches; track batch.ID) {
+                                @for (batch of DisplayedBatches; track batch.ID) {
                                     <tr (click)="OpenBatch(batch.ID)">
                                         <td>
                                             <strong class="mja-batch-num">{{ batch.JournalEntryBatchNumber }}</strong>
@@ -339,6 +514,96 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             background: var(--mj-bg-surface-sunken, #f8fafc);
             box-sizing: border-box;
         }
+
+        .mja-company-action-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .mja-company-action-row {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 12px 14px;
+            border-radius: var(--mj-radius-md, 8px);
+            border: 1px solid var(--mj-border-default, #e2e8f0);
+            background: var(--mj-bg-surface-sunken, #f8fafc);
+        }
+
+        .mja-company-action-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .mja-company-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--mj-text-primary, #0f172a);
+        }
+
+        .mja-company-code {
+            font-size: 11px;
+            font-weight: 600;
+            font-family: var(--mj-font-family-mono);
+            color: var(--mj-text-muted, #64748b);
+            background: var(--mj-bg-surface, #ffffff);
+            padding: 1px 6px;
+            border-radius: 4px;
+            border: 1px solid var(--mj-border-default, #e2e8f0);
+        }
+
+        .mja-company-tiles-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 10px;
+        }
+
+        .mja-action-tile {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: var(--mj-radius-md, 8px);
+            border: 1px solid var(--mj-border-default, #e2e8f0);
+            background: var(--mj-bg-surface, #ffffff);
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.15s ease;
+        }
+
+        .mja-action-tile:hover {
+            border-color: var(--mj-brand-primary, #0284c7);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .mja-action-tile--active {
+            border-color: var(--mj-brand-primary, #0284c7);
+            background: #f0f9ff;
+            box-shadow: 0 0 0 1px var(--mj-brand-primary, #0284c7);
+        }
+
+        .mja-action-tile-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--mj-text-secondary, #475569);
+        }
+
+        .mja-action-tile-count {
+            font-size: 16px;
+            font-weight: 800;
+            font-family: var(--mj-font-family-mono);
+            color: var(--mj-text-primary, #0f172a);
+        }
+
+        .mja-action-tile--warn .mja-action-tile-count { color: #d97706; }
+        .mja-action-tile--info .mja-action-tile-count { color: #0284c7; }
+        .mja-action-tile--danger .mja-action-tile-count { color: #dc2626; }
 
         /* 1. Header Card */
         .mja-head-card {
@@ -739,15 +1004,92 @@ export class AccountingOverviewPageComponent implements OnInit {
     private loadSeq = 0;
 
     public IsLoading = false;
+    public IsLoadingUnbatched = false;
     /** Why the figures could not be read. The figures then show dashes; nothing is made up. */
     public LoadError: string | null = null;
     public RecentBatches: RecentBatchRow[] = [];
+    public ActionBatches: RecentBatchRow[] = [];
+    public CompanyActionRows: CompanyActionTileRow[] = [];
+    public ActiveTile: ActiveActionTile | null = null;
+    public UnbatchedEntries: UnbatchedEntryRow[] = [];
     public MonthlyBars: MonthlyVolumeBar[] = [];
     /** True when the period has more months than the chart draws. */
     public ChartClipped = false;
     public readonly MaxChartMonths = MAX_CHART_MONTHS;
 
     public KPIs: AccountingOverviewKPIs = { ...NO_KPIS };
+
+    /** The companies currently in scope (all companies when SelectedIDs is empty). */
+    public get VisibleCompanies(): ScopeCompany[] {
+        const selected = this.scope.SelectedIDs;
+        if (selected.length === 0) return this.scope.Companies;
+        return this.scope.Companies.filter((c) => selected.some((id) => UUIDsEqual(id, c.ID)));
+    }
+
+    /** Today's business day (`YYYY-MM-DD`), the default cutoff for unbatched entries. */
+    public get CutoffDay(): string {
+        return BusinessTimeZoneEngine.Instance.Today();
+    }
+
+    public get DisplayedBatches(): RecentBatchRow[] {
+        const active = this.ActiveTile;
+        if (!active || active.Kind === 'UnbatchedPastCutoff') return this.RecentBatches;
+        return this.ActionBatches.filter(
+            (b) => this.batchMatchesCompany(b, active.CompanyID, active.CompanyName) && b.Status === active.Kind,
+        );
+    }
+
+    public get ActiveTileLabel(): string {
+        if (!this.ActiveTile) return '';
+        switch (this.ActiveTile.Kind) {
+            case 'Pending':
+                return 'Batches Pending Approval';
+            case 'Approved':
+                return 'Approved Batches Not Sent';
+            case 'Failed':
+                return 'Failed Batches';
+            case 'UnbatchedPastCutoff':
+                return 'Unbatched Entries Past Cutoff';
+        }
+    }
+
+    public get ActiveTileSubtitle(): string {
+        if (!this.ActiveTile) return '';
+        if (this.ActiveTile.Kind === 'UnbatchedPastCutoff') {
+            return `Pending journal entries effective on or before ${this.CutoffDay}`;
+        }
+        return `All posting dates (${this.DisplayedBatches.length} matching)`;
+    }
+
+    public IsTileActive(companyId: string, kind: ActionTileKind): boolean {
+        return !!this.ActiveTile && UUIDsEqual(this.ActiveTile.CompanyID, companyId) && this.ActiveTile.Kind === kind;
+    }
+
+    public async SelectActionTile(companyId: string, kind: ActionTileKind): Promise<void> {
+        if (this.IsTileActive(companyId, kind)) {
+            this.ClearActionTile();
+            return;
+        }
+        const company = this.VisibleCompanies.find((c) => UUIDsEqual(c.ID, companyId));
+        this.ActiveTile = {
+            CompanyID: companyId,
+            CompanyName: company?.Name ?? companyId,
+            Kind: kind,
+        };
+        if (kind === 'UnbatchedPastCutoff') {
+            await this.loadUnbatchedEntries(companyId);
+        } else {
+            this.UnbatchedEntries = [];
+            this.cdr.markForCheck();
+        }
+    }
+
+    public ClearActionTile(): void {
+        this.ActiveTile = null;
+        this.UnbatchedEntries = [];
+        this.IsLoadingUnbatched = false;
+        this.cdr.markForCheck();
+    }
 
     /**
      * The stage row, and the ONLY place a batch status is enumerated on this page. The tally in
@@ -842,7 +1184,9 @@ export class AccountingOverviewPageComponent implements OnInit {
         const entryEdge = (orderBy: string): RunViewParams => ({
             EntityName: JE_ENTITY, ExtraFilter: inPeriod, Fields: ['ID', 'EffectiveDate'], OrderBy: orderBy, MaxRows: 1, ResultType: 'simple',
         });
-        const [batches, pending, first, last] = await new RunView().RunViews<OverviewRow>([
+        const companies = this.VisibleCompanies;
+        const cutoff = this.CutoffDay;
+        const results = await new RunView().RunViews<OverviewRow>([
             {
                 EntityName: BATCH_ENTITY,
                 ExtraFilter: this.filterFor('PostingDate', window),
@@ -853,14 +1197,66 @@ export class AccountingOverviewPageComponent implements OnInit {
             { EntityName: JE_ENTITY, ExtraFilter: this.scope.ComposeFilter(`Status='Pending'`), Fields: ['ID'], MaxRows: 1, ResultType: 'simple' },
             entryEdge('EffectiveDate ASC'),
             entryEdge('EffectiveDate DESC'),
+            {
+                EntityName: BATCH_ENTITY,
+                ExtraFilter: this.scope.ComposeFilter(`Status IN ('Pending', 'Approved', 'Failed')`),
+                Fields: RECENT_BATCH_FIELDS,
+                OrderBy: 'PostingDate DESC, JournalEntryBatchNumber DESC',
+                ResultType: 'simple',
+            },
+            ...companies.map((c): RunViewParams => ({
+                EntityName: JE_ENTITY,
+                ExtraFilter: this.unbatchedFilterFor(c.ID, cutoff),
+                Fields: ['ID'],
+                MaxRows: 1,
+                ResultType: 'simple',
+            })),
         ]);
+        const [batches, pending, first, last, actionBatches, ...companyCounts] = results;
+        const unbatchedByCompany = new Map<string, number>();
+        companies.forEach((c, i) => {
+            unbatchedByCompany.set(c.ID, AccountingOverviewPageComponent.totalOf(companyCounts[i], 'unbatched journal entries'));
+        });
         return {
             batches: AccountingOverviewPageComponent.rowsOf(batches, 'journal entry batches').filter(isBatchRow),
+            actionBatches: AccountingOverviewPageComponent.rowsOf(actionBatches, 'action journal entry batches').filter(isBatchRow),
+            unbatchedByCompany,
             pendingEntries: AccountingOverviewPageComponent.totalOf(pending, 'pending journal entries'),
             entriesInPeriod: AccountingOverviewPageComponent.totalOf(first, 'journal entries'),
             firstEntryDay: AccountingOverviewPageComponent.edgeDay(first),
             lastEntryDay: AccountingOverviewPageComponent.edgeDay(last),
         };
+    }
+
+    private unbatchedFilterFor(companyId: string, cutoff = this.CutoffDay): string {
+        const profile = AccountingEngineBase.Instance.CompanyProfiles.find((p) => UUIDsEqual(p.ID, companyId));
+        const startDay = profile ? ToCalendarDay(profile.PostingStartDate) : null;
+        const floor = startDay ? ` AND EffectiveDate >= '${startDay}'` : '';
+        return this.scope.ComposeFilter(
+            `CompanyID='${companyId}' AND Status='Pending' AND EffectiveDate <= '${cutoff}'${floor}`,
+        );
+    }
+
+    private async loadUnbatchedEntries(companyId: string): Promise<void> {
+        this.IsLoadingUnbatched = true;
+        this.cdr.markForCheck();
+        try {
+            const res = await new RunView().RunView<UnbatchedEntryRow>({
+                EntityName: JE_ENTITY,
+                ExtraFilter: this.unbatchedFilterFor(companyId),
+                Fields: UNBATCHED_ENTRY_FIELDS,
+                OrderBy: 'EffectiveDate ASC, EntryNumber ASC',
+                MaxRows: RECENT_BATCH_ROWS,
+                ResultType: 'simple',
+            });
+            this.UnbatchedEntries = AccountingOverviewPageComponent.rowsOf(res, 'unbatched journal entries');
+        } catch (e) {
+            this.LoadError = e instanceof Error ? e.message : String(e);
+            this.UnbatchedEntries = [];
+        } finally {
+            this.IsLoadingUnbatched = false;
+            this.cdr.markForCheck();
+        }
     }
 
     /**
@@ -887,10 +1283,45 @@ export class AccountingOverviewPageComponent implements OnInit {
 
     private applyFigures(reads: OverviewReads, chart: { months: ChartMonth[]; counts: number[]; clipped: boolean }): void {
         this.RecentBatches = reads.batches.slice(0, RECENT_BATCH_ROWS);
+        this.ActionBatches = reads.actionBatches;
+        this.CompanyActionRows = this.buildCompanyActionRows(reads.actionBatches, reads.unbatchedByCompany);
+        if (this.ActiveTile && !this.VisibleCompanies.some((c) => UUIDsEqual(c.ID, this.ActiveTile!.CompanyID))) {
+            this.ClearActionTile();
+        } else if (this.ActiveTile?.Kind === 'UnbatchedPastCutoff') {
+            void this.loadUnbatchedEntries(this.ActiveTile.CompanyID);
+        }
         this.computeBatchMetrics(reads.batches);
         this.KPIs = { ...this.KPIs, PendingJournalEntries: reads.pendingEntries, EntriesInPeriod: reads.entriesInPeriod };
         this.MonthlyBars = AccountingOverviewPageComponent.toBars(chart.months, chart.counts);
         this.ChartClipped = chart.clipped;
+    }
+
+    private buildCompanyActionRows(batches: RecentBatchRow[], unbatchedByCompany: Map<string, number>): CompanyActionTileRow[] {
+        return this.VisibleCompanies.map((c) => {
+            let pending = 0;
+            let approved = 0;
+            let failed = 0;
+            for (const b of batches) {
+                if (!this.batchMatchesCompany(b, c.ID, c.Name)) continue;
+                if (b.Status === 'Pending') pending++;
+                else if (b.Status === 'Approved') approved++;
+                else if (b.Status === 'Failed') failed++;
+            }
+            return {
+                CompanyID: c.ID,
+                CompanyName: c.Name,
+                CompanyCode: c.CompanyCode,
+                PendingBatches: pending,
+                ApprovedBatches: approved,
+                FailedBatches: failed,
+                UnbatchedPastCutoff: unbatchedByCompany.get(c.ID) ?? 0,
+            };
+        });
+    }
+
+    private batchMatchesCompany(batch: RecentBatchRow, companyId: string, companyName: string): boolean {
+        if (batch.CompanyID) return UUIDsEqual(batch.CompanyID, companyId);
+        return batch.Company === companyName;
     }
 
     /** A failed read: say why, and show dashes rather than numbers nobody read. */
@@ -899,6 +1330,16 @@ export class AccountingOverviewPageComponent implements OnInit {
         this.KPIs = { ...NO_KPIS };
         this.Stages = AccountingOverviewPageComponent.unreadStages();
         this.RecentBatches = [];
+        this.ActionBatches = [];
+        this.CompanyActionRows = this.VisibleCompanies.map((c) => ({
+            CompanyID: c.ID,
+            CompanyName: c.Name,
+            CompanyCode: c.CompanyCode,
+            PendingBatches: null,
+            ApprovedBatches: null,
+            FailedBatches: null,
+            UnbatchedPastCutoff: null,
+        }));
         this.MonthlyBars = [];
         this.ChartClipped = false;
         this.cdr.markForCheck();
@@ -972,6 +1413,11 @@ export class AccountingOverviewPageComponent implements OnInit {
     public OpenBatch(id: string): void {
         if (!this.navService) return;
         this.navService.OpenEntityRecord(BATCH_ENTITY, CompositeKey.FromID(id));
+    }
+
+    public OpenJournalEntry(id: string): void {
+        if (!this.navService) return;
+        this.navService.OpenEntityRecord(JE_ENTITY, CompositeKey.FromID(id));
     }
 
     public CreateNewJournalEntry(): void {

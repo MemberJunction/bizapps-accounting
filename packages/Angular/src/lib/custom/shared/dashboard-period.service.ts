@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { distinctUntilChanged } from 'rxjs/operators';
-import { LogError } from '@memberjunction/core';
+import { IMetadataProvider, LogError, UserInfo } from '@memberjunction/core';
 import { UserInfoEngine } from '@memberjunction/core-entities';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import {
@@ -45,11 +45,11 @@ export class DashboardPeriodService {
   }
 
   /** Reads the persisted period once. Idempotent; a failed read leaves the default in place. */
-  public async Load(): Promise<void> {
+  public async Load(contextUser?: UserInfo, provider?: IMetadataProvider): Promise<void> {
     if (this.loaded) return;
     this.loaded = true;
     try {
-      await UserInfoEngine.Instance.Config(false);
+      await UserInfoEngine.Instance.Config(false, contextUser, provider);
       this.state$.next(ParsePeriodStateJSON(UserInfoEngine.Instance.GetSetting(DashboardPeriodService.SettingKey)));
     } catch (e) {
       // An unreadable preference is not a broken dashboard: it opens on the default period.

@@ -54,7 +54,10 @@ export abstract class CategoryShellBase extends BaseDashboard {
   protected async loadData(): Promise<void> {
     if (!this.ActivePageId) this.ActivePageId = this.DefaultPageId;
     // The dashboards' period loads beside the scope; both are idempotent, so every shell asks.
-    await Promise.all([this.Scope.Load(this.ProviderToUse.CurrentUser, this.ProviderToUse), this.Periods.Load()]);
+    await Promise.all([
+      this.Scope.Load(this.ProviderToUse.CurrentUser, this.ProviderToUse),
+      this.Periods.Load(this.ProviderToUse.CurrentUser, this.ProviderToUse),
+    ]);
     await this.loadCategoryData();
     this.cdr.markForCheck();
   }

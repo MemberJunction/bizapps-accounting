@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { IMetadataProvider, Metadata, RunView, RunViewParams, RunViewResult, UserInfo } from '@memberjunction/core';
+import { NavigationService } from '@memberjunction/ng-shared';
 import { DashboardFilterBarComponent } from '@mj-biz-apps/common-ng';
 import { AccountingOverviewPageComponent } from './accounting-overview.component';
 import { CompanyScopeService } from '../shared/company-scope.service';
@@ -38,9 +39,22 @@ const BATCH = {
   TotalEntries: 3,
   TotalDebits: 100,
   TotalCredits: 100,
-  Company: 'Test Company',
+  Company: 'Acme Test Co',
+  CompanyID: ACME.ID,
 };
 const POSTED_BATCH = { ...BATCH, ID: '00000000-0000-0000-0000-000000000002', JournalEntryBatchNumber: 'JEB-TEST-0002', Status: 'Posted', TotalDebits: 250 };
+const APPROVED_BATCH = { ...BATCH, ID: '00000000-0000-0000-0000-000000000003', JournalEntryBatchNumber: 'JEB-TEST-0003', Status: 'Approved', TotalDebits: 400 };
+const FAILED_BATCH = { ...BATCH, ID: '00000000-0000-0000-0000-000000000004', JournalEntryBatchNumber: 'JEB-TEST-0004', Status: 'Failed', TotalDebits: 150, Company: 'Birch Test Co', CompanyID: BIRCH.ID };
+const UNBATCHED_JE = {
+  ID: '00000000-0000-0000-0000-000000000099',
+  EntryNumber: 'JE-ACME-2026-0001',
+  EffectiveDate: FIRST_OF_OCTOBER,
+  EntryType: 'OrderBooking',
+  Description: 'Booking entry waiting for batch',
+  Company: 'Acme Test Co',
+  CompanyID: ACME.ID,
+  Status: 'Pending',
+};
 
 /** Monthly counts by the month a filter names: October 2, November 0, December 1. */
 const MONTH_COUNTS: Record<string, number> = { '2026-10': 2, '2026-11': 0, '2026-12': 1 };
@@ -57,8 +71,13 @@ describe('AccountingOverviewPageComponent (DOM)', () => {
     reads.push(p);
     const filter = filterOf(p);
     if (p.EntityName === BATCH_ENTITY) {
-      return failBatches ? { ...viewResult([]), Success: false, ErrorMessage: 'batches unavailable' } : viewResult([BATCH, POSTED_BATCH]);
+      if (failBatches) return { ...viewResult([]), Success: false, ErrorMessage: 'batches unavailable' };
+      if (filter.includes("Status IN ('Pending', 'Approved', 'Failed')")) {
+        return viewResult([BATCH, APPROVED_BATCH, FAILED_BATCH]);
+      }
+      return viewResult([BATCH, POSTED_BATCH]);
     }
+    if (filter.includes("Status='Pending'") && p.MaxRows !== 1) return viewResult([UNBATCHED_JE], 1);
     if (filter.includes("Status='Pending'")) return viewResult([{ ID: 'je' }], 7);
     if (p.OrderBy === 'EffectiveDate ASC') return viewResult([{ ID: 'je1', EffectiveDate: FIRST_OF_OCTOBER }], 3);
     if (p.OrderBy === 'EffectiveDate DESC') return viewResult([{ ID: 'je3', EffectiveDate: '2026-12-02T00:00:00.000Z' }], 3);
@@ -176,6 +195,69 @@ describe('AccountingOverviewPageComponent (DOM)', () => {
     expect(fixture.componentInstance.MonthlyBars).toEqual([]);
     expect(fixture.nativeElement.textContent).toContain('Posting history could not be loaded.');
   });
+
+  it('renders action tiles by company for the selected companies and narrows when a company is picked (#368, #369)', async () => {
+    const fixture = await render();
+
+    const rows = fixture.nativeElement.querySelectorAll('.mja-company-action-row');
+    expect(rows.length).toBe(2);
+    expect(text(fixture, `action-tile-pending-${ACME.ID}`)).toContain('1');
+    expect(text(fixture, `action-tile-approved-${ACME.ID}`)).toContain('1');
+    expect(text(fixture, `action-tile-failed-${ACME.ID}`)).toContain('0');
+    expect(text(fixture, `action-tile-unbatched-${ACME.ID}`)).toContain('7');
+    expect(text(fixture, `action-tile-failed-${BIRCH.ID}`)).toContain('1');
+
+    reads = [];
+    fixture.debugElement.query(By.directive(DashboardFilterBarComponent)).componentInstance.ToggleCompany(ACME.ID);
+    await vi.waitFor(() => expect(reads.length).toBeGreaterThan(0));
+    await settle(fixture);
+
+    const narrowedRows = fixture.nativeElement.querySelectorAll('.mja-company-action-row');
+    expect(narrowedRows.length).toBe(1);
+    expect(narrowedRows[0].getAttribute('data-company-id')).toBe(ACME.ID);
+  });
+
+  it('clicking a company batch tile filters the batch table and opens the batch on row click (#368)', async () => {
+    const nav = { OpenEntityRecord: vi.fn(), OpenNewEntityRecord: vi.fn(), OpenNavItemByName: vi.fn() };
+    TestBed.overrideProvider(NavigationService, { useValue: nav });
+    const fixture = await render();
+
+    const approvedBtn = fixture.nativeElement.querySelector(`[data-testid="action-tile-approved-${ACME.ID}"]`) as HTMLButtonElement;
+    approvedBtn.click();
+    fixture.detectChanges();
+
+    expect(text(fixture, 'overview-filtered-title')).toContain('Acme Test Co — Approved Batches Not Sent');
+    const batchRows = fixture.nativeElement.querySelectorAll('[data-testid="overview-batches-table"] tbody tr');
+    expect(batchRows.length).toBe(1);
+    expect(batchRows[0].textContent).toContain('JEB-TEST-0003');
+
+    (batchRows[0] as HTMLTableRowElement).click();
+    expect(nav.OpenEntityRecord).toHaveBeenCalledWith(BATCH_ENTITY, expect.anything());
+
+    const clearBtn = fixture.nativeElement.querySelector('[data-testid="overview-clear-tile-filter"]') as HTMLButtonElement;
+    clearBtn.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.ActiveTile).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="overview-batches-table"] tbody tr').length).toBe(2);
+  });
+
+  it('clicking unbatched past cutoff loads and renders unbatched entries for that company and opens the entry on row click (#368)', async () => {
+    const nav = { OpenEntityRecord: vi.fn(), OpenNewEntityRecord: vi.fn(), OpenNavItemByName: vi.fn() };
+    TestBed.overrideProvider(NavigationService, { useValue: nav });
+    const fixture = await render();
+
+    const unbatchedBtn = fixture.nativeElement.querySelector(`[data-testid="action-tile-unbatched-${ACME.ID}"]`) as HTMLButtonElement;
+    unbatchedBtn.click();
+    await settle(fixture);
+
+    expect(text(fixture, 'overview-filtered-title')).toContain('Acme Test Co — Unbatched Entries Past Cutoff');
+    const entryRows = fixture.nativeElement.querySelectorAll('[data-testid="overview-unbatched-table"] tbody tr');
+    expect(entryRows.length).toBe(1);
+    expect(entryRows[0].textContent).toContain('JE-ACME-2026-0001');
+
+    (entryRows[0] as HTMLTableRowElement).click();
+    expect(nav.OpenEntityRecord).toHaveBeenCalledWith(JE_ENTITY, expect.anything());
+  });
 });
 
 describe('AccountingOverviewPageComponent — Build Batch needs the batch-operator grant (#448, DOM)', () => {
@@ -198,6 +280,7 @@ describe('AccountingOverviewPageComponent — Build Batch needs the batch-operat
     const fixture = TestBed.createComponent(AccountingOverviewPageComponent);
     fixture.detectChanges();
     await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.RecentBatches.length).toBeGreaterThan(0));
     await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
     fixture.detectChanges();
     return [...fixture.nativeElement.querySelectorAll('button')]
