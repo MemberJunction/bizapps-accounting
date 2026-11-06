@@ -1249,3 +1249,71 @@ describe('AccountingBatchesPageComponent — Archive permissions (#325) and 1024
     }
   });
 });
+
+describe('AccountingBatchesPageComponent — Send approved batches (golive #451, DOM)', () => {
+  const APPROVED_ONE: BatchItem = { ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000011', JournalEntryBatchNumber: 'JEB-TEST-0011', Status: 'Approved' };
+  const APPROVED_TWO: BatchItem = { ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000012', JournalEntryBatchNumber: 'JEB-TEST-0012', Status: 'Approved' };
+  let batchReads: number;
+
+  beforeEach(() => {
+    batchReads = 0;
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName === BATCH_ENTITY) {
+        batchReads++;
+        return viewResult([LISTED_BATCH, APPROVED_ONE, APPROVED_TWO]);
+      }
+      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, Name: 'Test Company', ApprovalCFOUserID: APPROVER_USER_ID }]);
+      return viewResult([], 0);
+    });
+  });
+
+  function signInHolding(holdsGrant: boolean): void {
+    const user = new UserInfo();
+    user.ID = BUILDER_USER_ID;
+    const provider = { CurrentUser: user, Authorizations: BatchOperatorCatalog(holdsGrant ? [BUILDER_USER_ID] : []) };
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue(provider as unknown as IMetadataProvider);
+  }
+
+  async function render(): Promise<ComponentFixture<AccountingBatchesPageComponent>> {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  function sendButton(fixture: ComponentFixture<AccountingBatchesPageComponent>): HTMLButtonElement | null {
+    return (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.mja-actions button.sab-open');
+  }
+
+  it('shows to a holder of the batch-operator grant, counting the Approved batches', async () => {
+    signInHolding(true);
+    const fixture = await render();
+
+    expect(sendButton(fixture)?.textContent).toContain('Send approved batches (2)');
+    expect(sendButton(fixture)?.disabled).toBe(false);
+  });
+
+  it('is hidden from a user without the grant', async () => {
+    signInHolding(false);
+    const fixture = await render();
+
+    expect(sendButton(fixture)).toBeNull();
+  });
+
+  it('reloads the batch list after the send', async () => {
+    signInHolding(true);
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'DispatchApprovedJournalEntryBatches')
+      .mockResolvedValue({ Success: true, Batches: [], PostedCount: 0 });
+    const fixture = await render();
+    const readsBefore = batchReads;
+
+    sendButton(fixture)!.click();
+    fixture.detectChanges();
+    const confirm = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('mja-send-approved-batches mj-dialog-actions button'))[0];
+    confirm.click();
+
+    await vi.waitFor(() => expect(batchReads).toBe(readsBefore + 1));
+  });
+});
