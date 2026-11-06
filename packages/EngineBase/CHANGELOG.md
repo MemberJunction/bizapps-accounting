@@ -1,5 +1,20 @@
 # @mj-biz-apps/accounting-engine-base
 
+## 0.26.0
+
+### Minor Changes
+
+- 501999c: Add `ResolveFirstLinkedAccount` and `RefreshAfterLinkMiss` to `AccountingEngineBase`: when a link walk finds no GL account for a role, the engine reloads its cache once (throttled to one reload per 30 seconds, shared between concurrent callers) and retries, so GL account links written directly to the database are picked up without restarting the server (bc-aidp-next-golive#438).
+- a56dd15: A Periods page for month close, and a Finance gate on the posting start date (golive #447).
+
+  - Only holders of the new `MJ.BizApps.Accounting.PostingStartDate.Set` authorization (granted to the Finance role) can set, move or clear a company's `PostingStartDate` on its Accounting Company Profile, the same way `BooksClosedThroughDate` is gated.
+  - The Accounting app gains a Periods nav item: one row per active company with its books-closed and posting start dates. Close month / Reopen month move the books-closed date by whole calendar months, and a month still under way cannot be closed. The posting start date is read-only with an Edit behind a confirmation, and shows how many pending entries it holds back (the batch preview's count). The buttons show only to holders of each authorization.
+  - `@mj-biz-apps/accounting-engine-base` exports `UserCanSetBooksClosedThroughDate`, `UserCanSetPostingStartDate` and both authorization names, plus `CloseMonthThrough`, `ReopenMonthThrough` and `CanCloseMonth`.
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.26.0
+
 ## 0.25.1
 
 ### Patch Changes
