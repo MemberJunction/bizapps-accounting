@@ -34,8 +34,9 @@
  *     written to the approval Task as a comment, so the approver's record shows what became of it.
  *     The comment needs the canceller's linked Person, so the authorization refuses a cancel
  *     without one before any work starts (#212).
- *   assertMayArchive(batchId) (#448): who may archive: before approval only the company's CFO; past
- *     approval the CFO or the batch's approver, as for a cancel.
+ *   assertMayArchive(batchId) (#448, golive #325): who may archive: before approval the company's CFO
+ *     or a holder of the batch-operator authorization (the Finance role); past approval the CFO or the
+ *     batch's approver, as for a cancel.
  *   recordArchive(batchId, archive) (golive #325): an archive is recorded on the approval Task the
  *     same way as a cancel, so archiving no longer leaves the Task open.
  *
@@ -53,8 +54,9 @@
  *   ENTITY (gated): 'MJ_BizApps_Accounting: Journal Entry Batches'
  *   DOC:    JournalEntryBatchEngine.ts (JournalEntryBatchApprovalGate seam) · plan §S1 (CFO-approval workflow gate)
  */
-import { IMetadataProvider, IRunViewProvider, UserInfo } from '@memberjunction/core';
+import { IMetadataProvider, IRunViewProvider, LogError, UserInfo } from '@memberjunction/core';
 import { UUIDsEqual } from '@memberjunction/global';
+import { JOURNAL_ENTRY_BATCH_OPERATE_AUTH, UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
 import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 import {
   IsApprovalOutcome,
@@ -394,10 +396,11 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
   }
 
   /**
-   * Who may archive a batch (#448). Before approval only the company's configured CFO: an archive
-   * keeps the batch's entries out of every future batch for good, so the builder, who may cancel a
-   * Pending batch, may not archive one. Past approval the cancel's rule: the CFO or the batch's
-   * approver, who must then have a linked Person for recordArchive's comment.
+   * Who may archive a batch (#448, golive #325). Before approval the company's configured CFO or a
+   * holder of the batch-operator authorization (the Finance role): an archive keeps the batch's
+   * entries out of every future batch for good, so a builder without the batch-operator
+   * authorization may cancel a Pending batch, not archive one. Past approval the cancel's rule:
+   * the CFO or the batch's approver, who must then have a linked Person for recordArchive's comment.
    */
   async assertMayArchive(batchId: string, contextUser: UserInfo): Promise<void> {
     const batch = await this.loadBatch(batchId, contextUser);
@@ -406,10 +409,13 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
       return;
     }
     const cfoUserId = await this.readCFOUserIdForCompany(batch.CompanyID, contextUser);
-    if (!cfoUserId || !UUIDsEqual(cfoUserId, contextUser.ID)) {
+    const isCfo = !!cfoUserId && UUIDsEqual(cfoUserId, contextUser.ID);
+    const isBatchOperator = UserCanOperateJournalEntryBatches(contextUser, this.provider.Authorizations);
+    if (!isCfo && !isBatchOperator) {
       throw new Error(
         `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the company's configured approver ` +
-        `(the Approval CFO on its Accounting Company Profile) may archive it before approval; its builder may cancel it instead.`,
+        `(the Approval CFO on its Accounting Company Profile) or a user with the ${JOURNAL_ENTRY_BATCH_OPERATE_AUTH} authorization ` +
+        `(the Finance role) may archive it before approval; its builder may cancel it instead.`,
       );
     }
   }
@@ -529,12 +535,15 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
 
   // ─── helpers ───────────────────────────────────────────────────────────────
 
-  /** Why a cancel or archive past approval is refused for a user with no linked Person (#212, golive #325). */
+  /** Why a cancel or archive past approval is refused for a user with no linked Person (#212, golive #325, #458). */
   private noLinkedPersonError(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo, action: BatchCloseAction = 'cancel'): Error {
+    LogError(
+      `TasksAppApprovalGate: cannot ${action} batch ${batch.JournalEntryBatchNumber ?? batch.ID} after approval — ` +
+      `user ${contextUser.ID} resolved to no active Person record via user entity link or People user link.`,
+    );
     return new Error(
-      `Batch ${batch.JournalEntryBatchNumber ?? batch.ID}: the ${action} cannot be recorded on its approval Task because user ` +
-      `${contextUser.Email ?? contextUser.ID} has no linked Person record. ` +
-      `An administrator must link this user to a Person before the batch can be ${action === 'cancel' ? 'cancelled' : 'archived'} after approval.`,
+      `Your account is not linked to a person record, so this ${action} cannot be recorded on the batch's approval request. ` +
+      'Ask an administrator to link your account, then try again.',
     );
   }
 

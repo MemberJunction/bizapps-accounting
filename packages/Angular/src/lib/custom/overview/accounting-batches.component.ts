@@ -2,6 +2,7 @@ import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef, inject }
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CompositeKey, Metadata, RunView } from '@memberjunction/core';
+import { NormalizeUUID } from '@memberjunction/global';
 import { UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { NavigationService } from '@memberjunction/ng-shared';
@@ -28,7 +29,7 @@ import { BatchAction, BatchActionDialogState } from '../JournalEntryBatchDispatc
 import { BatchActionDialogComponent } from '../JournalEntryBatchDispatch/batch-action-dialog/batch-action-dialog.component';
 import { RetryConfirmState } from '../JournalEntryBatchDispatch/retry-confirm-dialog/retry-confirm-dialog.state';
 import { RetryConfirmDialogComponent } from '../JournalEntryBatchDispatch/retry-confirm-dialog/retry-confirm-dialog.component';
-import { CompanyApprovers, IsErpAcceptedFailedBatch, LoadCompanyApprovers, MayArchiveBatch, MayCancelApprovedBatch, MayCancelPendingBatch, MayDecideBatch } from '../JournalEntryBatchDispatch/batch-action-permission';
+import { CompanyApprovers, IsErpAcceptedFailedBatch, MayArchiveBatch, MayCancelApprovedBatch, MayCancelPendingBatch, MayDecideBatch } from '../JournalEntryBatchDispatch/batch-action-permission';
 
 /**
  * The batch fields this page reads, PICKED from the generated entity class rather than
@@ -70,6 +71,9 @@ interface StageCount {
 }
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
+
+/** The company-profile fields the Build dialog and the Archive rule read. */
+type CompanyProfileRow = { ID: string; Name?: string | null; ApprovalCFOUserID?: string | null };
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
 /**
@@ -256,52 +260,57 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                                 <!-- Confirm/affirmative LEFT, then secondary, per the MJ button convention. -->
                                                 @if (CanDispatch(batch)) {
                                                     <button mjButton variant="primary" size="sm" type="button"
+                                                            aria-label="Dispatch"
                                                             [disabled]="DispatchingBatchID === batch.ID"
                                                             [title]="'Send this approved batch to ' + batch.TargetSystem + '.'"
                                                             (click)="OnDispatch(batch, $event)">
-                                                        <i class="fa-solid fa-paper-plane"></i> Dispatch
+                                                        <i class="fa-solid fa-paper-plane" aria-hidden="true"></i> <span class="mja-btn-label">Dispatch</span>
                                                     </button>
                                                 }
                                                 @if (CanRetry(batch)) {
                                                     <button mjButton variant="primary" size="sm" type="button"
+                                                            aria-label="Retry"
                                                             [disabled]="DispatchingBatchID === batch.ID"
                                                             [title]="'Send this batch to ' + batch.TargetSystem + ' again. The ERP is checked first, so a batch it already holds is not posted twice.'"
                                                             (click)="OnDispatch(batch, $event)">
-                                                        <i class="fa-solid fa-rotate-right"></i> Retry
+                                                        <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> <span class="mja-btn-label">Retry</span>
                                                     </button>
                                                 }
                                                 @if (CanDecide(batch)) {
                                                     <button mjButton variant="success" size="sm" type="button"
+                                                            aria-label="Approve"
                                                             [disabled]="DecidingBatchID === batch.ID"
                                                             title="Approve this batch so it can be dispatched to the ERP."
                                                             (click)="OnApprove(batch, $event)">
-                                                        <i class="fa-solid fa-thumbs-up"></i> Approve
+                                                        <i class="fa-solid fa-thumbs-up" aria-hidden="true"></i> <span class="mja-btn-label">Approve</span>
                                                     </button>
                                                     <button mjButton variant="danger" size="sm" type="button"
+                                                            aria-label="Reject"
                                                             [disabled]="DecidingBatchID === batch.ID"
                                                             title="Reject this batch. It is cancelled and its journal entries return to the next build."
                                                             (click)="OnReject(batch, $event)">
-                                                        <i class="fa-solid fa-thumbs-down"></i> Reject
+                                                        <i class="fa-solid fa-thumbs-down" aria-hidden="true"></i> <span class="mja-btn-label">Reject</span>
                                                     </button>
                                                 }
                                                 @if (CanArchive(batch)) {
                                                     <button mjButton variant="secondary" size="sm" type="button"
+                                                            aria-label="Archive"
                                                             [disabled]="ArchivingBatchID === batch.ID"
                                                             title="Close this batch permanently without sending it to the ERP. Its journal entries stay locked to it."
                                                             (click)="OnArchive(batch, $event)">
-                                                        <i class="fa-solid fa-box-archive"></i> Archive
+                                                        <i class="fa-solid fa-box-archive" aria-hidden="true"></i> <span class="mja-btn-label">Archive</span>
                                                     </button>
                                                 }
                                                 @if (CanCancel(batch)) {
                                                     <button mjButton variant="secondary" size="sm" type="button"
+                                                            aria-label="Cancel"
                                                             [disabled]="CancellingBatchID === batch.ID"
                                                             title="Cancel this batch and return its journal entries to the next build."
                                                             (click)="OnCancel(batch, $event)">
-                                                        <i class="fa-solid fa-ban"></i> Cancel
+                                                        <i class="fa-solid fa-ban" aria-hidden="true"></i> <span class="mja-btn-label">Cancel</span>
                                                     </button>
                                                 }
                                             </div>
-                                            <i class="fa-solid fa-arrow-up-right-from-square"></i>
                                         </td>
                                     </tr>
                                 }
@@ -322,6 +331,20 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                     }
 
                     <div class="mja-modal-controls">
+                        <div class="mja-modal-field">
+                            <label class="mja-modal-label">Company</label>
+                            <mj-dropdown
+                                [Data]="CompanyOptions"
+                                TextField="Label"
+                                ValueField="Value"
+                                [ValuePrimitive]="true"
+                                [(ngModel)]="BuildCompanyID"
+                                (ngModelChange)="OnBuildCompanyChange()"
+                                Placeholder="Choose a company…"
+                                aria-label="Company">
+                            </mj-dropdown>
+                        </div>
+
                         <div class="mja-modal-field">
                             <label class="mja-modal-label">Target ERP</label>
                             <mj-dropdown
@@ -772,6 +795,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             flex: 1;
             display: flex;
             flex-direction: column;
+            container-type: inline-size;
         }
 
         /* Empty State */
@@ -909,7 +933,6 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
         }
 
         .mja-td-action > * { vertical-align: middle; }
-        .mja-td-action > .mja-row-actions + i { margin-left: 10px; }
 
         /* Up to four buttons (Approve, Reject, Archive, Cancel on a Pending batch, #466): they wrap
            two to a line instead of widening the table past the page. The min-width keeps a pair on
@@ -925,6 +948,24 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
         }
         /* A row with no actions (Posted, Archived) keeps no blank 210px. */
         .mja-row-actions:empty { display: none; }
+
+        /* At 1024px viewports (container <= 1080px), collapse row action button text to icon-only
+           with tooltip + aria-label so every column fits without horizontal scrolling (#457). */
+        @container (max-width: 1080px) {
+            .mja-table thead th,
+            .mja-table tbody td {
+                padding: 10px 10px;
+            }
+            .mja-row-actions {
+                min-width: 0;
+                max-width: none;
+                flex-wrap: nowrap;
+                gap: 4px;
+            }
+            .mja-row-actions .mja-btn-label {
+                display: none;
+            }
+        }
 
         .mja-loading {
             display: flex;
@@ -1140,6 +1181,8 @@ export class AccountingBatchesPageComponent implements OnInit {
     public BuildModalVisible = false;
     public IsPreviewLoading = false;
     public IsBuildingBatch = false;
+    public CompanyOptions: { Label: string; Value: string }[] = [];
+    public BuildCompanyID = '';
     public BuildTarget = 'BusinessCentral';
     public BuildCutoffDate = '';
     /** The batch's posting date (`YYYY-MM-DD`) — the journal date the ERP receives (golive #315). */
@@ -1300,19 +1343,20 @@ export class AccountingBatchesPageComponent implements OnInit {
     /**
      * Archive is offered wherever the server's LEGAL_TRANSITIONS allows it (Pending / Approved / Failed),
      * except on a Failed batch carrying the ERP's reference, which the server refuses (#413), and only to
-     * the users the server would let archive it (#448): holders of the batch-operator Authorization who
-     * are, on a Pending batch, the company's approver, and past approval the company's approver or the
-     * user who approved it.
+     * the users the server would let archive it (#448, golive #325): on a Pending batch the company's
+     * approver or a holder of the batch-operator Authorization (the Finance role), and past approval the
+     * company's approver or the user who approved it.
      */
     public CanArchive(batch: BatchItem): boolean {
         if (IsErpAcceptedFailedBatch(batch)) return false;
         if (!['Pending', 'Approved', 'Failed'].includes(batch.Status) || this.ArchivingBatchID === batch.ID) return false;
-        return this.MayOperateBatches && MayArchiveBatch(batch, Metadata.Provider?.CurrentUser?.ID, this.companyApprovers);
+        return MayArchiveBatch(batch, Metadata.Provider?.CurrentUser?.ID, this.companyApprovers, this.MayOperateBatches);
     }
 
     /**
      * Whether the signed-in user holds the batch-operator Authorization (the Finance role) that Build
-     * and Archive require on the server (#448). The server stays the authority.
+     * requires on the server (#448), and that also lets a user archive a Pending batch (golive #325).
+     * The server stays the authority.
      */
     public get MayOperateBatches(): boolean {
         return UserCanOperateJournalEntryBatches(Metadata.Provider?.CurrentUser, Metadata.Provider?.Authorizations);
@@ -1459,7 +1503,7 @@ export class AccountingBatchesPageComponent implements OnInit {
 
         try {
             const rv = new RunView();
-            const [batchRes, jeRes, approvers] = await Promise.all([
+            const [batchRes, jeRes, profileRes] = await Promise.all([
                 rv.RunView<BatchItem>({
                     EntityName: BATCH_ENTITY,
                     OrderBy: 'PostingDate DESC, JournalEntryBatchNumber DESC',
@@ -1472,9 +1516,14 @@ export class AccountingBatchesPageComponent implements OnInit {
                     ResultType: 'simple',
                     MaxRows: 1,
                 }),
-                LoadCompanyApprovers(rv),
+                rv.RunView<CompanyProfileRow>({
+                    EntityName: 'MJ_BizApps_Accounting: Accounting Company Profiles',
+                    Fields: ['ID', 'Name', 'ApprovalCFOUserID'],
+                    OrderBy: 'Name ASC',
+                    ResultType: 'simple',
+                }),
             ]);
-            this.companyApprovers = approvers;
+            this.applyCompanyProfiles(profileRes.Success ? profileRes.Results ?? [] : []);
 
             if (batchRes.Success && batchRes.Results) {
                 this.Batches = batchRes.Results;
@@ -1490,6 +1539,19 @@ export class AccountingBatchesPageComponent implements OnInit {
         } finally {
             this.IsLoading = false;
             this.cdr.markForCheck();
+        }
+    }
+
+    /** The Build dialog's company choices and each company's approver, from one read of the profiles (#366, golive #325). */
+    private applyCompanyProfiles(profiles: readonly CompanyProfileRow[]): void {
+        const approvers = new Map<string, string>();
+        for (const p of profiles) {
+            if (p.ApprovalCFOUserID) approvers.set(NormalizeUUID(p.ID), p.ApprovalCFOUserID);
+        }
+        this.companyApprovers = approvers;
+        this.CompanyOptions = profiles.map(p => ({ Label: p.Name?.trim() || p.ID, Value: p.ID }));
+        if (this.CompanyOptions.length === 1 && !this.BuildCompanyID) {
+            this.BuildCompanyID = this.CompanyOptions[0].Value;
         }
     }
 
@@ -1633,10 +1695,12 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.ConfirmPostingDate((event.target as HTMLInputElement).checked);
     }
 
-    /** Why the posting date falls in a month finance has closed for a ticked entry's company (golive #316), or null. */
+    /** Why the posting date falls in a month finance has closed for the selected company (golive #316, #366), or null. */
     public get ClosedBooksProblem(): string | null {
         const included = new Set(this.IncludedEntryIDs);
-        const companies = this.PreviewEntries.filter(e => included.has(e.ID)).map(e => e.CompanyID);
+        const companies = this.BuildCompanyID
+            ? [this.BuildCompanyID]
+            : this.PreviewEntries.filter(e => included.has(e.ID)).map(e => e.CompanyID);
         return ClosedBooksProblem(this.BuildPostingDate, companies);
     }
 
@@ -1645,6 +1709,7 @@ export class AccountingBatchesPageComponent implements OnInit {
         // The preview re-queries on every change and its pool ends at the posting date, so no ticked
         // entry can postdate it; the server refuses that case regardless.
         if (!this.MayOperateBatches) return 'Building a journal entry batch requires the Finance role.';
+        if (!this.BuildCompanyID.trim()) return 'Choose a company.';
         if (!IsCalendarDay(this.BuildPostingDate)) return 'Choose a posting date.';
         if (this.ClosedBooksProblem) return this.ClosedBooksProblem;
         if (this.PostingDateWarning && !this.PostingDateConfirmed) return `Confirm posting this batch in ${this.PostingMonth}.`;
@@ -1665,6 +1730,9 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.Selection = ALL_ENTRIES;
         this.ModalErrorMessage = null;
         this.confirmedPostingDate = null;
+        if (!this.BuildCompanyID && this.CompanyOptions.length === 1) {
+            this.BuildCompanyID = this.CompanyOptions[0].Value;
+        }
         if (!this.BuildCutoffDate) {
             this.BuildCutoffDate = BusinessTimeZoneEngine.Instance.Today();
         }
@@ -1686,6 +1754,15 @@ export class AccountingBatchesPageComponent implements OnInit {
         await this.LoadBuildPreview();
     }
 
+    /**
+     * A new company swaps the whole candidate pool, so a hand-ticked set from the old company would
+     * leave nothing included. Start from every entry, as opening the dialog does.
+     */
+    public async OnBuildCompanyChange(): Promise<void> {
+        this.Selection = ALL_ENTRIES;
+        await this.LoadBuildPreview();
+    }
+
     public async LoadBuildPreview(): Promise<void> {
         const seq = ++this.previewRequestSeq;
         this.IsPreviewLoading = true;
@@ -1698,6 +1775,7 @@ export class AccountingBatchesPageComponent implements OnInit {
             // candidates: after a filter change those are the old pool (golive #284). The server
             // still returns every candidate, so an unticked entry stays visible and re-tickable.
             const previewRes = await this.dispatchClient.PreviewJournalEntryBatch({
+                CompanyIDs: this.BuildCompanyID ? [this.BuildCompanyID] : null,
                 Cutoff: this.BuildCutoffDate || null,
                 PostingDate: this.BuildPostingDate || null,
                 ExcludeEntryTypeCodes: this.ExcludeRevRec ? ['RevenueRecognition'] : null,
@@ -1765,6 +1843,8 @@ export class AccountingBatchesPageComponent implements OnInit {
             // Build EXACTLY the ticked set. Source='Explicit' re-validates server-side that every
             // id is still Pending and loud-rejects a stale selection — the preview is a snapshot.
             // With nothing unticked this is the same set the criteria sweep would have taken.
+            // No CompanyID: an Explicit build groups the ids by each entry's own company, and the
+            // preview already limited them to the chosen one.
             const buildRes = await this.dispatchClient.BuildJournalEntryBatch({
                 TargetSystem: this.BuildTarget,
                 Cutoff: this.BuildCutoffDate || null,
