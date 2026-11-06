@@ -1,5 +1,25 @@
 # @mj-biz-apps/accounting-core-entities-server
 
+## 0.26.0
+
+### Minor Changes
+
+- a56dd15: A Periods page for month close, and a Finance gate on the posting start date (golive #447).
+
+  - Only holders of the new `MJ.BizApps.Accounting.PostingStartDate.Set` authorization (granted to the Finance role) can set, move or clear a company's `PostingStartDate` on its Accounting Company Profile, the same way `BooksClosedThroughDate` is gated.
+  - The Accounting app gains a Periods nav item: one row per active company with its books-closed and posting start dates. Close month / Reopen month move the books-closed date by whole calendar months, and a month still under way cannot be closed. The posting start date is read-only with an Edit behind a confirmation, and shows how many pending entries it holds back (the batch preview's count). The buttons show only to holders of each authorization.
+  - `@mj-biz-apps/accounting-engine-base` exports `UserCanSetBooksClosedThroughDate`, `UserCanSetPostingStartDate` and both authorization names, plus `CloseMonthThrough`, `ReopenMonthThrough` and `CanCloseMonth`.
+
+- ccee5c0: Add a "Send approved batches" button to the Batches page (bc-aidp-next-golive#451). It calls the new `Accounting.DispatchApprovedJournalEntryBatches` Remote Operation, which requires the batch-operator Authorization (the Finance role), takes an optional company filter, sends every Approved batch through the same send as the per-batch Dispatch button, and returns each batch's outcome; one batch failing does not stop the rest. The hourly dispatch action now shares that selection and send and still runs only as the system user. The ERP sync panel is relabelled "Pull accounts and dimensions from ERP" and points to the Batches page for posting.
+
+### Patch Changes
+
+- 81b934e: The batch detail panel and the batch workspace list each entry's source record in a new Source column, which opens that record (the payment line or order line that created the entry). The record is named by its entity's name field when it has one, otherwise by the entity; names load in one batched read. The batch preview now returns each candidate's LinkedEntity and LinkedRecordID. What is sent to the ERP is unchanged.
+- Updated dependencies [501999c]
+- Updated dependencies [a56dd15]
+  - @mj-biz-apps/accounting-engine-base@0.26.0
+  - @mj-biz-apps/accounting-entities@0.26.0
+
 ## 0.25.1
 
 ### Patch Changes
