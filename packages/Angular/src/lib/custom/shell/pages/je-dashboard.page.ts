@@ -2,7 +2,6 @@ import { Component, ChangeDetectionStrategy, inject, OnInit, OnDestroy } from '@
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { RunView, RunViewParams } from '@memberjunction/core';
 import { mjBizAppsAccountingJournalEntryEntityType } from '@mj-biz-apps/accounting-entities';
-import { CompanyScopeService } from '../../shared/company-scope.service';
 import {
   AccountingDashboardBase,
   DashboardList,
@@ -48,9 +47,16 @@ const JE_LIST_FIELDS: (keyof JournalEntryListRow)[] = [
   'Company',
 ];
 
-/** Every count the page reads, carried together so the cards can source their headers from them. */
+/**
+ * Every count the page reads, carried together so the cards can source their headers from them.
+ *
+ * `inPeriod`, `pendingInPeriod`, `batched` and `glPosted` are bounded by the filter bar's period on
+ * `EffectiveDate`. `pending` and `awaiting` are work queues and count every date: an entry left
+ * Pending since last year is still waiting.
+ */
 interface JeCounts {
-  thisMonth: number;
+  inPeriod: number;
+  pendingInPeriod: number;
   pending: number;
   batched: number;
   glPosted: number;
@@ -82,7 +88,6 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
   /** The shell header's Refresh reaches this page only while it is the mounted one. */
   private pageRefresh = inject(PageRefreshService);
   private refreshSub: { unsubscribe: () => void } | null = null;
-  public Scope = inject(CompanyScopeService);
   public Title = 'Journal Entries';
   public Subtitle = 'What needs attention in the ledger';
 
@@ -102,6 +107,7 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
 
   ngOnInit(): void {
     this.refreshSub = this.pageRefresh.OnRefresh(() => this.Refresh());
+    this.reloadOnFilterChange(() => this.Refresh());
     void this.load();
   }
 
@@ -114,6 +120,7 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
   }
 
   private async load(): Promise<void> {
+    const isCurrent = this.beginLoad();
     this.IsLoading = true;
     this.LoadError = null;
     this.cdr.markForCheck();
@@ -122,17 +129,21 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
       // The cards are built AFTER both settle because a card's header count comes from the COUNT,
       // not from however many rows we chose to show (see DashboardList.Count).
       const [counts, rows] = await Promise.all([this.loadCounts(), this.loadListRows()]);
+      if (!isCurrent()) return;
       this.Stats = this.buildStats(counts);
       this.Breakdowns = this.buildBreakdowns(counts);
       this.Lists = this.buildLists(rows, counts);
     } catch (e) {
+      if (!isCurrent()) return;
       this.LoadError = e instanceof Error ? e.message : String(e);
       this.Stats = [];
       this.Breakdowns = [];
       this.Lists = [];
     } finally {
-      this.IsLoading = false;
-      this.cdr.markForCheck();
+      if (isCurrent()) {
+        this.IsLoading = false;
+        this.cdr.markForCheck();
+      }
     }
   }
 
@@ -148,40 +159,43 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
    * not worth its price.
    */
   private async loadCounts(): Promise<JeCounts> {
-    const monthStart = this.monthStartBusiness();
+    const period = this.periodFilter('EffectiveDate');
     const scoped = (own: string | null): string => this.Scope.ComposeFilter(own);
+    const inPeriod = (own: string | null): string => scoped(this.allOf(own, period));
 
     // NO scheduled-entries count: the ScheduledJournalEntry system was retired (D15) — its count
     // here made the WHOLE dashboard load reject with "entity not found" (red LoadError card).
-    const [thisMonth, pending, batched, glPosted, awaiting] = await Promise.all([
-      this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`EffectiveDate >= '${monthStart}'`) }),
+    const [entries, pendingInPeriod, pending, batched, glPosted, awaiting] = await Promise.all([
+      this.count({ EntityName: JE_ENTITY, ExtraFilter: inPeriod(null) }),
+      this.count({ EntityName: JE_ENTITY, ExtraFilter: inPeriod(`Status='Pending'`) }),
       this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Pending'`) }),
-      this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Batched'`) }),
-      this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='GLPosted'`) }),
+      this.count({ EntityName: JE_ENTITY, ExtraFilter: inPeriod(`Status='Batched'`) }),
+      this.count({ EntityName: JE_ENTITY, ExtraFilter: inPeriod(`Status='GLPosted'`) }),
       // C.8: a Pending MANUAL entry is sitting behind the CFO gate — it will not be batched.
       this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Pending' AND EntryType='Manual'`) }),
     ]);
 
-    return { thisMonth, pending, batched, glPosted, awaiting };
+    return { inPeriod: entries, pendingInPeriod, pending, batched, glPosted, awaiting };
   }
 
   /**
-   * The status breakdown + the two time-shaped counts. Pending / Batched / GLPosted are the WHOLE
-   * `JournalEntry.Status` value list, so the three together account for every entry in scope.
+   * The period's entries, two of their statuses, and the two work queues. The queues (Pending,
+   * Awaiting CFO approval) are not bounded by the period, and their tooltips say so.
    */
   private buildStats(c: JeCounts): DashboardStat[] {
+    const effective = `with an effective date in ${this.periodPhrase} (${this.windowText})`;
     return [
-      { Id: 'month', Label: 'Entries this month', Value: c.thisMonth, Icon: 'fa-solid fa-book-open', GoTo: 'all-entries',
-        Tooltip: 'Journal entries with an effective date in the current calendar month, in the business time zone.' },
+      { Id: 'period', Label: 'Entries', Value: c.inPeriod, Icon: 'fa-solid fa-book-open', GoTo: 'all-entries',
+        Tooltip: `Journal entries ${effective}.` },
       { Id: 'pending', Label: 'Pending', Value: c.pending, Icon: 'fa-solid fa-layer-group', GoTo: 'all-entries',
-        Tooltip: 'Not yet batched — the candidate pool a JE batch build would sweep.' },
+        Tooltip: 'Not yet batched — the candidate pool a JE batch build would sweep. Every date, not only the selected period: an entry still waiting is counted however old it is.' },
       { Id: 'batched', Label: 'Batched', Value: c.batched, Icon: 'fa-solid fa-box-archive', GoTo: 'all-batches',
-        Tooltip: 'Locked into a journal entry batch and on their way to the ERP. Immutable from here (BA trigger).' },
+        Tooltip: `Entries ${effective}, locked into a journal entry batch and on their way to the ERP. Immutable from here (BA trigger).` },
       { Id: 'glposted', Label: 'GL posted', Value: c.glPosted, Icon: 'fa-solid fa-circle-check', GoTo: 'all-entries',
-        Tooltip: 'Confirmed landed in the ERP general ledger — the end of the line for an entry.' },
+        Tooltip: `Entries ${effective}, confirmed landed in the ERP general ledger — the end of the line for an entry.` },
       { Id: 'awaiting', Label: 'Awaiting CFO approval', Value: c.awaiting, Icon: 'fa-solid fa-user-check',
         GoTo: 'approvals', Warn: c.awaiting > 0,
-        Tooltip: 'Pending MANUAL entries. They are excluded from batching until approved (C.8) — this is why an entry can look "stuck".' },
+        Tooltip: 'Pending MANUAL entries. They are excluded from batching until approved (C.8) — this is why an entry can look "stuck". Every date, not only the selected period.' },
     ];
   }
 
@@ -189,8 +203,9 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
    * The pipeline shape, at zero read cost — every segment is a count `loadCounts` already ran.
    *
    * Pending / Batched / GLPosted is the WHOLE `JournalEntry.Status` value list, which is what makes
-   * this bar honest: the three segments account for every entry in scope, so the proportions are
-   * real shares of a real total rather than three unrelated numbers sharing an axis. If a migration
+   * this bar honest: the three segments account for every entry in scope and period, so the
+   * proportions are real shares of a real total rather than three unrelated numbers sharing an axis.
+   * All three are bounded by the period, including Pending, unlike the Pending stat card. If a migration
    * widens the Status CHECK constraint, a fourth segment belongs here — the value list is the
    * contract this card depends on.
    *
@@ -202,10 +217,10 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
         Id: 'pipeline',
         Title: 'Ledger pipeline',
         Icon: 'fa-solid fa-diagram-project',
-        Caption: 'Every entry in scope, by status',
-        EmptyMessage: 'No journal entries in this company scope yet.',
+        Caption: `Entries effective in ${this.periodPhrase}, by status`,
+        EmptyMessage: `No journal entries in this company scope for ${this.periodPhrase}.`,
         Segments: [
-          { Id: 'pending', Label: 'Pending', Value: c.pending, Tone: 'brand',
+          { Id: 'pending', Label: 'Pending', Value: c.pendingInPeriod, Tone: 'brand',
             Tooltip: 'Not yet batched — the candidate pool a JE batch build would sweep.' },
           { Id: 'batched', Label: 'Batched', Value: c.batched, Tone: 'info',
             Tooltip: 'Locked into a journal entry batch and on their way to the ERP. Immutable from here (BA trigger).' },
@@ -233,7 +248,8 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
 
     const [recent, awaiting, oldest] = await rv.RunViews<JournalEntryListRow>(
       [
-        list(null, 'EffectiveDate DESC'),
+        // The period bounds the recent card; the two queues below count every date.
+        list(this.periodFilter('EffectiveDate'), 'EffectiveDate DESC'),
         // C.8 again — the same population the "Awaiting CFO approval" stat counts, now named.
         list(`EntryType='Manual' AND Status='Pending'`, 'EffectiveDate DESC'),
         // ASC, not DESC: the point of this card is the entry that has been sitting UNPOSTED longest.
@@ -257,9 +273,9 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
         Id: 'recent',
         Title: 'Recent journal entries',
         Icon: 'fa-solid fa-clock-rotate-left',
-        // The "recent" card is a top-5 of everything, so its own row count IS its honest header.
-        Count: rows.recent.length,
-        EmptyMessage: 'No journal entries in this company scope yet.',
+        // The latest five of the period's entries; the header is the period's count.
+        Count: c.inPeriod,
+        EmptyMessage: `No journal entries in this company scope for ${this.periodPhrase}.`,
         Items: rows.recent.map((r) => this.toItem(r, false)),
       },
       {
