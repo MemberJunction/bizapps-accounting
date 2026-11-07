@@ -1,7 +1,8 @@
-import { Metadata } from '@memberjunction/core';
+import { Metadata, type UserInfo } from '@memberjunction/core';
 import { ActionResultSimple, RunActionParams } from '@memberjunction/actions-base';
 import { BaseAction } from '@memberjunction/actions';
-import { RegisterClass } from '@memberjunction/global';
+import { RegisterClass, UUIDsEqual } from '@memberjunction/global';
+import { UserCache } from '@memberjunction/generic-database-provider';
 import { AccountingERPEngine } from '@mj-biz-apps/accounting-core-entities-server';
 
 /**
@@ -9,6 +10,9 @@ import { AccountingERPEngine } from '@mj-biz-apps/accounting-core-entities-serve
  *
  * One scheduled job calls this once per day for every credentialed company.
  * The engine fans out; this action does not.
+ *
+ * Only the MJ system user, which the scheduler runs jobs as, may run it. A person syncs from the
+ * Explorer ERP sync page, which goes through the `Accounting.RunERPSync` Remote Operation instead.
  */
 @RegisterClass(BaseAction, 'Accounting.RunERPSync')
 export class RunERPSyncAction extends BaseAction {
@@ -21,6 +25,7 @@ export class RunERPSyncAction extends BaseAction {
     if (!user) {
       return { Success: false, ResultCode: 'ERROR', Message: 'The ERP sync could not run: no user was given to run it as.' };
     }
+    assertSystemUser(user);
     const objects = params.Params.find((p) => p.Name === 'Objects')?.Value as Array<'accounts' | 'dimensions' | 'dimensionValues'> | undefined;
     const companyIds = params.Params.find((p) => p.Name === 'CompanyIDs')?.Value as string[] | undefined;
     const output = await AccountingERPEngine.Instance.SyncMasterData(
@@ -34,6 +39,17 @@ export class RunERPSyncAction extends BaseAction {
       Message: output.Results.map(resultSummary).join('; '),
       Params: [...params.Params, { Name: 'Results', Type: 'Output', Value: output.Results }],
     };
+  }
+}
+
+/** Fails closed when the user cache does not hold the system user. */
+function assertSystemUser(contextUser: UserInfo): void {
+  const systemUser = UserCache.Instance.GetSystemUser();
+  if (!systemUser || !contextUser?.ID || !UUIDsEqual(contextUser.ID, systemUser.ID)) {
+    throw new Error(
+      'The ERP sync did not run: this action runs only as the MJ system user, which the scheduled sync job runs as. ' +
+      'Run a sync from the ERP sync page instead.',
+    );
   }
 }
 

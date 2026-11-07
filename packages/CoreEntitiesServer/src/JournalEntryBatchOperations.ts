@@ -391,6 +391,7 @@ export class ResumeJournalEntryBatchPostingOperation extends BaseRemotableOperat
   public readonly RequiredScope = 'accounting:post';
 
   protected async InternalExecute(input: ResumeJournalEntryBatchPostingInput, provider: IMetadataProvider, user: UserInfo): Promise<ResumeJournalEntryBatchPostingOutput> {
+    requireBatchOperator(user, provider, 'ResumeJournalEntryBatchPosting');
     if (!input?.JournalEntryBatchID) throw new Error('Posting was not resumed: no batch was given.');
     requireSqlGuid(input.JournalEntryBatchID, 'ResumeJournalEntryBatchPosting');
     const { batch, journalEntriesPosted } = await resumeJournalEntryBatchPosting(input.JournalEntryBatchID, user, provider);

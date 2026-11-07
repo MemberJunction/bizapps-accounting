@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RunActionParams } from '@memberjunction/actions-base';
-import { Metadata } from '@memberjunction/core';
+import { Metadata, type UserInfo } from '@memberjunction/core';
+import { UserCache } from '@memberjunction/generic-database-provider';
 import { RunERPSyncAction } from '../RunERPSyncAction';
 import * as serverEngine from '@mj-biz-apps/accounting-core-entities-server';
 
@@ -29,6 +30,16 @@ describe('RunERPSyncAction (#256)', () => {
     beforeEach(() => {
         vi.restoreAllMocks();
         Metadata.Provider = { Config: { ActiveStatusAssertions: false } } as never;
+        // The action is restricted to the MJ system user, which the scheduled sync job runs as.
+        vi.spyOn(UserCache.Instance, 'GetSystemUser').mockReturnValue({ ID: 'SYSTEM-USER' } as UserInfo);
+    });
+
+    it('refuses any caller other than the MJ system user', async () => {
+        const sync = vi.spyOn(serverEngine.AccountingERPEngine.Instance, 'SyncMasterData');
+        const params = runParams();
+        params.ContextUser = { ID: 'SOMEONE-ELSE' } as never;
+        await expect(new RunERPSyncAction().Run(params)).rejects.toThrow(/runs only as the MJ system user/);
+        expect(sync).not.toHaveBeenCalled();
     });
 
     it('succeeds when every connection either synced or was skipped, and says which were skipped', async () => {
