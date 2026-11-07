@@ -15,6 +15,7 @@ import {
   JournalEntryBatchWorkspaceClient,
   type JournalEntryBatchCriteria,
   type BatchPreview,
+  type HeldBackEntry,
   type EntryTypeScope,
   type JournalEntryBatchTargetSystem,
 } from './journal-entry-batch-workspace.client';
@@ -505,6 +506,12 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   }
   public get BeforePostingStartCount(): number {
     return this.Preview?.BeforePostingStartCount ?? 0;
+  }
+  public get AfterPostingDateCount(): number {
+    return this.Preview?.AfterPostingDateCount ?? 0;
+  }
+  public get AfterPostingDateEntries(): HeldBackEntry[] {
+    return this.Preview?.AfterPostingDateEntries ?? [];
   }
 
   // ─── build ─────────────────────────────────────────────────────────────────

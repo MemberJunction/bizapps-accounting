@@ -211,6 +211,19 @@ export interface PreviewJournalEntryBatchOutputWire {
   GrossCredits: number;
   OutOfOrderSkipCount: number;
   BeforePostingStartCount: number;
+  AfterPostingDateCount?: number;
+  AfterPostingDateEntries?: HeldBackEntryWire[];
+}
+
+/** An entry the preview reports as held back, and why (golive #448). */
+export interface HeldBackEntryWire {
+  ID: string;
+  EntryNumber: string;
+  EffectiveDate: string;
+  EntryTypeCode: string;
+  CompanyID: string;
+  Description: string | null;
+  Reason: string;
 }
 
 export interface PreviewJournalEntryBatchResult {
@@ -232,6 +245,12 @@ export interface PreviewJournalEntryBatchResult {
    * date: held back, and left Pending, by every build.
    */
   BeforePostingStartCount: number;
+  /**
+   * How many entries the other criteria admit that are dated after the posting date (golive #448):
+   * held back until a batch posts on or after their date. `AfterPostingDateEntries` lists the oldest.
+   */
+  AfterPostingDateCount: number;
+  AfterPostingDateEntries: HeldBackEntryWire[];
   ErrorMessage?: string;
 }
 
@@ -270,7 +289,7 @@ export class JournalEntryBatchDispatchClient {
     try {
       const res = await this.dataProvider.RouteOperation<PreviewJournalEntryBatchOptionsInput, PreviewJournalEntryBatchOutputWire>(
         'Accounting.PreviewJournalEntryBatch', options ?? {});
-      if (!res.Success || !res.Output) return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0, ErrorMessage: res.ErrorMessage ?? 'The server returned no result. Try again; if it keeps happening, ask an administrator to check the server logs.' };
+      if (!res.Success || !res.Output) return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0, AfterPostingDateCount: 0, AfterPostingDateEntries: [], ErrorMessage: res.ErrorMessage ?? 'The server returned no result. Try again; if it keeps happening, ask an administrator to check the server logs.' };
       return {
         Success: true,
         Candidates: res.Output.Candidates ?? [],
@@ -280,11 +299,13 @@ export class JournalEntryBatchDispatchClient {
         GrossCredits: res.Output.GrossCredits ?? 0,
         OutOfOrderSkipCount: res.Output.OutOfOrderSkipCount ?? 0,
         BeforePostingStartCount: res.Output.BeforePostingStartCount ?? 0,
+        AfterPostingDateCount: res.Output.AfterPostingDateCount ?? 0,
+        AfterPostingDateEntries: res.Output.AfterPostingDateEntries ?? [],
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`JournalEntryBatchDispatchClient.PreviewJournalEntryBatch failed: ${msg}`);
-      return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0, ErrorMessage: msg };
+      return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0, AfterPostingDateCount: 0, AfterPostingDateEntries: [], ErrorMessage: msg };
     }
   }
 

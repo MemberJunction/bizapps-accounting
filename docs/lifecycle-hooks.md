@@ -85,6 +85,15 @@ original's `ReversedByJournalEntryID` (the one field the immutability trigger le
 The reversal's `EffectiveDate` is the later of today's business day (`BusinessTimeZoneEngine`) and the
 original's `EffectiveDate`, so a reversal never lands in a period before the entry it reverses (#266).
 
+### W10 — Re-dating a Pending entry *(✅ `JournalEntryEntityServer.SaveRedatedEffectiveDate(day)`, golive #448)*
+**Fires:** only from `Accounting.RedatePendingJournalEntries`, after it has checked the caller (the
+batch-operator Authorization), the company's `BooksClosedThroughDate` and `PostingStartDate`, and that
+the move stays in the entry's fiscal year.
+**Does:** moves a saved, Pending, unbatched entry's `EffectiveDate` and saves it. During that save
+`EffectiveDateChangeAllowed` is true; it is false on every other save, so a rule that makes `EffectiveDate`
+immutable on saved entries (#391) consults it to let this one change through. A manual entry's approval
+re-routes as for any date change.
+
 ### W9 — JE attachment validation *(✅ `JournalEntryEntityServer.ts`)*
 **Fires:** whenever a JE is saved with a non-null `FileID`.
 **Does:** verifies the `FileID` references an existing `__mj.File` (the DB FK is the hard guarantee).

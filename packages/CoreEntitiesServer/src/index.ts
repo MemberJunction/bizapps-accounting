@@ -170,6 +170,17 @@ export {
   type GenerateReversalOutput,
 } from './GenerateReversalOperation.js';
 export {
+  RedatePendingJournalEntriesOperation,
+  LoadRedatePendingJournalEntriesOperation,
+  RedateProblems,
+  NamedEntriesFilter,
+  type RedatePendingJournalEntriesInput,
+  type RedatePendingJournalEntriesOutput,
+  type RedatedJournalEntry,
+  type RedateCandidate,
+  type CompanyDateRules,
+} from './RedatePendingJournalEntriesOperation.js';
+export {
   GetJournalEntryStatesOperation,
   LoadGetJournalEntryStatesOperation,
   MAX_JOURNAL_ENTRY_STATE_IDS,
