@@ -5,6 +5,7 @@
 }
 .erp-sync__head h3 { margin: 0; font-size: 1rem; color: var(--mj-text-primary); }
 .erp-sync__head p { margin: 4px 0 0; color: var(--mj-text-secondary); font-size: var(--mj-text-sm); }
+.erp-sync__head .erp-sync__posting { display: flex; gap: 6px; align-items: baseline; color: var(--mj-text-primary); }
 .erp-sync__objects { display: flex; gap: 16px; flex-wrap: wrap; color: var(--mj-text-primary); }
 .erp-sync__objects label { display: flex; gap: 6px; align-items: center; }
 .erp-sync__results { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }

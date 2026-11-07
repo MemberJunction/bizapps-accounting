@@ -4,19 +4,24 @@ import { resolve } from 'node:path';
 import { MJGlobal } from '@memberjunction/global';
 import { BaseAction } from '@memberjunction/actions';
 import { RunActionParams } from '@memberjunction/actions-base';
-import { Metadata, RunView, type UserInfo } from '@memberjunction/core';
+import { Metadata, type UserInfo } from '@memberjunction/core';
 import { UserCache } from '@memberjunction/generic-database-provider';
 import * as serverEngine from '@mj-biz-apps/accounting-core-entities-server';
-import { DispatchApprovedJournalEntryBatchesAction, approvedBatchFilter } from '../DispatchApprovedJournalEntryBatchesAction';
+import { DispatchApprovedJournalEntryBatchesAction } from '../DispatchApprovedJournalEntryBatchesAction';
 
+/**
+ * The selection and the sends are `dispatchApprovedJournalEntryBatches` in
+ * accounting-core-entities-server, tested there (ApprovedBatchDispatch.test.ts) with the Send approved
+ * batches operation that shares it. What is under test here is the action's own part: the system-user
+ * check, the inputs it passes and the result it reports.
+ */
 const CO_1 = '11111111-1111-4111-8111-111111111111';
-const CO_2 = '22222222-2222-4222-8222-222222222222';
 
-const row = (n: number, companyId = CO_1) => ({ ID: `B-${n}`, JournalEntryBatchNumber: `BATCH-00000${n}`, CompanyID: companyId });
-
-/** A batch as sendJournalEntryBatch returns it. */
-const sentBatch = (status: string, errorMessage: string | null = null) =>
-    ({ Status: status, ErrorMessage: errorMessage }) as unknown as Awaited<ReturnType<typeof serverEngine.sendJournalEntryBatch>>;
+type Outcome = serverEngine.ApprovedBatchDispatchOutcome;
+const outcome = (n: number, status: string, over: Partial<Outcome> = {}): Outcome => ({
+    batchId: `B-${n}`, batchNumber: `BATCH-00000${n}`, companyId: CO_1, company: 'Co 1', status,
+    error: null, needsAttention: status !== 'Posted', takenByAnotherSend: false, ...over,
+});
 
 const runParams = (inputs: Array<{ Name: string; Value: unknown }> = [], userId = 'SYSTEM-USER'): RunActionParams => {
     const params = new RunActionParams();
@@ -29,8 +34,8 @@ const runParams = (inputs: Array<{ Name: string; Value: unknown }> = [], userId 
     return params;
 };
 
-const mockApproved = (rows: Array<ReturnType<typeof row>>) =>
-    vi.spyOn(RunView.prototype, 'RunView').mockResolvedValue({ Success: true, Results: rows } as never);
+const mockDispatch = (outcomes: Outcome[]) =>
+    vi.spyOn(serverEngine, 'dispatchApprovedJournalEntryBatches').mockResolvedValue(outcomes);
 
 describe('DispatchApprovedJournalEntryBatchesAction', () => {
     beforeEach(() => {
@@ -44,38 +49,39 @@ describe('DispatchApprovedJournalEntryBatchesAction', () => {
         expect(instance).toBeInstanceOf(DispatchApprovedJournalEntryBatchesAction);
     });
 
-    it('sends every Approved batch, oldest approval first, through the same send the Dispatch button uses', async () => {
-        const view = mockApproved([row(1), row(2, CO_2)]);
-        const send = vi.spyOn(serverEngine, 'sendJournalEntryBatch').mockResolvedValue(sentBatch('Posted'));
+    it('sends through the shared dispatch, passing its filter inputs and the server provider', async () => {
+        const dispatch = mockDispatch([outcome(1, 'Posted'), outcome(2, 'Posted')]);
 
-        const params = runParams();
+        const params = runParams([{ Name: 'TargetSystem', Value: 'BusinessCentral' }, { Name: 'CompanyIDs', Value: [CO_1] }]);
         const result = await new DispatchApprovedJournalEntryBatchesAction().Run(params);
 
-        expect(result.Success).toBe(true);
-        expect(result.ResultCode).toBe('SUCCESS');
-        expect(view.mock.calls[0][0]).toMatchObject({ ExtraFilter: `Status='Approved'`, OrderBy: 'ApprovedAt ASC' });
-        expect(send.mock.calls.map(c => c[0])).toEqual(['B-1', 'B-2']);
-        // No confirmation is ever passed: the job does not attest that a batch has not posted.
-        expect(send.mock.calls[0][2]).toEqual({ provider: Metadata.Provider });
+        expect(result).toMatchObject({ Success: true, ResultCode: 'SUCCESS' });
+        expect(dispatch).toHaveBeenCalledWith({ targetSystem: 'BusinessCentral', companyIds: [CO_1] }, params.ContextUser, Metadata.Provider);
         expect(params.Params.find(p => p.Name === 'PostedCount')?.Value).toBe(2);
     });
 
+    it('passes no narrowing when no filter inputs are given', async () => {
+        const dispatch = mockDispatch([]);
+
+        await new DispatchApprovedJournalEntryBatchesAction().Run(runParams([{ Name: 'CompanyIDs', Value: [] }]));
+
+        expect(dispatch.mock.calls[0][0]).toEqual({ targetSystem: null, companyIds: null });
+    });
+
     it('reports a clean run with nothing to send', async () => {
-        mockApproved([]);
-        const send = vi.spyOn(serverEngine, 'sendJournalEntryBatch');
+        mockDispatch([]);
 
         const result = await new DispatchApprovedJournalEntryBatchesAction().Run(runParams());
 
         expect(result).toMatchObject({ Success: true, ResultCode: 'NO_BATCHES' });
-        expect(send).not.toHaveBeenCalled();
     });
 
-    it('keeps going after a batch fails, and fails the run naming each batch that did not post', async () => {
-        mockApproved([row(1), row(2), row(3)]);
-        vi.spyOn(serverEngine, 'sendJournalEntryBatch')
-            .mockResolvedValueOnce(sentBatch('Failed', 'could not check the ERP for document BATCH-000001'))
-            .mockRejectedValueOnce(new Error('The batch was not sent: batch BATCH-000002 no longer matches its approved content.'))
-            .mockResolvedValueOnce(sentBatch('Posted'));
+    it('fails the run naming each batch that did not post', async () => {
+        mockDispatch([
+            outcome(1, 'Failed', { error: 'could not check the ERP for document BATCH-000001' }),
+            outcome(2, 'Approved', { error: 'The batch was not sent: batch BATCH-000002 no longer matches its approved content.' }),
+            outcome(3, 'Posted'),
+        ]);
 
         const params = runParams();
         const result = await new DispatchApprovedJournalEntryBatchesAction().Run(params);
@@ -90,9 +96,7 @@ describe('DispatchApprovedJournalEntryBatchesAction', () => {
     });
 
     it('leaves a batch another send took first to that send, without failing the run', async () => {
-        mockApproved([row(1)]);
-        vi.spyOn(serverEngine, 'sendJournalEntryBatch')
-            .mockRejectedValue(new serverEngine.JournalEntryBatchSendRefusedError('B-1', 'Sent', 'refused'));
+        mockDispatch([outcome(1, 'Sent', { needsAttention: false, takenByAnotherSend: true })]);
 
         const result = await new DispatchApprovedJournalEntryBatchesAction().Run(runParams());
 
@@ -100,11 +104,11 @@ describe('DispatchApprovedJournalEntryBatchesAction', () => {
     });
 
     it('runs only as the MJ system user, before reading any batch', async () => {
-        const view = mockApproved([row(1)]);
+        const dispatch = mockDispatch([outcome(1, 'Posted')]);
 
         await expect(new DispatchApprovedJournalEntryBatchesAction().Run(runParams([], 'FINANCE-USER')))
             .rejects.toThrow(/runs only as the MJ system user/);
-        expect(view).not.toHaveBeenCalled();
+        expect(dispatch).not.toHaveBeenCalled();
     });
 
     it('fails closed when the user cache does not hold the system user', async () => {
@@ -112,18 +116,6 @@ describe('DispatchApprovedJournalEntryBatchesAction', () => {
 
         await expect(new DispatchApprovedJournalEntryBatchesAction().Run(runParams()))
             .rejects.toThrow(/runs only as the MJ system user/);
-    });
-});
-
-describe('approvedBatchFilter', () => {
-    it('narrows to a target ERP and to companies', () => {
-        expect(approvedBatchFilter({ targetSystem: 'BusinessCentral', companyIds: [CO_1, CO_2] }))
-            .toBe(`Status='Approved' AND TargetSystem='BusinessCentral' AND CompanyID IN ('${CO_1}','${CO_2}')`);
-    });
-
-    it('refuses a target ERP outside the known set and a company that is not an ID', () => {
-        expect(() => approvedBatchFilter({ targetSystem: "x' OR 1=1 --" as never, companyIds: null })).toThrow(/is not a target ERP/);
-        expect(() => approvedBatchFilter({ targetSystem: null, companyIds: ["x' OR 1=1 --"] })).toThrow(/not a valid UUID/);
     });
 });
 

@@ -1,11 +1,14 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, Input, inject, OnInit, OnDestroy } from '@angular/core';
-import { RunView, type IRemoteOperationProvider } from '@memberjunction/core';
+import { CompositeKey, LogError, RunView, type IRemoteOperationProvider } from '@memberjunction/core';
 import { AccountingEngineBase, UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
 import { BusinessTimeZoneEngine, IsBeforeDay, IsCalendarDay, ToCalendarDay } from '@mj-biz-apps/common-entities';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
+import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { ClosedBooksProblem, PostingDateMonthWarning, PostingMonthLabel } from '../../shared/posting-date-warning';
 import { CompanyScopeService } from '../../shared/company-scope.service';
+import { openBizDetail } from '../../shared/biz-detail-form';
+import { LoadJournalEntrySources, SourceLabel, type JournalEntrySource } from '../../shared/je-source';
 import { WorkspaceTabStore } from '../../../transfer-pending/workspace-tabs/workspace-tab-store';
 import { WorkspaceTab } from '../../../transfer-pending/workspace-tabs/workspace-tabs.types';
 import {
@@ -72,6 +75,13 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   private pageRefresh = inject(PageRefreshService);
   private refreshSub: { unsubscribe: () => void } | null = null;
   public Scope = inject(CompanyScopeService);
+  private forms = inject(MJFormPresenterService);
+
+  /**
+   * Source record per candidate entry ID (bc-aidp-next-golive#452), shared by every tab: an entry's
+   * source never changes, so a name read once stays good. Filled after each preview, off its path.
+   */
+  private sources = new Map<string, JournalEntrySource>();
 
   private tabs = new WorkspaceTabStore<BatchDraft>();
   private client = new JournalEntryBatchWorkspaceClient();
@@ -340,6 +350,37 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     return this.Scope.Companies.find((c) => c.ID === id)?.Name ?? 'Unknown company';
   }
 
+  public SourceOf(entryId: string): JournalEntrySource | undefined {
+    return this.sources.get(entryId);
+  }
+
+  public SourceText(source: JournalEntrySource): string {
+    return SourceLabel(source);
+  }
+
+  /** Open a candidate's source record (the payment line, order line, …) over the workspace. */
+  public OpenSource(source: JournalEntrySource): void {
+    openBizDetail(this.forms, {
+      entityName: source.EntityName,
+      primaryKey: CompositeKey.FromID(source.RecordID),
+      title: SourceLabel(source),
+      mode: 'slide-in',
+    });
+  }
+
+  /** Resolve the sources of candidates not seen before; a failed read leaves those cells as entity labels. */
+  private async loadSources(preview: BatchPreview): Promise<void> {
+    const unseen = preview.Candidates.filter((c) => !this.sources.has(c.ID));
+    if (unseen.length === 0) return;
+    try {
+      const found = await LoadJournalEntrySources(this.ProviderToUse, unseen);
+      for (const [id, source] of found) this.sources.set(id, source);
+    } catch (e) {
+      LogError(`Batch workspace: could not load the source records: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    this.cdr.markForCheck();
+  }
+
   // ─── preview ───────────────────────────────────────────────────────────────
 
   /**
@@ -373,6 +414,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
       d.PreviewStale = false;
       this.tabs.UpdateState(tabId, d);
       this.ActionMessage = null;
+      void this.loadSources(preview);
     } catch (e) {
       if (!isLatestForTab()) return;
       this.setError(e instanceof Error ? e.message : String(e));

@@ -24,8 +24,8 @@ const JE_A = 'aaaaaaaa-0000-0000-0000-000000000001';
 const JE_B = 'aaaaaaaa-0000-0000-0000-000000000002';
 
 const entries = [
-  { ID: JE_A, EntryNumber: 'JE-1', EffectiveDate: '2026-09-01', EntryTypeID: TYPE_ID, CompanyID: COMPANY, Description: null },
-  { ID: JE_B, EntryNumber: 'JE-2', EffectiveDate: '2026-09-02', EntryTypeID: TYPE_ID, CompanyID: COMPANY, Description: null },
+  { ID: JE_A, EntryNumber: 'JE-1', EffectiveDate: '2026-09-01', EntryTypeID: TYPE_ID, CompanyID: COMPANY, Description: null, LinkedEntity: 'Test: Payment Lines', LinkedRecordID: 'pl-1' },
+  { ID: JE_B, EntryNumber: 'JE-2', EffectiveDate: '2026-09-02', EntryTypeID: TYPE_ID, CompanyID: COMPANY, Description: null, LinkedEntity: null, LinkedRecordID: null },
 ];
 const lines = [
   { ID: 'l1', JournalEntryID: JE_A, GLAccountID: GL_AR, DebitAmount: 100, CreditAmount: 0 },
@@ -83,5 +83,16 @@ describe('previewBatch — candidate Amount ignores the selection', () => {
     expect(result.Candidates.map(c => c.Amount)).toEqual([100, 250.5]);
     expect(result.TotalDebits).toBe(0);
     expect(result.GrossDebits).toBe(0);
+  });
+});
+
+// bc-aidp-next-golive#452: the workspace's Source column links each candidate to its source record.
+describe('previewBatch — candidate origin pair', () => {
+  it("carries each candidate's LinkedEntity and LinkedRecordID, null on a manual entry", async () => {
+    const result = await previewBatch({}, user, fakeProvider());
+
+    const byId = new Map(result.Candidates.map(c => [c.ID, c]));
+    expect(byId.get(JE_A)).toMatchObject({ LinkedEntity: 'Test: Payment Lines', LinkedRecordID: 'pl-1' });
+    expect(byId.get(JE_B)).toMatchObject({ LinkedEntity: null, LinkedRecordID: null });
   });
 });

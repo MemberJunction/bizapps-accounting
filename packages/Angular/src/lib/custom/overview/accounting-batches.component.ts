@@ -30,6 +30,7 @@ import { BatchAction, BatchActionDialogState } from '../JournalEntryBatchDispatc
 import { BatchActionDialogComponent } from '../JournalEntryBatchDispatch/batch-action-dialog/batch-action-dialog.component';
 import { RetryConfirmState } from '../JournalEntryBatchDispatch/retry-confirm-dialog/retry-confirm-dialog.state';
 import { RetryConfirmDialogComponent } from '../JournalEntryBatchDispatch/retry-confirm-dialog/retry-confirm-dialog.component';
+import { SendApprovedBatchesComponent } from '../JournalEntryBatchDispatch/send-approved-batches/send-approved-batches.component';
 import { CompanyApprovers, IsErpAcceptedFailedBatch, MayArchiveBatch, MayCancelApprovedBatch, MayCancelPendingBatch, MayDecideBatch } from '../JournalEntryBatchDispatch/batch-action-permission';
 
 /**
@@ -86,7 +87,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 @Component({
     selector: 'mj-accounting-batches-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent, BatchActionDialogComponent, RetryConfirmDialogComponent],
+    imports: [CommonModule, FormsModule, MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent, BatchActionDialogComponent, RetryConfirmDialogComponent, SendApprovedBatchesComponent],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div class="mja-batches-layout">
@@ -115,6 +116,10 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                     </div>
 
                     <div class="mja-actions">
+                        <!-- Sends every Approved batch now instead of waiting for the hourly job (golive #451). -->
+                        @if (MayOperateBatches) {
+                            <mja-send-approved-batches [ApprovedCount]="ApprovedBatchCount" (Sent)="LoadBatches()" />
+                        }
                         @if (MayOperateBatches) {
                             <button mjButton variant="primary" size="sm" type="button" (click)="OpenBuildBatchModal()">
                                 <i class="fa-solid fa-plus"></i> Build Batch
@@ -638,6 +643,13 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             align-items: center;
             justify-content: space-between;
             gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .mja-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
             flex-wrap: wrap;
         }
 
@@ -1282,6 +1294,11 @@ export class AccountingBatchesPageComponent implements OnInit {
     public CanDecide(batch: BatchItem): boolean {
         if (batch.Status !== 'Pending' || this.DecidingBatchID === batch.ID) return false;
         return MayDecideBatch(batch, Metadata.Provider?.CurrentUser?.ID, this.companyApprovers);
+    }
+
+    /** How many listed batches are Approved: what Send approved batches will send (golive #451). */
+    public get ApprovedBatchCount(): number {
+        return this.Batches.filter(b => b.Status === 'Approved').length;
     }
 
     /** Dispatch sends an Approved batch to the ERP; it needs the batch-operator Authorization (#448). */

@@ -117,6 +117,11 @@ auto-refresh, and exposes:
   Cardinality=Many roles throw `ROLE_NOT_SINGULAR` (BA-D34).
 - **`ResolveLinkedAccounts(...)`** — every covering Active link for a Many role (`BankAccount`).
   One roles return the same 0-or-1 winner as `ResolveLinkedAccount`.
+- **`ResolveFirstLinkedAccount(records, role, asOfDate, options)`** — the first record in a caller-ordered
+  walk with a link; when none has one, reloads the cache once and retries (bc-aidp-next-golive#438), so
+  links written straight to the database are found without a server restart.
+  **`RefreshAfterLinkMiss()`** is that reload for callers that walk themselves: shared between concurrent
+  callers, and skipped (returns false) within 30 s of the last one.
 - the **pure draft pipeline** (`runDraftPipeline`) + the typed contract (`JournalEntryDraft`,
   `CreateJournalEntryResult`, the 10 error codes) — importable by Orders' client code with zero server deps.
 

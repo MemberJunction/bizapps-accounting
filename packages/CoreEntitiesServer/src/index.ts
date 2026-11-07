@@ -193,6 +193,7 @@ export {
   PreviewJournalEntryBatchOperation,
   RegenerateJournalEntryBatchOperation,
   DispatchJournalEntryBatchOperation,
+  DispatchApprovedJournalEntryBatchesOperation,
   RecordJournalEntryBatchDecisionOperation,
   GetJournalEntryBatchApprovalStateOperation,
   ArchiveJournalEntryBatchOperation,
@@ -207,6 +208,9 @@ export {
   type RegenerateJournalEntryBatchInput,
   type DispatchJournalEntryBatchInput,
   type DispatchJournalEntryBatchOutput,
+  type DispatchApprovedJournalEntryBatchesInput,
+  type DispatchApprovedJournalEntryBatchesOutput,
+  type DispatchApprovedJournalEntryBatchOutcome,
   type JournalEntryBatchDecisionOutcome,
   type RecordJournalEntryBatchDecisionInput,
   type RecordJournalEntryBatchDecisionOutput,
@@ -220,6 +224,16 @@ export {
   type ResumeJournalEntryBatchPostingOutput,
   type GetStrandedJournalEntriesOutput,
 } from './JournalEntryBatchOperations.js';
+// Every Approved batch through the per-batch send: shared by the hourly dispatch action and the
+// Send approved batches operation (bc-aidp-next-golive#451).
+export {
+  approvedBatchFilter,
+  readApprovedJournalEntryBatches,
+  dispatchApprovedJournalEntryBatch,
+  dispatchApprovedJournalEntryBatches,
+  type ApprovedBatchDispatchFilter,
+  type ApprovedBatchDispatchOutcome,
+} from './ApprovedBatchDispatch.js';
 
 // Finance exceptions (golive #279): the month-end review list. Three remote operations —
 // Accounting.GetFinanceExceptionTypes / RaiseFinanceExceptions / ClearFinanceException — over the

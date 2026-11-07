@@ -2125,6 +2125,9 @@ export interface JournalEntryBatchPreviewEntry {
   Description: string | null;
   /** Σ debits on the entry — the money column the preview grid shows. */
   Amount: number;
+  /** D25 origin pair, for the grid's Source link (bc-aidp-next-golive#452). Null on a manual entry. */
+  LinkedEntity: string | null;
+  LinkedRecordID: string | null;
 }
 
 /** One row of the preview's "affected accounts" summary. */
@@ -2272,12 +2275,12 @@ export async function previewBatch(
   const filter = await candidateFilterParts(options, contextUser, p);
   // Read WITHOUT the approval part and split here: the entries awaiting approval are counted from
   // the same read instead of a second query (golive #353). The build applies the full filter.
-  const res = await p.rv.RunView<{ ID: string; EntryNumber: string; EffectiveDate: string; EntryTypeID: string; CompanyID: string; Description: string | null; ApprovalLevel: string | null; ApprovedAt: string | null }>(
+  const res = await p.rv.RunView<{ ID: string; EntryNumber: string; EffectiveDate: string; EntryTypeID: string; CompanyID: string; Description: string | null; ApprovalLevel: string | null; ApprovedAt: string | null; LinkedEntity: string | null; LinkedRecordID: string | null }>(
     {
       EntityName: JE_ENTITY,
       ExtraFilter: [...filter.criteria, ...filter.postingStart].join(' AND '),
       OrderBy: 'EffectiveDate ASC, EntryNumber ASC', // the same oldest-first order the build uses
-      Fields: ['ID', 'EntryNumber', 'EffectiveDate', 'EntryTypeID', 'CompanyID', 'Description', 'ApprovalLevel', 'ApprovedAt'],
+      Fields: ['ID', 'EntryNumber', 'EffectiveDate', 'EntryTypeID', 'CompanyID', 'Description', 'ApprovalLevel', 'ApprovedAt', 'LinkedEntity', 'LinkedRecordID'],
       ResultType: 'simple',
       BypassCache: true,
       IgnoreMaxRows: true,
@@ -2325,6 +2328,8 @@ export async function previewBatch(
       CompanyID: r.CompanyID,
       Description: r.Description,
       Amount: amountByJE.get(r.ID) ?? 0,
+      LinkedEntity: r.LinkedEntity,
+      LinkedRecordID: r.LinkedRecordID,
     })),
     AffectedAccounts: await summarizeAffectedAccounts(groups, contextUser, p),
     TotalDebits: totalDebits,

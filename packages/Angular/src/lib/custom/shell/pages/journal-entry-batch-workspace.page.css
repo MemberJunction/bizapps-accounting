@@ -297,3 +297,25 @@
   max-width: 42ch;
   font-size: 13px;
 }
+
+/* Source column (bc-aidp-next-golive#452): the entry's source record, as a link. */
+.bw-source {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bw-source-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--mj-text-link);
+  cursor: pointer;
+  font: inherit;
+}
+.bw-source-link:hover {
+  text-decoration: underline;
+}
+.bw-source-none {
+  color: var(--mj-text-muted);
+}
