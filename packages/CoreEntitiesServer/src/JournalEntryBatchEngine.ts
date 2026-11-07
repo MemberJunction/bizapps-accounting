@@ -974,7 +974,7 @@ export async function resolveExternalAccount(
 ): Promise<string> {
   const p = resolveProviders(provider);
   const glRes = await p.rv.RunView<{ Code: string; ExternalSystem: string | null; ExternalAccountID: string | null }>(
-    { EntityName: GL_ENTITY, ExtraFilter: `ID='${glAccountId}'`, Fields: ['Code', 'ExternalSystem', 'ExternalAccountID'], ResultType: 'simple', BypassCache: true },
+    { EntityName: GL_ENTITY, ExtraFilter: `ID=${sqlGuidLiteral(glAccountId, 'resolveExternalAccount: GL account id')}`, Fields: ['Code', 'ExternalSystem', 'ExternalAccountID'], ResultType: 'simple', BypassCache: true },
     contextUser,
   );
   const gl = glRes.Results?.[0];
@@ -1771,7 +1771,7 @@ async function postOrFail(
 async function loadSummaryLines(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo, p: Providers): Promise<mjBizAppsAccountingJournalEntryLineEntity[]> {
   if (!batch.SummaryJournalEntryID) return [];
   const res = await p.rv.RunView<mjBizAppsAccountingJournalEntryLineEntity>(
-    { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${batch.SummaryJournalEntryID}'`, OrderBy: 'LineNumber', ResultType: 'entity_object', BypassCache: true, IgnoreMaxRows: true },
+    { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID=${sqlGuidLiteral(batch.SummaryJournalEntryID, 'loadSummaryLines: summary journal entry id')}`, OrderBy: 'LineNumber', ResultType: 'entity_object', BypassCache: true, IgnoreMaxRows: true },
     contextUser,
   );
   // Loud on failure: an empty result here would send the ERP an empty journal.
