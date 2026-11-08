@@ -5,27 +5,29 @@
  * with the typed contract intact on the wire.
  *
  *   1. success — a mergeable draft books; outputJSON carries {Success, JournalEntryID,
- *      EntryNumber JE-{FY}-{seq}, LineCount} (exact values).
+ *      EntryNumber JE-{CompanyCode}-{FY}-{seq:000000}, LineCount} (exact values).
  *   2. typed failure ON THE WIRE — an unbalanced draft returns transport success=true with
  *      Output.Success=false + UNBALANCED (logical failures live INSIDE the output).
  *   3. unknown operation key → UNKNOWN_OPERATION (the registry gate works over the wire).
+ *   4. Accounting.GenerateJournalEntryReversal — a reversal JE comes back with an EntryNumber; a
+ *      second reversal of the same JE is refused.
  *
- * Reuses the batching fixture for an isolated company. Run from the INSTANCE WORKTREE ROOT:
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/engine-op-api.ts
- * Env overrides: MJ_API_URL (default http://localhost:4070) · MJ_API_KEY · MJDEV_SLUG.
+ * Reuses the batching fixture for an isolated company. Run from the repo root
+ * (paths resolve from this file, so any directory works):
+ *   npx tsx test-harnesses/api/engine-op-api.ts
+ * Env overrides: MJ_API_URL (default http://localhost:4180) · MJ_API_KEY (default: minted with
+ * `mjdev key <slug>`) · MJDEV_SLUG (default accounting-revamp) · MJDEV_BIN (see ../harness-paths.mts).
  * Exit codes: 0 all passed · 1 assertion failures · 2 bootstrap/connection error.
  */
-import { execFileSync, execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import type { CreateJournalEntryOutput, JournalEntryDraft } from '@mj-biz-apps/accounting-engine-base';
+import { MJDEV_BIN, REPO_ROOT, TSX_BIN } from '../harness-paths.mjs';
 
 const API_URL = (process.env.MJ_API_URL ?? 'http://localhost:4180').replace(/\/+$/, '');
 const GRAPHQL_URL = `${API_URL}/`;
-const MJDEV_LAUNCHER = '/Users/marcelotorres/MJDev/bin/mjdev';
 const INSTANCE_SLUG = process.env.MJDEV_SLUG ?? 'accounting-revamp';
-const WORKTREE_ROOT = process.cwd();
-const TSX = path.resolve(WORKTREE_ROOT, 'node_modules', '.bin', 'tsx');
-const FIXTURE = path.resolve(WORKTREE_ROOT, 'packages/dev-apps/bizapps-accounting/test-harnesses/playwright/lib/batching-fixture.ts');
+const FIXTURE = path.join(REPO_ROOT, 'test-harnesses', 'playwright', 'lib', 'batching-fixture.ts');
 
 let passed = 0, failed = 0;
 function check(label: string, ok: boolean, detail?: string): void {
@@ -34,13 +36,13 @@ function check(label: string, ok: boolean, detail?: string): void {
 }
 function failBootstrap(reason: string): never {
   console.error(`\nBOOTSTRAP ERROR: ${reason}`);
-  console.error(`Fix: ${MJDEV_LAUNCHER} run ${INSTANCE_SLUG} api  (and run from the instance worktree root)`);
+  console.error(`Fix: ${MJDEV_BIN} run ${INSTANCE_SLUG} api  (or set MJ_API_URL / MJ_API_KEY for another MJAPI)`);
   process.exit(2);
 }
 function resolveApiKey(): string {
   const fromEnv = process.env.MJ_API_KEY?.trim();
   if (fromEnv) return fromEnv;
-  const out = execSync(`${MJDEV_LAUNCHER} key ${INSTANCE_SLUG}`, { encoding: 'utf8' });
+  const out = execFileSync(MJDEV_BIN, ['key', INSTANCE_SLUG], { encoding: 'utf8' });
   const key = out.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith('mj_sk_')).pop();
   if (!key) failBootstrap('launcher produced no mj_sk_ key');
   return key;
@@ -65,14 +67,14 @@ interface Fixture { companyId: string; cfoPersonId: string; runTag: string; jeId
 interface GLRow { ID: string; Code: string }
 
 function fixtureSetup(): Fixture {
-  const out = execFileSync(TSX, [FIXTURE, 'setup'], { cwd: WORKTREE_ROOT, encoding: 'utf8', timeout: 180_000 });
+  const out = execFileSync(TSX_BIN, [FIXTURE, 'setup'], { cwd: REPO_ROOT, encoding: 'utf8', timeout: 180_000 });
   const line = out.split('\n').find((l) => l.startsWith('FIXTURE_JSON '));
   if (!line) failBootstrap(`batching-fixture setup did not emit FIXTURE_JSON. Output:\n${out.slice(-600)}`);
   return JSON.parse(line.slice('FIXTURE_JSON '.length));
 }
 function fixtureTeardown(companyId: string, cfoPersonId: string): void {
   try {
-    execFileSync(TSX, [FIXTURE, 'teardown', companyId, cfoPersonId], { cwd: WORKTREE_ROOT, encoding: 'utf8', timeout: 180_000 });
+    execFileSync(TSX_BIN, [FIXTURE, 'teardown', companyId, cfoPersonId], { cwd: REPO_ROOT, encoding: 'utf8', timeout: 180_000 });
     console.log('  (fixture torn down)');
   } catch (e) {
     console.log(`  [teardown warning] ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);

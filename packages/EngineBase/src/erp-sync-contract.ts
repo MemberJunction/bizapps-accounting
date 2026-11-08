@@ -12,7 +12,14 @@ export interface RunERPSyncCompanyResult {
   CompanyID: string;
   CompanyIntegrationID: string | null;
   ProviderName: string | null;
+  /** False only when the connection's sync failed. A skipped connection is not a failure. */
   Success: boolean;
+  /**
+   * True when the connection was not synced and that is expected: an ERP connection with no entity
+   * maps for the requested objects, such as a posting-only connection. `Success` is then true, and
+   * `Message` says why it was skipped.
+   */
+  Skipped?: boolean;
   Message: string;
   Objects: AccountingERPSyncObject[];
 }

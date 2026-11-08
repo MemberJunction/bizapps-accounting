@@ -1,5 +1,247 @@
 # @mj-biz-apps/accounting-server
 
+## 0.25.1
+
+### Patch Changes
+
+- Updated dependencies [a2783f1]
+  - @mj-biz-apps/accounting-core-entities-server@0.25.1
+  - @mj-biz-apps/accounting-actions@0.25.1
+  - @mj-biz-apps/accounting-entities@0.25.1
+
+## 0.25.0
+
+### Patch Changes
+
+- Updated dependencies [1d11c39]
+- Updated dependencies [b3592ca]
+- Updated dependencies [69680e9]
+- Updated dependencies [a54fd4e]
+  - @mj-biz-apps/accounting-entities@0.25.0
+  - @mj-biz-apps/accounting-actions@0.25.0
+  - @mj-biz-apps/accounting-core-entities-server@0.25.0
+
+## 0.24.0
+
+### Minor Changes
+
+- 266cf9c: New nullable column `AccountingCompanyProfile.BooksClosedThroughDate` (DATE): the last day of the latest month finance has closed for the company. A date on or before it is in a closed month. NULL means nothing is closed; existing profiles read NULL. Includes the CodeGen output for the column (entity subclass, GraphQL types, profile form field).
+- a577db6: A journal entry batch's cancel reason holds 1,000 characters, up from 500 (`JournalEntryBatch.CancelReason` is `NVARCHAR(1000)`). Migration `V202610201000` widens the column and regenerates the batch's base view and create/update/delete procedures, whose `@CancelReason` parameter was `nvarchar(500)` (#307).
+- d51bb87: Three column descriptions now say what the code does (#352): `JournalEntryBatchNumber` gives the global `BATCH-{seq:000000}` format with no company segment; `FinanceException.DedupeKey` says a repeat raise refreshes an Open row's creator fields and summary; `GLAccount.IsSystemSeeded` names `AccountingCompanyProfileEntityServer.SeedDefaultChartOfAccounts()` instead of the removed procedure. A new migration updates the extended properties and, through its CodeGen block, the entity field metadata.
+
+### Patch Changes
+
+- Updated dependencies [96b1a48]
+- Updated dependencies [ff56bcc]
+- Updated dependencies [201d11f]
+- Updated dependencies [5ee4741]
+- Updated dependencies [0ffa7e7]
+- Updated dependencies [7b88d06]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [803a7ab]
+- Updated dependencies [6d866b6]
+- Updated dependencies [266cf9c]
+- Updated dependencies [74e2ad9]
+- Updated dependencies [a577db6]
+- Updated dependencies [47d5474]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [d51bb87]
+- Updated dependencies [140106d]
+- Updated dependencies [fa4f5fa]
+- Updated dependencies [ecdc1e0]
+- Updated dependencies [003d4e6]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [4c0476c]
+- Updated dependencies [aff9c70]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [a7c8e83]
+- Updated dependencies [074060f]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [da5d2c6]
+- Updated dependencies [a74ce5f]
+- Updated dependencies [5677f94]
+- Updated dependencies [f7b9b1c]
+  - @mj-biz-apps/accounting-core-entities-server@0.24.0
+  - @mj-biz-apps/accounting-entities@0.24.0
+  - @mj-biz-apps/accounting-actions@0.24.0
+
+## 0.23.0
+
+### Patch Changes
+
+- b5646b8: Requires MemberJunction 6.1.6, the 6.1 LTS release QA runs. Every `@memberjunction/*` range and both root overrides are `^6.1.6`, and `mj-app.json` declares `>=6.1.6 <7.0.0`.
+- Updated dependencies [12a7026]
+- Updated dependencies [b5646b8]
+  - @mj-biz-apps/accounting-core-entities-server@0.23.0
+  - @mj-biz-apps/accounting-entities@0.23.0
+  - @mj-biz-apps/accounting-actions@0.23.0
+
+## 0.22.2
+
+### Patch Changes
+
+- Updated dependencies [de62630]
+  - @mj-biz-apps/accounting-core-entities-server@0.22.2
+  - @mj-biz-apps/accounting-actions@0.22.2
+  - @mj-biz-apps/accounting-entities@0.22.2
+
+## 0.22.1
+
+### Patch Changes
+
+- 95623ed: The packages' dependencies on each other are caret ranges (`^0.22.0`) instead of exact versions. A host that pins or overrides one package of this app at a later compatible version no longer forces an exact-match copy of its siblings. Changesets keeps the caret and moves its floor on each release.
+- Updated dependencies [95623ed]
+  - @mj-biz-apps/accounting-actions@0.22.1
+  - @mj-biz-apps/accounting-core-entities-server@0.22.1
+  - @mj-biz-apps/accounting-entities@0.22.1
+
+## 0.22.0
+
+### Patch Changes
+
+- 37536eb: MemberJunction and other BizApps packages are peer dependencies with caret ranges (`^6.1.5`,
+  `^5.50.2` for common, `^1.4.1` for tasks; no `~`, nothing in `dependencies`), so a 6.2 host keeps
+  one copy of each instead of installing a second 6.1 tree. MemberJunction
+  devDependencies and the root `pnpm.overrides` use the same `^6.1.5` floor. Adds `check-dependency-model` to CI.
+- Updated dependencies [3974848]
+- Updated dependencies [3888284]
+- Updated dependencies [37536eb]
+  - @mj-biz-apps/accounting-core-entities-server@0.22.0
+  - @mj-biz-apps/accounting-actions@0.22.0
+  - @mj-biz-apps/accounting-entities@0.22.0
+
+## 0.21.2
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-actions@0.21.2
+- @mj-biz-apps/accounting-core-entities-server@0.21.2
+- @mj-biz-apps/accounting-entities@0.21.2
+
+## 0.21.1
+
+### Patch Changes
+
+- Updated dependencies [3c91c38]
+- Updated dependencies [5b5db24]
+- Updated dependencies [96e5830]
+- Updated dependencies [56f60bd]
+- Updated dependencies [fd193bf]
+  - @mj-biz-apps/accounting-core-entities-server@0.21.1
+  - @mj-biz-apps/accounting-actions@0.21.1
+  - @mj-biz-apps/accounting-entities@0.21.1
+
+## 0.21.0
+
+### Minor Changes
+
+- 4b5fdac: A company profile's parent may itself have a parent. `trg_ACP_NoChains` (error 50010) now refuses a cycle instead of any chain, so a Division can sit under a legal entity that sits under a holding company. A profile pointing at itself stays refused by `CK_AccountingCompanyProfile_NoSelfParent`. The `ParentAccountingCompanyID` description is rewritten: a Division, Department or Branch uses the books of the first company up the chain of any other type. Includes the CodeGen output for the description.
+
+### Patch Changes
+
+- Updated dependencies [4b5fdac]
+- Updated dependencies [1af981d]
+- Updated dependencies [6a30d91]
+  - @mj-biz-apps/accounting-entities@0.21.0
+  - @mj-biz-apps/accounting-core-entities-server@0.21.0
+  - @mj-biz-apps/accounting-actions@0.21.0
+
+## 0.20.0
+
+### Minor Changes
+
+- c7a1af4: A journal entry batch can no longer be sent to the ERP twice, and every send is recorded (#184).
+
+  - New trigger `trg_JournalEntryBatch_SendOnce` (error 50030). A send must start from `Approved` or `Failed`
+    and advance `SendAttemptCount` by exactly one; no update may keep a batch `Sent`; and `SentAt`,
+    `SentByUserID` and `SendAttemptCount` change at no other time. When two operators, two browser tabs, or a
+    scheduled run and an operator send the same batch, the second save fails and its ERP call never runs,
+    whether the first send is still `Sent`, has `Posted`, or has `Failed` again.
+  - `sendJournalEntryBatch` throws `JournalEntryBatchSendRefusedError` for that refusal, naming the status the
+    batch reads now. `Accounting.BuildJournalEntryBatches` does not mark the batch `Failed` on it.
+  - New columns `SentByUserID` and `SendAttemptCount` on `JournalEntryBatch`. Every transition into `Sent`
+    stamps them, with `SentAt`, from the context user and the loaded count. The count is dispatch attempts that
+    entered `Sent`, including a retry adopted from the ERP and a first send the pre-flight lookup refuses.
+    Batches sent before this release read `SendAttemptCount = 1`, with no sender.
+  - The batch detail panel and the Dispatch status page show who sent a batch and how many attempts it took.
+  - A successful retry still clears `ErrorMessage`. The earlier value, and each overwritten `SentAt` and
+    sender, remain in `__mj.RecordChange`.
+
+- b2de2f7: Dimension tags on a locked journal entry line are frozen, and a batch can record that a retry adopted the ERP's posting over a broken approved-content seal (#216).
+
+  - New trigger `trg_JELD_Immutability` (error 50033) refuses insert, update and delete of a `JournalEntryLineDimension` row whose journal entry is `Batched` or `GLPosted`, as `trg_JEL_Immutability` does for the line. The PostgreSQL twin ships as a PG-only migration, since the converter does not convert triggers.
+  - New nullable column `JournalEntryBatch.SealMismatchDetectedAt`: when a Failed batch's retry finds its journal already in the ERP although the batch no longer matches its seal, this records when it was recorded Posted, so the batch can be listed and its local tags reviewed. Existing batches read NULL.
+  - `SealMismatchDetectedAt` is frozen. `trg_JournalEntryBatch_Immutability` (error 50034) lets it be set only by the update that records a retried batch `Posted` (`Sent` → `Posted` with `SendAttemptCount` above 1), and refuses any later change or clear and any insert that carries it. The trigger now also fires on insert. Its PostgreSQL twin is `trg_JournalEntryBatch_SealMismatchFreeze` in the same PG-only migration.
+
+- a8e560f: New nullable column `AccountingCompanyProfile.PostingStartDate` (DATE): the first `EffectiveDate` a company posts to the ERP. Journal entries dated before it are meant never to enter a posting batch, for example history brought in at cutover that the ERP already holds. NULL means no floor; existing profiles read NULL. Includes the CodeGen output for the column (entity subclass, GraphQL types, profile form field).
+
+### Patch Changes
+
+- Updated dependencies [5ce8759]
+- Updated dependencies [525d657]
+- Updated dependencies [77e4756]
+- Updated dependencies [416d250]
+- Updated dependencies [c7a1af4]
+- Updated dependencies [d3a99ff]
+- Updated dependencies [3c5be1e]
+- Updated dependencies [346dc14]
+- Updated dependencies [01888bc]
+- Updated dependencies [6931f2c]
+- Updated dependencies [b2de2f7]
+- Updated dependencies [c0c06e0]
+- Updated dependencies [a8e560f]
+- Updated dependencies [37ff531]
+- Updated dependencies [d8629a1]
+  - @mj-biz-apps/accounting-core-entities-server@0.20.0
+  - @mj-biz-apps/accounting-actions@0.20.0
+  - @mj-biz-apps/accounting-entities@0.20.0
+
+## 0.19.0
+
+### Patch Changes
+
+- Updated dependencies [571a7a1]
+- Updated dependencies [dd98450]
+- Updated dependencies [f9e5be1]
+- Updated dependencies [6f1515e]
+  - @mj-biz-apps/accounting-core-entities-server@0.19.0
+  - @mj-biz-apps/accounting-actions@0.19.0
+  - @mj-biz-apps/accounting-entities@0.19.0
+
+## 0.18.0
+
+### Patch Changes
+
+- Updated dependencies [905d1c0]
+- Updated dependencies [a08677e]
+- Updated dependencies [cc21d7c]
+  - @mj-biz-apps/accounting-core-entities-server@0.18.0
+  - @mj-biz-apps/accounting-entities@0.18.0
+  - @mj-biz-apps/accounting-actions@0.18.0
+
+## 0.17.0
+
+### Minor Changes
+
+- a36297a: Adds a finance exception list for month-end review (golive #279). New tables `FinanceExceptionType` (the catalog of exception kinds: a stable `Code`, the owning app, `IsActive`, and a JSON `Configuration` of detector thresholds) and `FinanceException` (one row per record a reviewer must look at, unique on type and `DedupeKey`, with `Status` `Open` → `Reviewed` | `Corrected` and a review audit that `CK_FinanceException_Review` keeps consistent with it). Five types are seeded as metadata: `PROGRESS_JUDGMENT_CALL`, `PROGRESS_UNATTESTED`, `WON_DEAL_ORDER_NOT_CONFIRMED`, `PRICE_BELOW_ENGINE_UNAPPROVED` and `OVERLAPPING_SUBSCRIPTION`. Three remote operations: `Accounting.GetFinanceExceptionTypes` returns each type's parsed thresholds; `Accounting.RaiseFinanceExceptions` raises exceptions idempotently (an existing row is returned rather than duplicated, and a repeat raise of an Open row refreshes its creator fields and summary; an inactive type is skipped; an unknown type or entity fails the whole call and writes nothing), joins the caller's transaction, reads under an update lock so a concurrent raise of the same item returns the first one's row, and requires the system user when called through the API, so only server code raises; `Accounting.ClearFinanceException` clears an Open exception with a required note, locking the row so a concurrent clear finds it no longer Open, and requires the new `MJ.BizApps.Accounting.FinanceExceptions.Clear` authorization, held by a new `Finance` role, while refusing the source record's creator and any exception whose creator has no linked login. `FinanceExceptionEntityServer` refuses a status or review change made outside that operation, any change to a cleared exception, and any delete. A saved query, "Finance Exceptions Ready To Close", groups the list by company and month; a month is ready when it has no Open exceptions. Remote operation typed bases are now emitted into `@mj-biz-apps/accounting-entities` (`generated/remote_operations.ts`).
+
+### Patch Changes
+
+- be40504: Accounting Company Profiles, Tax Authorities and Tax Jurisdictions open and save again on hosts where a record has no geocode (MemberJunction/bc-aidp-next-golive#295). Their GraphQL output types declared `_mj__Latitude` / `_mj__Longitude` non-null, but on a host those view columns come from a LEFT JOIN to the geocode cache and are NULL for any record that isn't geocoded, which is every Company Profile on AIDP. GraphQL answered with "Cannot return null for non-nullable field", so every single-record load failed, and every save committed and then reported failure, because the mutation returns the record through the same type. The six fields are now `@Field(() => Float, {nullable: true})` / `?: number`. Input types are unchanged.
+
+  The root cause is MemberJunction's GraphQL generator. On 6.1.x, including the 6.1.0-edge.7 CodeGen this repo pins, `isNonNullableServerField` returns `IsUnrestrictableField` and ignores `AllowsNull`, so an unrestrictable `__mj_` field comes out non-null even when it allows NULL. MJ `next` fixed it in #4635 (`!AllowsNull && IsUnrestrictableField`); `lts/6.1` does not have the fix yet. The generated file was edited by hand to match the fixed generator's output exactly. Until the fix reaches the CodeGen this repo runs, a regeneration puts the non-null declarations back, and a new test in the server package fails if it does: it checks every entity output field declared non-null against the generated entity class's nullability.
+
+- Updated dependencies [7210151]
+- Updated dependencies [c46af6c]
+- Updated dependencies [12b1513]
+- Updated dependencies [3af15bb]
+- Updated dependencies [a36297a]
+- Updated dependencies [39ca6d0]
+- Updated dependencies [972696b]
+  - @mj-biz-apps/accounting-entities@0.17.0
+  - @mj-biz-apps/accounting-core-entities-server@0.17.0
+  - @mj-biz-apps/accounting-actions@0.17.0
+
 ## 0.16.0
 
 ### Patch Changes

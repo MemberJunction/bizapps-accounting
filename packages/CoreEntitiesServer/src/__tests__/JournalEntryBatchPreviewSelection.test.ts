@@ -45,7 +45,7 @@ describe('PreviewJournalEntryBatchOperation — the selection on the wire', () =
   beforeEach(() => {
     previewBatchSpy.mockReset();
     previewBatchSpy.mockResolvedValue({
-      Candidates: [], AffectedAccounts: [], TotalDebits: 0, TotalCredits: 0, PerCompany: [], OutOfOrderSkipCount: 0,
+      Candidates: [], AffectedAccounts: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, PerCompany: [], OutOfOrderSkipCount: 0,
     });
   });
 

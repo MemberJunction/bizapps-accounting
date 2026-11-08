@@ -1,5 +1,117 @@
 # @mj-biz-apps/accounting-integration-tests
 
+## 0.25.1
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.25.1
+
+## 0.25.0
+
+### Patch Changes
+
+- Updated dependencies [1d11c39]
+- Updated dependencies [69680e9]
+- Updated dependencies [a54fd4e]
+  - @mj-biz-apps/accounting-entities@0.25.0
+
+## 0.24.0
+
+### Patch Changes
+
+- Updated dependencies [ff56bcc]
+- Updated dependencies [0ffa7e7]
+- Updated dependencies [266cf9c]
+- Updated dependencies [a577db6]
+- Updated dependencies [d51bb87]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [da5d2c6]
+- Updated dependencies [a74ce5f]
+- Updated dependencies [5677f94]
+- Updated dependencies [f7b9b1c]
+  - @mj-biz-apps/accounting-entities@0.24.0
+
+## 0.23.0
+
+### Patch Changes
+
+- b5646b8: Requires MemberJunction 6.1.6, the 6.1 LTS release QA runs. Every `@memberjunction/*` range and both root overrides are `^6.1.6`, and `mj-app.json` declares `>=6.1.6 <7.0.0`.
+- Updated dependencies [b5646b8]
+  - @mj-biz-apps/accounting-entities@0.23.0
+
+## 0.22.2
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.22.2
+
+## 0.22.1
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.22.1
+
+## 0.22.0
+
+### Patch Changes
+
+- Updated dependencies [37536eb]
+  - @mj-biz-apps/accounting-entities@0.22.0
+
+## 0.21.2
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.21.2
+
+## 0.21.1
+
+### Patch Changes
+
+- Updated dependencies [fd193bf]
+  - @mj-biz-apps/accounting-entities@0.21.1
+
+## 0.21.0
+
+### Patch Changes
+
+- Updated dependencies [4b5fdac]
+  - @mj-biz-apps/accounting-entities@0.21.0
+
+## 0.20.0
+
+### Patch Changes
+
+- Updated dependencies [77e4756]
+- Updated dependencies [c7a1af4]
+- Updated dependencies [d3a99ff]
+- Updated dependencies [b2de2f7]
+- Updated dependencies [a8e560f]
+  - @mj-biz-apps/accounting-entities@0.20.0
+
+## 0.19.0
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.19.0
+
+## 0.18.0
+
+### Patch Changes
+
+- Updated dependencies [cc21d7c]
+  - @mj-biz-apps/accounting-entities@0.18.0
+
+## 0.17.0
+
+### Patch Changes
+
+- Updated dependencies [7210151]
+- Updated dependencies [a36297a]
+  - @mj-biz-apps/accounting-entities@0.17.0
+
 ## 0.16.0
 
 ### Patch Changes

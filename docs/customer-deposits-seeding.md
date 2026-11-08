@@ -9,9 +9,9 @@ One `GLAccountLink` per company for the `Customer Deposits` role. **Until a comp
 | **Role** | `Customer Deposits` (ID `30F23B36-3BEB-4687-BF49-A5607A9B268A`, seeded by the row in `metadata/gl-account-roles`, which reaches a host through the release's `*__Metadata_Sync.sql`) |
 | **Account** | Finance's choice: a dedicated Customer Deposits liability account, or the company's Deferred Revenue account |
 | **Level** | Company is enough. The role resolves like every other role (product, product category, product type, then company), so a product-level link overrides the company one where finance wants that |
-| **How many** | One per company at company level. The role is `Cardinality: One`, so a second Active link for the same record is refused by the tie guard |
+| **How many** | One per company at company level. The role is `Cardinality: One`, so the tie guard refuses a second Active link for the same record with the same `StartedAt`; a link with a later `StartedAt` supersedes the earlier one |
 
-Each company needs its **own** account. Orders refuses an account belonging to another company outright (D6: accounting derives a journal entry's company from the account).
+Each legal entity needs its **own** account. A Division, Department or Branch keeps no books of its own: its entries use its legal entity's account, found through a link on the Division's own record or, failing that, on the legal entity's (golive #313). Orders refuses an account belonging to another legal entity outright (orders D6: accounting derives a journal entry's company from the account).
 
 ## What orders books against it
 
@@ -27,4 +27,4 @@ bizapps-orders writes this role's `Name` in one place, `GL_ROLE.CustomerDeposits
 
 ## How the row reaches a database
 
-`metadata/gl-account-roles/.gl-account-roles.json` is the source of truth and the only thing this change contributes. A release reaches hosts through one `*__Metadata_Sync.sql` migration that the build engineer generates from the JSON when cutting the release; PRs do not carry seed migrations of their own (`scripts/check-release-seed-coverage.mjs`).
+`metadata/gl-account-roles/.gl-account-roles.json` is the source of truth; the change that added this role contributed only its row there. A release reaches hosts through one `*__Metadata_Sync.sql` migration that the build engineer generates from the JSON when cutting the release; PRs do not carry seed migrations of their own (`scripts/check-release-seed-coverage.mjs`). This row shipped in `V202609282330__v0.16.x__Metadata_Sync.sql`.

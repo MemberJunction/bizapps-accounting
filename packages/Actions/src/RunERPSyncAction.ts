@@ -15,11 +15,11 @@ export class RunERPSyncAction extends BaseAction {
   protected async InternalRunAction(params: RunActionParams): Promise<ActionResultSimple> {
     const provider = Metadata.Provider;
     if (!provider) {
-      return { Success: false, ResultCode: 'ERROR', Message: 'Metadata.Provider is not initialized' };
+      return { Success: false, ResultCode: 'ERROR', Message: 'The ERP sync could not run: the server has no metadata provider loaded.' };
     }
     const user = params.ContextUser;
     if (!user) {
-      return { Success: false, ResultCode: 'ERROR', Message: 'ContextUser is required' };
+      return { Success: false, ResultCode: 'ERROR', Message: 'The ERP sync could not run: no user was given to run it as.' };
     }
     const objects = params.Params.find((p) => p.Name === 'Objects')?.Value as Array<'accounts' | 'dimensions' | 'dimensionValues'> | undefined;
     const companyIds = params.Params.find((p) => p.Name === 'CompanyIDs')?.Value as string[] | undefined;
@@ -31,8 +31,17 @@ export class RunERPSyncAction extends BaseAction {
     return {
       Success: output.Success,
       ResultCode: output.Success ? 'SUCCESS' : 'ERROR',
-      Message: output.Results.map((r) => `${r.CompanyID}: ${r.Success ? 'ok' : r.Message}`).join('; '),
+      Message: output.Results.map(resultSummary).join('; '),
       Params: [...params.Params, { Name: 'Results', Type: 'Output', Value: output.Results }],
     };
   }
+}
+
+/**
+ * One connection's line in the run message. A skipped connection (no entity maps, such as a
+ * posting-only connection) is not a failure, and its message says it was skipped and why.
+ */
+function resultSummary(r: { CompanyID: string; Success: boolean; Skipped?: boolean; Message: string }): string {
+  const outcome = r.Skipped || !r.Success ? r.Message : 'ok';
+  return `${r.CompanyID}: ${outcome}`;
 }

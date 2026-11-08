@@ -24,7 +24,7 @@ import { LoadJournalEntryBatchDispatchResource } from './lib/custom/JournalEntry
 
 // Batch Status dashboard (embedded by the Batches category shell). Its former ReadModelsModule
 // siblings — TrialBalanceAR / RevenueTax / IntercompanyFlow / JEConsole — were DELETED 2026-07-29
-// (Amith PR-27 dead-code sweep): their vw_* backends were removed 2026-07-22 and the new category
+// (dead-code sweep): their vw_* backends were removed 2026-07-22 and the new category
 // shells replaced their nav items; git history keeps them if reporting (item f) resurrects one.
 import { ReadModelsModule } from './lib/custom/shared/read-models.module';
 import { LoadJournalEntryBatchStatusDashboard } from './lib/custom/JournalEntryBatchStatus/journal-entry-batch-status-dashboard.component';
@@ -53,6 +53,7 @@ import { LoadJournalEntriesCategoryResource } from './lib/custom/shell/journal-e
 import { LoadAccountingOverviewResource, AccountingOverviewResourceComponent } from './lib/custom/resources/accounting-overview-resource.component';
 import { LoadJournalEntriesResource, JournalEntriesResourceComponent } from './lib/custom/resources/journal-entries-resource.component';
 import { LoadBatchesResource, BatchesResourceComponent } from './lib/custom/resources/batches-resource.component';
+import { LoadPeriodsResource } from './lib/custom/resources/periods-resource.component';
 import { LoadApprovalsResource, ApprovalsResourceComponent } from './lib/custom/resources/approvals-resource.component';
 import { LoadDimensionsResource, DimensionsResourceComponent } from './lib/custom/resources/dimensions-resource.component';
 
@@ -92,7 +93,7 @@ export {
     type WaterfallYearGroup,
 } from './lib/components/deferred-revenue-waterfall/deferred-revenue-waterfall.component';
 export { DeferredRevenueWaterfallModule } from './lib/components/deferred-revenue-waterfall/deferred-revenue-waterfall.module';
-// (CustomerARBaseComponent + ReadModelsClient DELETED 2026-07-29 — Amith PR-27 dead-code sweep.
+// (CustomerARBaseComponent + ReadModelsClient DELETED 2026-07-29 — dead-code sweep.
 //  Their vw_* backends were removed 2026-07-22; when reporting returns (item f) the A/R reads get
 //  rebuilt on RunQuery per the four-surface doctrine, not resurrected from these. Git history has
 //  both if the shapes are ever wanted as reference.)
@@ -163,6 +164,8 @@ export { AccountingBatchesPageComponent } from './lib/custom/overview/accounting
 export { AccountingOverviewResourceComponent, LoadAccountingOverviewResource } from './lib/custom/resources/accounting-overview-resource.component';
 export { JournalEntriesResourceComponent, LoadJournalEntriesResource } from './lib/custom/resources/journal-entries-resource.component';
 export { BatchesResourceComponent, LoadBatchesResource } from './lib/custom/resources/batches-resource.component';
+export { PeriodsPageComponent } from './lib/custom/periods/periods.page';
+export { PeriodsResourceComponent, LoadPeriodsResource } from './lib/custom/resources/periods-resource.component';
 export { ApprovalsResourceComponent, LoadApprovalsResource } from './lib/custom/resources/approvals-resource.component';
 export { DimensionsResourceComponent, LoadDimensionsResource } from './lib/custom/resources/dimensions-resource.component';
 
@@ -175,6 +178,7 @@ export function LoadBizAppsAccountingClient(): void {
     // Top-level direct nav resources
     LoadAccountingOverviewResource();
     LoadBatchesResource();
+    LoadPeriodsResource();
     LoadJournalEntriesResource();
     LoadApprovalsResource();
     LoadChartOfAccountsResource();

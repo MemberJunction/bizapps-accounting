@@ -22,13 +22,11 @@
  *       (tie guard skipped); posting still uses the Cash-resolved account.
  *
  * PRECONDITION: zero stray Pending JEs (the engine writes Pending JEs; other harnesses' strays
- * would confuse the raw-SQL cross-checks). Run from the INSTANCE WORKTREE ROOT:
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/engine-runtime.ts
+ * would confuse the raw-SQL cross-checks). Run from the repo root:
+ *   npx tsx test-harnesses/server/engine-runtime.ts
  * Exit: 0 all passed · 1 failures · 2 bootstrap error. FK-aware teardown via the db_owner pool.
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'path';
 import { randomUUID } from 'crypto';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
@@ -51,6 +49,7 @@ import type {
   mjBizAppsAccountingGLAccountEntity,
   mjBizAppsAccountingGLAccountLinkEntity,
 } from '@mj-biz-apps/accounting-entities';
+import { LoadHarnessEnv } from '../harness-paths.mjs';
 
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
@@ -107,16 +106,16 @@ async function createCompany(user: UserInfo, currencyCode: string, label: string
 }
 
 async function bootstrap(): Promise<Ctx> {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   const { DB_HOST: host, DB_DATABASE: database, DB_USERNAME: user, DB_PASSWORD: password } = process.env;
-  if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env (run from the instance worktree root).');
+  if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env (looked in the working directory, then the repo root and each folder above it).');
   const pool = await new sql.ConnectionPool({ server: host, port: Number(process.env.DB_PORT ?? 1433), user, password, database, options: { encrypt: false, trustServerCertificate: true } }).connect();
   const { CODEGEN_DB_USERNAME: cgUser, CODEGEN_DB_PASSWORD: cgPassword } = process.env;
   if (!cgUser || !cgPassword) throw new Error('Missing CODEGEN_DB_USERNAME/PASSWORD in .env (needed for the db_owner teardown pool).');
   const teardownPool = await new sql.ConnectionPool({ server: host, port: Number(process.env.DB_PORT ?? 1433), user: cgUser, password: cgPassword, database, options: { encrypt: false, trustServerCertificate: true } }).connect();
-  await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
+  const sqlProvider = await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
   await assertInvariantTriggers(pool);
-  await UserCache.Instance.Refresh(pool);
+  await UserCache.Instance.Refresh(sqlProvider);
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('No context user found.');
   // Company-scoped since 2026-07-30: builds and the engine's cross-checks are per-company (D3/D7),
@@ -178,7 +177,7 @@ async function main(): Promise<void> {
   await test('E1 success — duplicate lines merge, debits order first, dimension lands, EntryNumber assigned (atomic)', async () => {
     const out = await runOp(ctx, {
       EffectiveDate: new Date().toISOString(),
-      EntryType: 'OrderBooking',
+      EntryType: 'Manual',
       Description: `${RUN_TAG} E1`,
       Lines: [
         { GLAccountID: companyA.revGL, CreditAmount: 60, Dimensions: [{ DimensionID: ctx.dimId, DimensionValueID: ctx.dimValSales }] },
@@ -195,7 +194,7 @@ async function main(): Promise<void> {
     const je = (await pool.request().query(
       `SELECT j.Status, t.Code AS EntryTypeCode FROM ${SCHEMA}.JournalEntry j
          JOIN ${SCHEMA}.JournalEntryType t ON t.ID = j.EntryTypeID WHERE j.ID='${out.JournalEntryID}'`)).recordset[0];
-    assert(!!je && je.Status === 'Pending' && je.EntryTypeCode === 'OrderBooking', `JE row wrong: ${JSON.stringify(je)}`);
+    assert(!!je && je.Status === 'Pending' && je.EntryTypeCode === 'Manual', `JE row wrong: ${JSON.stringify(je)}`);
     const lines = (await pool.request().query(`SELECT LineNumber, GLAccountID, DebitAmount, CreditAmount FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID='${out.JournalEntryID}' ORDER BY LineNumber`)).recordset;
     assert(lines.length === 3, `expected 3 line rows, got ${lines.length}`);
     assert(Number(lines[0].DebitAmount) === 100 && lines[0].GLAccountID.toLowerCase() === companyA.arGL.toLowerCase(), `line 1 should be the merged Dr AR 100, got ${JSON.stringify(lines[0])}`);
@@ -432,7 +431,7 @@ async function main(): Promise<void> {
   // ─── Teardown (db_owner pool) ──────────────────────────────────────────────
   const exec = async (q: string) => { try { await ctx.teardownPool.request().query(q); } catch (e) { console.log(`      teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); } };
   const jeIdList = createdJEIds.map(id => `'${id}'`).join(',');
-  const toggled = ['JournalEntryLine', 'JournalEntry'];
+  const toggled = ['JournalEntryLineDimension', 'JournalEntryLine', 'JournalEntry'];
   try {
     for (const t of toggled) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
     if (jeIdList) {

@@ -12,7 +12,7 @@
   height: 100%;
 }
 
-/* ── Contain each page's stacking (Marcelo 2026-07-29) ─────────────────────────
+/* ── Contain each page's stacking ──────────────────────────────────────────────
    Sub-pages mount their own <mj-page-header> (and sticky table headers) with positive z-indexes.
    Those are SIBLINGS-in-context of the shell's category header (also z-index:1), so later DOM
    order let a page's subheader paint OVER the category header (its shadow stopped landing) and
@@ -37,18 +37,17 @@
 }
 
 /* ── Header density (LOCAL OVERRIDE — deliberately minimal) ───────────────────
-   Marcelo: the stock header "needs to be smaller... it's just too thick. It's taking up a lot of
-   space and it's not doing much" — the user already knows the section (top nav) and the page (rail),
-   so the title earns little vertical space.
+   The stock header was too tall for what it carries — the user already knows the section (top
+   nav) and the page (rail), so the title earns little vertical space.
 
    ⚠ WHAT THIS BLOCK USED TO GET WRONG (fixed 2026-07-17, and it is the same mistake as the .mj-btn
    override we removed the same day). It ALSO forced the title to --mj-text-lg and the icon to 28px.
    But MJ's own title is --mj-text-xl and MJ ALREADY drops it to --mj-text-lg under a <=768px media
    query — so the override was PINNING MJ'S SMALL-SCREEN SIZE ONTO DESKTOP, permanently, defeating a
-   responsive decision MJ had already made. Marcelo saw the symptom and read it backwards:
-   "I'm not loving this metadata capsule. It's almost larger than the title... the icon next to it
-   looks really small in comparison." The capsule is MJ's own --mj-text-xs and was never the problem
-   — the TITLE had been shrunk a step, so the badge stopped reading as subordinate to it.
+   responsive decision MJ had already made. The visible symptom pointed the other way: the
+   metadata capsule looked almost as large as the title, and its icon too small. The capsule is
+   MJ's own --mj-text-xs and was never the problem — the TITLE had been shrunk a step, so the badge
+   stopped reading as subordinate to it.
 
    THE LESSON, twice in one day: overriding shared chrome does not merely restyle it, it OPTS OUT OF
    DECISIONS THE COMPONENT ALREADY MADE FOR YOU — MJ's 44px touch target on the button, MJ's
@@ -60,9 +59,8 @@
 }
 
 /* ── Header controls: UNIFORM VERTICAL SIZING ────────────────────────────────
-   Marcelo: the refresh button and the scope chip were different heights. "We need to pick one
-   sizing... the padding above and below those elements must be the same. Uniform vertical sizing,
-   uniform padding above and below. The horizontal doesn't matter, but the vertical sizing does."
+   The refresh button and the scope chip were different heights. Header controls share one
+   vertical size and the same padding above and below; horizontal size may differ.
 
    So: one height for every control in the header bar, applied at the bar level rather than per
    control — a per-control fix would drift again the next time one is added. Horizontal padding is
@@ -83,7 +81,7 @@
    So the button is left native at MJ's `sm` size, and the OTHER controls match IT. */
 /* Only the scope chip + refresh live in [actions] now — the stat badges moved to [meta]
    (2026-07-17), so their selector is gone rather than left as dead weight. These two are
-   exactly the pair whose mismatched heights Marcelo flagged, so this rule still has a job. */
+   exactly the pair whose heights mismatched, so this rule still has a job. */
 :host ::ng-deep mj-page-header [actions] mj-refresh-button button,
 :host ::ng-deep mj-page-header [actions] mj-company-scope-chip > * {
   height: var(--mj-shell-control-h);

@@ -1,10 +1,10 @@
 # Adopting MJ's Entity Action workflow extensions
 
-> **Status:** **Partly shipped.** MJ [#3408](https://github.com/MemberJunction/MJ/pull/3408) merged
-> 2026-08-04 and its scope/sequencing work is in the installed
-> `@memberjunction/core-entities@6.1.0-edge.1` (`EntityAction.ScopeEntityID` / `ScopeRecordID` /
-> `Sequence`) and `@memberjunction/actions-base@6.1.0-edge.1` (`EntityActionScopeResolver`).
-> **This PR authors two of the four §3 bindings** as metadata in `metadata/entity-actions/` —
+> **Status:** **Partly shipped.** MJ's Entity Action workflow extensions merged into MJ on
+> 2026-08-04, and their scope/sequencing work is in MJ 6.1.5, this repo's minimum MJ version:
+> `@memberjunction/core-entities` (`EntityAction.ScopeEntityID` / `ScopeRecordID` / `Sequence`)
+> and `@memberjunction/actions-base` (`EntityActionScopeResolver`).
+> **Two of the four §3 bindings are authored** as metadata in `metadata/entity-actions/` —
 > pure metadata, no migration, no app code.
 > **Two of the four are not buildable and are struck through in §3** — they bind `AccountingPeriod`,
 > which this repo does not have. See §3a.
@@ -13,7 +13,7 @@
 
 ---
 
-## 0. What shipped in this PR
+## 0. What this repo ships
 
 | | |
 |---|---|
@@ -22,8 +22,8 @@
 | `metadata/.mj-sync.json` | `entity-actions` appended to `directoryOrder` — it depends on entities and actions already existing |
 | `packages/CoreEntitiesServer/src/__tests__/EntityActionBindings.test.ts` | Shape tests for the rules in §4 that are checkable without a database |
 
-Nothing here is wired into app code, and nothing was pushed to a database — authoring and `mj sync push`
-are separate steps by design.
+Nothing here is wired into app code. The two bindings reach hosts through
+`migrations/V202608240216__v0.1.x__Metadata_Sync.sql`, still `Pending`.
 
 ---
 
@@ -33,7 +33,7 @@ are separate steps by design.
 create / update / delete / validate — is becoming the **workflow-hook substrate for every app on
 the platform**, so no app needs to invent its own.
 
-It already does more than its schema suggests, and this is worth knowing regardless of this PR:
+It already does more than its schema suggests, and this is worth knowing regardless of the extensions below:
 
 | Invocation | Where it fires | Semantics |
 |---|---|---|
@@ -46,7 +46,7 @@ deterministic **flow agent** (visual editor, `Action`/`Prompt`/`Sub-Agent`/`ForE
 per-step retry and error behaviour) or a **loop agent** where judgement is genuinely needed. The
 house shape is a flow agent with a `Sub-Agent` step calling a loop agent.
 
-**What #3408 adds:**
+**What the workflow extensions add:**
 
 - **`EntityAction.ScopeEntityID` + `ScopeRecordID`** — bind a workflow to *one configuration record*
   rather than to every record of an entity. This is the important one: it means **no app ever grows
@@ -103,7 +103,7 @@ design — `Validate` really is the correct invocation for a blocking close gate
 authored today.
 
 The practical loss is that **the one genuinely blocking `Validate` binding in the plan was one of the
-two void rows.** Everything shipped here is `After*` alerting. Nothing in this PR can refuse a save.
+two void rows.** Everything shipped here is `After*` alerting. Nothing authored here can refuse a save.
 
 ### 3b. Why both shipped bindings are `Pending`
 
@@ -111,16 +111,16 @@ MJ's `GenericDatabaseProvider` dispatches only bindings whose `EntityAction.Stat
 `EntityActionInvocation.Status` are `Active`, so a `Pending` row is inert. Three things must be true
 before either is switched on:
 
-1. **A transition filter must exist.** §1 claimed #3408 seeded reusable "field changed" / "field
-   changed *to* value" `ActionFilter`s. **It did not** — that is plan text in MJ's own
+1. **A transition filter must exist.** §1 claimed the extensions seeded reusable "field changed" /
+   "field changed *to* value" `ActionFilter`s. **They did not** — that is plan text in MJ's own
    `plans/entity-action-workflow-extensions.md`, and MJ's `ActionFilter` table has no `Name` column,
    so a reusable named filter is not expressible. What actually exists (MJ commit `df76df876d`,
-   2026-08-08, *after* #3408) is a filter row **generated per trigger**, whose `Code` bakes the field
-   and value in as literal arguments — `DidFieldChangeToValue('Status', 'Sent')` — against an
-   `ActionFilterContext` that the installed `actions-base@6.1.0-edge.1` **does not ship**. Until that
-   engine lands, `AfterUpdate` fires on *every* save, which is precisely the re-firing failure §1
-   warns about. No filter row is authored here rather than fabricate one against a runtime that
-   cannot honour it.
+   2026-08-08, *after* the extensions merged) is a filter row **generated per trigger**, whose `Code`
+   bakes the field and value in as literal arguments — `DidFieldChangeToValue('Status', 'Sent')`.
+   The engine that evaluates it ships in MJ 6.1.5: `@memberjunction/actions` runs a filter's `Code`
+   against an `ActionFilterContext` with `DidFieldChange` / `DidFieldChangeToValue`, built from
+   `@memberjunction/actions-base`'s `EntityChangeContext`. No filter row is authored here yet, so
+   `AfterUpdate` still fires on *every* save, which is precisely the re-firing failure §1 warns about.
 2. **A recipient must be configured.** `To` / `From` / `Provider` on `Send Single Message` are
    deployment configuration, deliberately left unset rather than filled with placeholders.
 3. **The company scope must be set.** See §3c.
@@ -142,20 +142,28 @@ resolver compares `String(fieldValue)` directly.
 
 ## 4. Notes specific to this repo
 
-**Hooks must never mutate posted data.** The JE immutability trigger (`Status ∈ {Batched, GLPosted}`
-allows only `GLPostedAt` / `GLReferenceID` / `Status`) is a database-level invariant and will refuse
-a misbehaving binding. That is the right outcome, but the failure would surface as a confusing
+**Hooks must never mutate posted data.** The JE immutability trigger (on a `Batched` or `GLPosted`
+entry it allows only `GLPostedAt`, `GLReferenceID`, `ReversedByJournalEntryID`, the
+`Batched → GLPosted` status move and the reversible unlock; error 50004) is a database-level
+invariant and will refuse a misbehaving binding. That is the right outcome, but the failure would surface as a confusing
 trigger error inside an agent run — so document the boundary rather than discovering it.
 
-**The balanced-JE and period-close triggers are DEFERRABLE constraint triggers.** A `Before*` or
-`Validate` binding runs inside the same transaction and will interact with them. Prefer `After*`
-for anything non-trivial.
+**The balanced-JE triggers fire when an entry locks.** There are no period triggers, and SQL Server
+has no deferrable constraint triggers: `trg_JournalEntry_BalancedOnLock` checks debits = credits
+when an entry moves to `Batched` or `GLPosted`, and `trg_JEL_RecheckParentBalance` re-checks when a
+line of a locked entry changes. A `Before*` or `Validate` binding runs inside the same transaction
+as the save that fires them. Prefer `After*` for anything non-trivial.
 
 **`JournalEntryBatch` has its own lock trigger, and it is easy to miss.** Once a batch reaches
-`Approved` / `Sent` / `Posted`, error 50009 allows only `Status`, `ApprovedAt`, `ApprovedByUserID`,
-`SentAt`, `PostedAt`, `ExternalJournalEntryBatchRef` and `ErrorMessage` to change — `CompanyID`,
-`PostingDate`, `SummaryJournalEntryID` and the approval-task pointer freeze at approval. A binding on
-the batch is as constrained as one on a posted JE.
+`Approved`, and in every later status (`Sent`, `Posted`, `Failed`, `Archived`, `Cancelled`), error
+50009 lets only `Status`, `PostedAt`, the archive audit triple, `ExternalJournalEntryBatchRef` and
+`ErrorMessage` evolve. `CompanyID`, `PostingDate`, `SummaryJournalEntryID`, the approval-task
+pointer, `ApprovedAt` / `ApprovedByUserID` and `ApprovedContentHash` freeze at approval. The send
+stamp (`SentAt` / `SentByUserID` / `SendAttemptCount`) changes only on a send (50030,
+`trg_JournalEntryBatch_SendOnce`), and the cancel audit only in the update that cancels (50032).
+Current rules: `migrations/V202610021230__v0.20.x__JournalEntryLineDimension_Immutability_SealMismatch.sql`
+and `V202610021200__v0.20.x__BatchSendOnce_SendAudit.sql`. A binding on the batch is as constrained
+as one on a posted JE.
 
 **`Company` is the natural scope record here**, since accounting is company-scoped throughout and
 `AccountingCompanyProfile` is an IsA child of `__mj.Company`. "The close workflow for this company"
@@ -164,7 +172,9 @@ belongs on that profile.
 **A `JournalEntry` header carries no amount.** Debits and credits live on `JournalEntryLine`, so
 "unusually large" cannot be decided from the record an `AfterCreate` binding receives — a real
 threshold has to sum the `Lines` collection, which is work for a purpose-built Action rather than a
-`Script` param. `EntryType = 'Manual'` *is* decidable from the header.
+`Script` param. Whether an entry is manual *is* decidable from the header: `EntryTypeID` points at
+the `Manual` `JournalEntryType` (BA-D29), and the entity's `EntryType` view field carries that
+type's name.
 
 ---
 
@@ -172,10 +182,10 @@ threshold has to sum the `Lines` collection, which is work for a purpose-built A
 
 §3's two `JournalEntry*` bindings are authored and inert. In rough order:
 
-1. **Wait for the transition-filter engine** (`ActionFilterContext` with `DidFieldChange` /
-   `DidFieldChangeToValue`) to reach a published `actions-base`, then author the per-binding
-   `ActionFilter` row for the batch binding — `DidFieldChangeToValue('Status', 'Sent')`. Without it
-   neither binding should go `Active`.
+1. **Author the per-binding `ActionFilter` row** for the batch binding —
+   `DidFieldChangeToValue('Status', 'Sent')`. The transition-filter engine it needs
+   (`ActionFilterContext` with `DidFieldChange` / `DidFieldChangeToValue`) ships in MJ 6.1.5.
+   Without the row neither binding should go `Active`.
 2. **Decide the alerting target properly.** Both bindings point at MJ core's `Send Single Message`
    because it is the only seeded, generic notification action. If accounting grows its own Action
    (one that can sum JE lines and apply a real threshold), rebind to it — that is also the natural
@@ -194,6 +204,3 @@ threshold has to sum the `Lines` collection, which is work for a purpose-built A
 - **A flow agent should create human work and finish** — it should not hold a run open waiting for
   a person. Use `MJ: AI Agent Requests` when the answer resumes the same run (minutes to hours), and
   a **bizapps-tasks** Task when it is durable, assignable work someone owns (days to weeks).
-
----
-_Generated by [Claude Code](https://claude.ai/code)_

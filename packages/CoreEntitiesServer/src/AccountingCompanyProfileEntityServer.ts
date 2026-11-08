@@ -26,12 +26,28 @@
  *   DOC:      docs/ARCHITECTURE.md#company-profile-init
  */
 
-import { BaseEntity, LogError, Metadata, RunView } from '@memberjunction/core';
+import {
+  BaseEntity,
+  IMetadataProvider,
+  IRunViewProvider,
+  LogError,
+  Metadata,
+  RunView,
+  ValidationErrorInfo,
+  ValidationResult,
+} from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
   mjBizAppsAccountingGLAccountEntity,
 } from '@mj-biz-apps/accounting-entities';
+import {
+  UserCanSetBooksClosedThroughDate,
+  UserCanSetPostingStartDate,
+  UsesParentBooks,
+} from '@mj-biz-apps/accounting-engine-base';
+import { ParentBooksAccountOwnerError } from './GLAccountEntityServer.js';
+import { sqlGuidLiteral } from './SqlGuards.js';
 
 import {
   DEFAULT_CHART_OF_ACCOUNTS,
@@ -49,6 +65,93 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
   //  - OperatingTimeZone = 'UTC' default (#158): the field is a per-company display override,
   //    and blank means "inherit `BizApps.BusinessTimeZone`". Stamping 'UTC' made every new
   //    company override the business zone with UTC.
+
+  /** BaseEntity SKIPS ValidateAsync by default — opt in, or the owner check below never runs on Save. */
+  public override get DefaultSkipAsyncValidation(): boolean {
+    return false;
+  }
+
+  /**
+   * A company that owns active GL accounts cannot become a Division, Department or Branch
+   * (bc-aidp-next-golive#313). Those types keep no books, so their entries resolve their legal
+   * entity's accounts and an account the company owned would never be used, or would book entries
+   * under a company with no ERP connection. `GLAccountEntityServer` refuses the same state on the
+   * account side. Checked on create, because GL accounts reference __mj.Company and a company can
+   * own accounts before its profile exists, and on update only when EntityType changes, so other
+   * edits to such a profile still save.
+   */
+  public override async ValidateAsync(): Promise<ValidationResult> {
+    const result = await super.ValidateAsync();
+    this.validateFinanceDateChanges(result);
+    if (UsesParentBooks(this.EntityType) && this.entityTypeNeedsOwnerCheck()) {
+      const ownedCode = await this.firstActiveGLAccountCode();
+      const error = ownedCode === null ? null : ParentBooksAccountOwnerError(ownedCode, this.ID, this.EntityType);
+      if (error) {
+        result.Success = false;
+        result.Errors.push(new ValidationErrorInfo('EntityType', `${error} Deactivate its accounts first.`, this.EntityType));
+      }
+    }
+    return result;
+  }
+
+  /** True for a new profile, or a saved one whose EntityType was edited. */
+  private entityTypeNeedsOwnerCheck(): boolean {
+    if (!this.IsSaved) return true;
+    return this.GetFieldByName('EntityType')?.Dirty ?? false;
+  }
+
+  /**
+   * Only finance moves the two posting cutoffs, each behind its own Authorization held by the
+   * Finance role: BooksClosedThroughDate (bc-aidp-next-golive#316) and PostingStartDate (#447).
+   * Closing a month and reopening one both change the first; moving the second earlier puts the
+   * entries dated before it into batches, and moving it later holds them back. Every change is kept
+   * in the record-change history, which this entity tracks. A save that leaves a date as it was is
+   * not checked, so other edits to the profile still save for anyone allowed to edit it.
+   */
+  private validateFinanceDateChanges(result: ValidationResult): void {
+    const catalog = (this.ProviderToUse as unknown as IMetadataProvider).Authorizations;
+    const user = this.ContextCurrentUser;
+    if (this.dateFieldChanging('BooksClosedThroughDate') && !UserCanSetBooksClosedThroughDate(user, catalog)) {
+      this.refuseDateChange(result, 'BooksClosedThroughDate', 'Only finance can change the date the books are closed through.', this.BooksClosedThroughDate);
+    }
+    if (this.dateFieldChanging('PostingStartDate') && !UserCanSetPostingStartDate(user, catalog)) {
+      this.refuseDateChange(result, 'PostingStartDate', 'Only finance can change the posting start date.', this.PostingStartDate);
+    }
+  }
+
+  /** A saved profile changes a date when the field is dirty; a new one when it sets the date at all. */
+  private dateFieldChanging(fieldName: 'BooksClosedThroughDate' | 'PostingStartDate'): boolean {
+    if (!this.IsSaved) return this.Get(fieldName) != null;
+    return this.GetFieldByName(fieldName)?.Dirty ?? false;
+  }
+
+  private refuseDateChange(result: ValidationResult, fieldName: string, message: string, value: Date | null): void {
+    result.Success = false;
+    result.Errors.push(new ValidationErrorInfo(fieldName, message, value));
+  }
+
+  /**
+   * The code of one active GL account this company owns, or null when it owns none. An inactive
+   * account takes no new lines, so it does no harm on a company that keeps no books.
+   */
+  private async firstActiveGLAccountCode(): Promise<string | null> {
+    const provider = this.ProviderToUse as unknown as IRunViewProvider;
+    const res = await provider.RunView<Pick<mjBizAppsAccountingGLAccountEntity, 'Code'>>(
+      {
+        EntityName: 'MJ_BizApps_Accounting: GL Accounts',
+        ExtraFilter: `CompanyID=${sqlGuidLiteral(this.ID, 'AccountingCompanyProfileEntityServer.firstActiveGLAccountCode')} AND IsActive=1`,
+        Fields: ['Code'],
+        MaxRows: 1,
+        ResultType: 'simple',
+        BypassCache: true,
+      },
+      this.ContextCurrentUser,
+    );
+    if (!res.Success) {
+      throw new Error(`Could not check whether company ${this.ID} owns active GL accounts: ${res.ErrorMessage ?? 'unknown error'}`);
+    }
+    return res.Results?.[0]?.Code ?? null;
+  }
 
   // ─── Seed COA (explicit capability — no longer an auto-hook) ───────────
 
@@ -80,7 +183,7 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
     const result = await rv.RunView<mjBizAppsAccountingGLAccountEntity>(
       {
         EntityName: 'MJ_BizApps_Accounting: GL Accounts',
-        ExtraFilter: `CompanyID = '${companyId}'`,
+        ExtraFilter: `CompanyID=${sqlGuidLiteral(companyId, 'AccountingCompanyProfileEntityServer.loadExistingGLAccountCodes')}`,
         ResultType: 'simple',
         Fields: ['Code'],
       },

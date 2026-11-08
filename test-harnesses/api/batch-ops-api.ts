@@ -6,40 +6,46 @@
  *
  * Integration-style (mirrors the orders headless E2E pattern + MJ's client-first transport
  * doctrine): one continuous business flow with EXACT-value asserts, not per-op smoke checks.
+ * The step numbers match the console output (there is no step 7).
  *
+ *   0. Accounting.PreviewJournalEntryBatch (read-only, before any build) — 3 candidates, NETTED
+ *      totals 600/600, one per-company footer row; selecting only the newest entry flags the two
+ *      older ones as out-of-order skips.
  *   1. Accounting.BuildJournalEntryBatch (explicit CompanyID) — the fixture's 3 JEs net 6 lines → 3 summary
  *      lines, NETTED totals 600 (not the gross 800); approvalTaskId returned (one-transaction
  *      build, D10 rev. 2026-07-29).
  *   2. The ApprovalTaskID/RaisedAt stamp is on the batch row (verified over the wire).
- *   3. GetBatchApprovalState → not approved (with a reason).
- *   4. RecordBatchDecision Approved → approval state flips true.
- *   5. DispatchJournalEntryBatch → Posted + MOCK external ref.
- *   6. Reject path: a new wire-created JE builds a second batch; RecordBatchDecision Rejected →
- *      batch Cancelled, the JE returns to the candidate pool (Pending, JournalEntryBatchID NULL).
- *   7. EmptyJournalEntryBatchError on the wire: an explicit build for a company with nothing to batch is a
+ *   3. Accounting.GetJournalEntryBatchApprovalState → not approved (with a reason).
+ *   4. Accounting.RecordJournalEntryBatchDecision Approved → approval state flips true.
+ *   5. Accounting.DispatchJournalEntryBatch → Posted + MOCK external ref.
+ *   6. Reject path: a new wire-created JE builds a second batch (Source 'Explicit'); re-building the
+ *      now-locked selection is refused; RecordJournalEntryBatchDecision Rejected → batch Cancelled,
+ *      the JE returns to the candidate pool (Pending, JournalEntryBatchID NULL).
+ *   8. Accounting.RegenerateJournalEntryBatch — a late JE is re-gathered into the SAME Pending batch
+ *      with the exact netted total (161 = 50 + 111); the batch is then rejected for teardown.
+ *   9. EmptyJournalEntryBatchError on the wire: an explicit build for a company with nothing to batch is a
  *      loud failure, not a silent no-op.
  *
  * (The no-CompanyID SWEEP form is deliberately NOT exercised here: on a shared instance it would
  * batch other companies' Pending JEs. Its loop is per-company buildJournalEntryBatch + pendingCompanies, both
  * covered — the sweep composition is exercised by the seeded GUI tier instead.)
  *
- * Run from the INSTANCE WORKTREE ROOT:
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/batch-ops-api.ts
- * Env overrides: MJ_API_URL (default http://localhost:4180) · MJ_API_KEY · MJDEV_SLUG.
+ * Run from the repo root (paths resolve from this file, so any directory works):
+ *   npx tsx test-harnesses/api/batch-ops-api.ts
+ * Env overrides: MJ_API_URL (default http://localhost:4180) · MJ_API_KEY (default: minted with
+ * `mjdev key <slug>`) · MJDEV_SLUG (default accounting-revamp) · MJDEV_BIN (see ../harness-paths.mts).
  * Exit codes: 0 all passed · 1 assertion failures · 2 bootstrap/connection error.
  */
-import { execFileSync, execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { CreateJournalEntryOutput, JournalEntryDraft } from '@mj-biz-apps/accounting-engine-base';
+import { MJDEV_BIN, REPO_ROOT, TSX_BIN } from '../harness-paths.mjs';
 
 const API_URL = (process.env.MJ_API_URL ?? 'http://localhost:4180').replace(/\/+$/, '');
 const GRAPHQL_URL = `${API_URL}/`;
-const MJDEV_LAUNCHER = '/Users/marcelotorres/MJDev/bin/mjdev';
 const INSTANCE_SLUG = process.env.MJDEV_SLUG ?? 'accounting-revamp';
-const WORKTREE_ROOT = process.cwd();
-const TSX = path.resolve(WORKTREE_ROOT, 'node_modules', '.bin', 'tsx');
-const FIXTURE = path.resolve(WORKTREE_ROOT, 'packages/dev-apps/bizapps-accounting/test-harnesses/playwright/lib/batching-fixture.ts');
+const FIXTURE = path.join(REPO_ROOT, 'test-harnesses', 'playwright', 'lib', 'batching-fixture.ts');
 
 let passed = 0, failed = 0;
 function check(label: string, ok: boolean, detail?: string): void {
@@ -48,13 +54,13 @@ function check(label: string, ok: boolean, detail?: string): void {
 }
 function failBootstrap(reason: string): never {
   console.error(`\nBOOTSTRAP ERROR: ${reason}`);
-  console.error(`Fix: ${MJDEV_LAUNCHER} run ${INSTANCE_SLUG} api  (and run from the instance worktree root)`);
+  console.error(`Fix: ${MJDEV_BIN} run ${INSTANCE_SLUG} api  (or set MJ_API_URL / MJ_API_KEY for another MJAPI)`);
   process.exit(2);
 }
 function resolveApiKey(): string {
   const fromEnv = process.env.MJ_API_KEY?.trim();
   if (fromEnv) return fromEnv;
-  const out = execSync(`${MJDEV_LAUNCHER} key ${INSTANCE_SLUG}`, { encoding: 'utf8' });
+  const out = execFileSync(MJDEV_BIN, ['key', INSTANCE_SLUG], { encoding: 'utf8' });
   const key = out.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith('mj_sk_')).pop();
   if (!key) failBootstrap('launcher produced no mj_sk_ key');
   return key;
@@ -93,14 +99,14 @@ async function wireRows<T>(apiKey: string, entityName: string, extraFilter: stri
 
 interface Fixture { companyId: string; runTag: string; jeId: string; expected: { jeCount: number; summaryLineCount: number; totalDebits: number; totalCredits: number } }
 function fixtureSetup(): Fixture {
-  const out = execFileSync(TSX, [FIXTURE, 'setup'], { cwd: WORKTREE_ROOT, encoding: 'utf8', timeout: 180_000 });
+  const out = execFileSync(TSX_BIN, [FIXTURE, 'setup'], { cwd: REPO_ROOT, encoding: 'utf8', timeout: 180_000 });
   const line = out.split('\n').find((l) => l.startsWith('FIXTURE_JSON '));
   if (!line) failBootstrap(`batching-fixture setup did not emit FIXTURE_JSON. Output:\n${out.slice(-600)}`);
   return JSON.parse(line.slice('FIXTURE_JSON '.length));
 }
 function fixtureTeardown(companyId: string): void {
   try {
-    execFileSync(TSX, [FIXTURE, 'teardown', companyId], { cwd: WORKTREE_ROOT, encoding: 'utf8', timeout: 180_000 });
+    execFileSync(TSX_BIN, [FIXTURE, 'teardown', companyId], { cwd: REPO_ROOT, encoding: 'utf8', timeout: 180_000 });
     console.log('  (fixture torn down)');
   } catch (e) {
     console.log(`  [teardown warning] ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);

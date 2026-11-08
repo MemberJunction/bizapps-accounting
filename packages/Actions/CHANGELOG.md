@@ -1,5 +1,210 @@
 # @mj-biz-apps/accounting-actions
 
+## 0.25.1
+
+### Patch Changes
+
+- Updated dependencies [a2783f1]
+  - @mj-biz-apps/accounting-core-entities-server@0.25.1
+
+## 0.25.0
+
+### Minor Changes
+
+- b3592ca: Add `Accounting.DispatchApprovedJournalEntryBatches` and an hourly scheduled job that runs it. The job sends every Approved journal entry batch to its ERP through the same send as the Dispatch button, so each send passes the CFO approval gate, the approved-content check and the ERP lookup. It approves nothing and never retries a Failed batch. Only the MJ system user may run it.
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-core-entities-server@0.25.0
+
+## 0.24.0
+
+### Patch Changes
+
+- Updated dependencies [96b1a48]
+- Updated dependencies [201d11f]
+- Updated dependencies [5ee4741]
+- Updated dependencies [7b88d06]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [803a7ab]
+- Updated dependencies [6d866b6]
+- Updated dependencies [74e2ad9]
+- Updated dependencies [47d5474]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [140106d]
+- Updated dependencies [fa4f5fa]
+- Updated dependencies [ecdc1e0]
+- Updated dependencies [003d4e6]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [4c0476c]
+- Updated dependencies [aff9c70]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [a7c8e83]
+- Updated dependencies [074060f]
+- Updated dependencies [ea5f9f7]
+  - @mj-biz-apps/accounting-core-entities-server@0.24.0
+
+## 0.23.0
+
+### Patch Changes
+
+- b5646b8: Requires MemberJunction 6.1.6, the 6.1 LTS release QA runs. Every `@memberjunction/*` range and both root overrides are `^6.1.6`, and `mj-app.json` declares `>=6.1.6 <7.0.0`.
+- Updated dependencies [12a7026]
+- Updated dependencies [b5646b8]
+  - @mj-biz-apps/accounting-core-entities-server@0.23.0
+
+## 0.22.2
+
+### Patch Changes
+
+- Updated dependencies [de62630]
+  - @mj-biz-apps/accounting-core-entities-server@0.22.2
+
+## 0.22.1
+
+### Patch Changes
+
+- 95623ed: The packages' dependencies on each other are caret ranges (`^0.22.0`) instead of exact versions. A host that pins or overrides one package of this app at a later compatible version no longer forces an exact-match copy of its siblings. Changesets keeps the caret and moves its floor on each release.
+- Updated dependencies [95623ed]
+  - @mj-biz-apps/accounting-core-entities-server@0.22.1
+
+## 0.22.0
+
+### Patch Changes
+
+- 3888284: A journal entry batch's `PostingDate` — the journal date the ERP receives — can now be chosen (golive #315), and scheduled batches are dated the last day of their sweep window instead of the run date (golive #314).
+
+  - **Engine.** `BuildJournalEntryBatchOptions.postingDate` (and `PostingDate` on `Accounting.BuildJournalEntryBatch` / `Accounting.PreviewJournalEntryBatch`) sets it, read by the same shape rules as a cutoff. Omitted, it is today's business day, as before. A selection holding an entry dated after the posting date is refused (`JournalEntryBatchPostingDateError`, naming the entries). `buildJournalEntryBatchFromExplicitIds` takes it as a new trailing parameter.
+  - **The posting date bounds the candidate pool.** Candidates end at the earlier of the cutoff and the posting date, in preview and build alike. A build with no cutoff no longer sweeps forward-dated entries (e.g. future revenue recognition); they wait for a batch dated on or after them. `regenerateJournalEntryBatch` re-gathers only through the batch's own posting date.
+  - **Approval.** The approval Task's name and description carry the posting date. A posting date cannot change after approval (the batch is frozen); cancel the batch and rebuild it, which raises a new approval.
+  - **Scheduled runs.** `Accounting.BuildJournalEntryBatches` dates each batch its cutoff day, or today when the cutoff is later: the nightly run on 1 September (cutoff 31 August) posts on 31 August. New export `postingDateForCutoff`.
+  - **UI.** The batch workspace and the Batches page's build modal have a Posting date input (default today); the workspace blocks the build while the date is empty or earlier than an included entry. The no-cutoff hint now says the pool runs through the posting date.
+
+- 37536eb: MemberJunction and other BizApps packages are peer dependencies with caret ranges (`^6.1.5`,
+  `^5.50.2` for common, `^1.4.1` for tasks; no `~`, nothing in `dependencies`), so a 6.2 host keeps
+  one copy of each instead of installing a second 6.1 tree. MemberJunction
+  devDependencies and the root `pnpm.overrides` use the same `^6.1.5` floor. Adds `check-dependency-model` to CI.
+- Updated dependencies [3974848]
+- Updated dependencies [3888284]
+- Updated dependencies [37536eb]
+  - @mj-biz-apps/accounting-core-entities-server@0.22.0
+
+## 0.21.2
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-core-entities-server@0.21.2
+
+## 0.21.1
+
+### Patch Changes
+
+- 5b5db24: Action dates follow the business day (golive #168). `Accounting.BuildJournalEntryBatches`: an explicit `Cutoff` written as a date-time is the business day it falls on (`2026-09-30T19:00:00-05:00` is 30 September, not 1 October), `StartDate` reaches the engine as written so it resolves by the same rule, and a malformed `Cutoff` or `StartDate` (`garbage`, `2026-02-30`, a date-time with no offset) fails with an error naming the parameter. The Business Central journal-entry action posts with today's business day when no `EntryDate` is given, instead of the UTC day — which from about 7 PM Central is already tomorrow.
+- Updated dependencies [3c91c38]
+- Updated dependencies [96e5830]
+- Updated dependencies [56f60bd]
+  - @mj-biz-apps/accounting-core-entities-server@0.21.1
+
+## 0.21.0
+
+### Patch Changes
+
+- Updated dependencies [1af981d]
+- Updated dependencies [6a30d91]
+  - @mj-biz-apps/accounting-core-entities-server@0.21.0
+
+## 0.20.0
+
+### Minor Changes
+
+- c7a1af4: A journal entry batch can no longer be sent to the ERP twice, and every send is recorded (#184).
+
+  - New trigger `trg_JournalEntryBatch_SendOnce` (error 50030). A send must start from `Approved` or `Failed`
+    and advance `SendAttemptCount` by exactly one; no update may keep a batch `Sent`; and `SentAt`,
+    `SentByUserID` and `SendAttemptCount` change at no other time. When two operators, two browser tabs, or a
+    scheduled run and an operator send the same batch, the second save fails and its ERP call never runs,
+    whether the first send is still `Sent`, has `Posted`, or has `Failed` again.
+  - `sendJournalEntryBatch` throws `JournalEntryBatchSendRefusedError` for that refusal, naming the status the
+    batch reads now. `Accounting.BuildJournalEntryBatches` does not mark the batch `Failed` on it.
+  - New columns `SentByUserID` and `SendAttemptCount` on `JournalEntryBatch`. Every transition into `Sent`
+    stamps them, with `SentAt`, from the context user and the loaded count. The count is dispatch attempts that
+    entered `Sent`, including a retry adopted from the ERP and a first send the pre-flight lookup refuses.
+    Batches sent before this release read `SendAttemptCount = 1`, with no sender.
+  - The batch detail panel and the Dispatch status page show who sent a batch and how many attempts it took.
+  - A successful retry still clears `ErrorMessage`. The earlier value, and each overwritten `SentAt` and
+    sender, remain in `__mj.RecordChange`.
+
+### Patch Changes
+
+- 5ce8759: A batch the ERP accepted can no longer be posted a second time. A `Failed` batch that carries the ERP's reference (the ERP accepted it and only its `Posted` save failed) is recorded `Posted` by a retry under that reference, with no lookup and no post, whatever the lookup would answer and whether or not the operator confirmed. `Cancel()` refuses it, and Dispatch status no longer offers Cancel for it. When the ERP returns no reference, the batch number is kept in its place.
+
+  When the `Sent → Failed` save itself fails, the send reloads the batch and throws `JournalEntryBatchFailureNotRecordedError`, carrying the status the database holds and any ERP reference, instead of reporting a `Failed` the database does not hold. The scheduled run's triage writes that reference with `Failed`.
+
+  A batch moves to `Sent` or `Posted` only through `JournalEntryBatchEntityServer.SaveDispatchTransition()`, which the dispatch engine calls; a plain save to either is refused, so a batch cannot be marked `Sent` and then `Posted` without the ERP being called.
+
+  A lookup that finds nothing is not trusted while the `ERP_POSTING_NOT_READ_BACK` finance exception type is missing or inactive, since a post that could not be read back would then raise no exception. An over-long account number names the account and points at its External Account ID instead of saying to shorten it. Both batch previews show how many entries a company's posting start date holds back.
+
+- Updated dependencies [5ce8759]
+- Updated dependencies [525d657]
+- Updated dependencies [416d250]
+- Updated dependencies [c7a1af4]
+- Updated dependencies [3c5be1e]
+- Updated dependencies [346dc14]
+- Updated dependencies [01888bc]
+- Updated dependencies [6931f2c]
+- Updated dependencies [c0c06e0]
+- Updated dependencies [37ff531]
+- Updated dependencies [d8629a1]
+  - @mj-biz-apps/accounting-core-entities-server@0.20.0
+
+## 0.19.0
+
+### Patch Changes
+
+- 571a7a1: Auto-posting is restricted to the MJ system user (#269). `autoPostJournalEntryBatch` approves the batch as its context user with no approval Task, so until now any signed-in user who ran `Accounting.BuildJournalEntryBatches` with `AutoPost: true` could build, approve and post a batch without CFO approval. The new `assertAutoPostCaller` refuses any context user other than the system user the scheduled posting jobs run as, and refuses when the user cache does not hold the system user. `autoPostJournalEntryBatch` checks it before the build, and the action checks it before any company is read. A run without `AutoPost` is unchanged: it builds behind the approval gate for any user.
+- Updated dependencies [571a7a1]
+- Updated dependencies [dd98450]
+- Updated dependencies [f9e5be1]
+- Updated dependencies [6f1515e]
+  - @mj-biz-apps/accounting-core-entities-server@0.19.0
+
+## 0.18.0
+
+### Patch Changes
+
+- Updated dependencies [905d1c0]
+- Updated dependencies [a08677e]
+  - @mj-biz-apps/accounting-core-entities-server@0.18.0
+
+## 0.17.0
+
+### Minor Changes
+
+- 12b1513: `sendJournalEntryBatch` and `cancelJournalEntryBatch` resolve their approval gate, ERP poster and ERP lookup themselves (#233), so a server caller can no longer pass a gate that allows everything or leave the ERP lookup out. They come from the new `JournalEntryBatchDispatchServices` class through the MJ ClassFactory: the defaults are `TasksAppApprovalGate` and the AccountingERPEngine poster and lookup, and a subclass registered at a higher priority replaces them (unit tests and harnesses do).
+
+  **Breaking:** `SendJournalEntryBatchOptions` loses `gate`, `poster` and `lookup`, and `CancelJournalEntryBatchOptions` loses `gate` and `lookup`. `JournalEntryBatchCancelGate` gains `assertRejected`.
+
+  The scheduled-posting approval waiver moves into one engine function, `autoPostJournalEntryBatch`: it enforces the include-list policy (`assertAutoPostPolicy`, moved from the action), builds with `AutoApproveGate`, approves as the context user and sends. It is the only send without an approval Task. `Accounting.BuildJournalEntryBatches` with `AutoPost` calls it per company; a failure after the build throws `AutoPostDispatchError`, which carries the build.
+
+  Cancelling a `Pending` batch now requires a terminal rejection recorded on its approval Task (`TasksAppApprovalGate.assertRejected`). Rejecting from Batch approvals records it first, so it works as before. A `Pending` batch with no approval Task has nothing to reject and cannot be cancelled; archive it instead.
+
+### Patch Changes
+
+- 3af15bb: A batch now posts through one chosen connection, and the ERP verb is told which one (#256).
+
+  - **The chosen connection reaches the ERP.** `CreateERPJournalInput` and `FindERPJournalInput` carry `CompanyIntegrationID`, and every verb call a provider makes (`CreateJournalEntry`, and the Business Central and QuickBooks Online `GetGLEntries` lookups) sends it as a `CompanyIntegrationID` param. It takes effect once MJ's accounting verbs accept that param (MemberJunction/MJ#4867); until then they ignore it and resolve their own connection as before.
+  - **One rule chooses the connection for the post and for the pre-flight lookup**, so the two always agree. The candidates are the batch company's active Company Integrations whose Integration matches the batch's target. None: the batch is refused as before. One: it is used. Several: the one whose Configuration JSON has `"postJournalEntries": true` is used when it is the only one marked; otherwise the post is refused and the lookup reports an error, naming the connections and saying how to fix it (mark exactly one, or deactivate the others). Before, a company with two active connections for its target (production plus a sandbox, say) posted through whichever row the database returned first. A Configuration that is not JSON does not mark its connection, and is logged.
+  - **One posting connection per company works** (option A in #256): a Company Integration owned by the company, on the shared ERP Credential and carrying that company's ERP company, with no entity maps and no schedule, posts the company's batches and is skipped by the master-data sync.
+  - **The nightly master-data sync reads ERP connections only, and skips a connection with nothing to pull.** `SyncMasterData` no longer tries a company's HubSpot, IRS or Asana connection, which reported a false failure every night. An ERP connection with no entity maps for the requested objects, such as a posting-only connection, is reported with `Skipped: true` and `Success: true`, and does not fail the run. A failed entity-map query is now a failure rather than being read as "no maps". `RunERPSyncCompanyResult` gains the optional `Skipped` field, and the `Accounting.RunERPSync` action's message gives a skipped connection's reason.
+
+- Updated dependencies [c46af6c]
+- Updated dependencies [12b1513]
+- Updated dependencies [3af15bb]
+- Updated dependencies [a36297a]
+- Updated dependencies [39ca6d0]
+- Updated dependencies [972696b]
+  - @mj-biz-apps/accounting-core-entities-server@0.17.0
+
 ## 0.16.0
 
 ### Patch Changes

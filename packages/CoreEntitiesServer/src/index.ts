@@ -16,11 +16,15 @@
 export { AccountingCompanyProfileEntityServer } from './AccountingCompanyProfileEntityServer.js';
 export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
-export { JournalEntryBatchEntityServer, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
-export { GLAccountEntityServer } from './GLAccountEntityServer.js';
+export { JournalEntryLineDimensionEntityServer, LoadJournalEntryLineDimensionEntityServer } from './JournalEntryLineDimensionEntityServer.js';
+export { JournalEntryBatchEntityServer, type ApprovedContentCheck, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
+export { GLAccountEntityServer, BusinessCentralAccountNumberError, BUSINESS_CENTRAL_ACCOUNT_NUMBER_MAX_LENGTH } from './GLAccountEntityServer.js';
+export { DimensionEntityServer, LoadDimensionEntityServer } from './DimensionEntityServer.js';
+export { DimensionValueEntityServer, LoadDimensionValueEntityServer } from './DimensionValueEntityServer.js';
 export { GLAccountLinkEntityServer, LoadGLAccountLinkEntityServer } from './GLAccountLinkEntityServer.js';
 export { IntercompanyAccountMatchEntityServer } from './IntercompanyAccountMatchEntityServer.js';
 export { JournalEntryTypeEntityServer, LoadJournalEntryTypeEntityServer } from './JournalEntryTypeEntityServer.js';
+export { FinanceExceptionEntityServer, LoadFinanceExceptionEntityServer } from './FinanceExceptionEntityServer.js';
 // (AccountingPeriodEntityServer removed 2026-07-06 — AccountingPeriod retired, CH-1.)
 
 // Internal helpers exported for use by future EntityServer classes (period
@@ -35,6 +39,7 @@ export { getNextJournalEntryNumber, getNextJournalEntryBatchNumber } from './Seq
 // Validate-don't-escape UUID guards for SQL predicate interpolation (2026-09-05 security sweep) —
 // use these anywhere a client-supplied id reaches an ExtraFilter string.
 export { isSqlGuid, requireSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
+export { requireDateBound, loadTodayBusiness, type DateBound } from './BusinessDay.js';
 export {
   LookupJournalEntryTypeByCode,
   LookupJournalEntryTypeByID,
@@ -56,16 +61,24 @@ export {
   classifyViewEntries,
   previewBatch,
   pendingCandidateFilter,
+  APPROVED_OR_NO_APPROVAL_NEEDED_CLAUSE,
+  IsAwaitingManualApproval,
   outOfOrderSkipCount,
   perCompanySubtotals,
   pendingCompanies,
   EmptyJournalEntryBatchError,
   JournalEntryBatchFromViewError,
+  JournalEntryBatchPostingDateError,
   approveJournalEntryBatch,
   sendJournalEntryBatch,
+  autoPostJournalEntryBatch,
+  assertAutoPostPolicy,
+  assertAutoPostCaller,
+  AutoPostDispatchError,
   resumeJournalEntryBatchPosting,
   findStrandedJournalEntries,
   recordDispatchFailure,
+  JournalEntryBatchFailureNotRecordedError,
   cancelJournalEntryBatch,
   regenerateJournalEntryBatch,
   netLines,
@@ -74,6 +87,9 @@ export {
   mockErpPoster,
   unavailableErpLookup,
   ErpPostingUnconfirmedError,
+  JournalEntryBatchSendRefusedError,
+  JournalEntryBatchPostedDuringCancelError,
+  JournalEntryBatchMismatchDuringCancelError,
   AutoApproveGate,
 } from './JournalEntryBatchEngine.js';
 export type {
@@ -97,7 +113,9 @@ export type {
   JournalEntryBatchCancelGate,
   CancelJournalEntryBatchOptions,
   RecordedCancellation,
+  RecordedArchive,
   SendJournalEntryBatchOptions,
+  AutoPostJournalEntryBatchResult,
   DispatchFailureRecord,
   ResumeJournalEntryBatchPostingResult,
   StrandedJournalEntryBatch,
@@ -107,6 +125,10 @@ export type {
 // S1 — the REAL CFO-approval gate, backed by the bizapps-tasks app (replaces AutoApproveGate in
 // production). See TasksAppApprovalGate.ts.
 export { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
+
+// Where sendJournalEntryBatch and cancelJournalEntryBatch get their gate, ERP poster and lookup (#233). Register a subclass at a higher
+// priority to replace them; callers can no longer pass their own.
+export { JournalEntryBatchDispatchServices } from './JournalEntryBatchDispatchServices.js';
 
 // (ScheduledJournalEntryService retired 2026-07-23 — the schedule tables were dropped in the
 //  rewritten baseline (plan D15: rev-rec is REAL forward-dated JEs written at booking).
@@ -148,6 +170,17 @@ export {
   type GenerateReversalOutput,
 } from './GenerateReversalOperation.js';
 export {
+  RedatePendingJournalEntriesOperation,
+  LoadRedatePendingJournalEntriesOperation,
+  RedateProblems,
+  NamedEntriesFilter,
+  type RedatePendingJournalEntriesInput,
+  type RedatePendingJournalEntriesOutput,
+  type RedatedJournalEntry,
+  type RedateCandidate,
+  type CompanyDateRules,
+} from './RedatePendingJournalEntriesOperation.js';
+export {
   GetJournalEntryStatesOperation,
   LoadGetJournalEntryStatesOperation,
   MAX_JOURNAL_ENTRY_STATE_IDS,
@@ -160,6 +193,7 @@ export {
   PreviewJournalEntryBatchOperation,
   RegenerateJournalEntryBatchOperation,
   DispatchJournalEntryBatchOperation,
+  DispatchApprovedJournalEntryBatchesOperation,
   RecordJournalEntryBatchDecisionOperation,
   GetJournalEntryBatchApprovalStateOperation,
   ArchiveJournalEntryBatchOperation,
@@ -174,6 +208,9 @@ export {
   type RegenerateJournalEntryBatchInput,
   type DispatchJournalEntryBatchInput,
   type DispatchJournalEntryBatchOutput,
+  type DispatchApprovedJournalEntryBatchesInput,
+  type DispatchApprovedJournalEntryBatchesOutput,
+  type DispatchApprovedJournalEntryBatchOutcome,
   type JournalEntryBatchDecisionOutcome,
   type RecordJournalEntryBatchDecisionInput,
   type RecordJournalEntryBatchDecisionOutput,
@@ -187,3 +224,76 @@ export {
   type ResumeJournalEntryBatchPostingOutput,
   type GetStrandedJournalEntriesOutput,
 } from './JournalEntryBatchOperations.js';
+// Every Approved batch through the per-batch send: shared by the hourly dispatch action and the
+// Send approved batches operation (bc-aidp-next-golive#451).
+export {
+  approvedBatchFilter,
+  readApprovedJournalEntryBatches,
+  dispatchApprovedJournalEntryBatch,
+  dispatchApprovedJournalEntryBatches,
+  type ApprovedBatchDispatchFilter,
+  type ApprovedBatchDispatchOutcome,
+} from './ApprovedBatchDispatch.js';
+
+// Finance exceptions (golive #279): the month-end review list. Three remote operations —
+// Accounting.GetFinanceExceptionTypes / RaiseFinanceExceptions / ClearFinanceException — over the
+// typed bases CodeGen emits into @mj-biz-apps/accounting-entities. Registered via
+// LoadFinanceExceptionOperations. The status guard on FinanceException is FinanceExceptionEntityServer.
+export {
+  GetFinanceExceptionTypesOperation,
+  RaiseFinanceExceptionsOperation,
+  ClearFinanceExceptionOperation,
+  LoadFinanceExceptionOperations,
+} from './FinanceExceptionOperations.js';
+export {
+  FINANCE_EXCEPTION_TYPE_ENTITY,
+  FinanceExceptionClearContextFor,
+  UserCanClearFinanceExceptions,
+  ParseFinanceExceptionConfiguration,
+} from './FinanceExceptions.js';
+// Who may clear which finance exception (golive #320 §4): per-type, unattributed-creator and
+// escalated-creator rights a host turns on by granting them to its roles.
+export {
+  FINANCE_EXCEPTIONS_CLEAR_AUTH,
+  FINANCE_EXCEPTIONS_CLEAR_TYPE_AUTH_PREFIX,
+  FINANCE_EXCEPTIONS_CLEAR_UNATTRIBUTED_AUTH,
+  FINANCE_EXCEPTIONS_ESCALATED_CREATOR_AUTH,
+  FINANCE_EXCEPTIONS_CLEAR_ESCALATED_AUTH,
+  FinanceExceptionClearTypeAuthName,
+  IsFinanceExceptionRuleGranted,
+  HoldsAnyFinanceExceptionClearRight,
+  ResolveFinanceExceptionClearRule,
+  HoldsFinanceExceptionClearRule,
+  FinanceExceptionClearRuleRefusal,
+  type FinanceExceptionClearRuleKind,
+  type FinanceExceptionClearRule,
+  type FinanceExceptionClearRefusal,
+  type FinanceExceptionClearSubject,
+  type FinanceExceptionClearContext,
+  type FinanceExceptionClearResolution,
+} from './FinanceExceptionClearPolicy.js';
+export { FINANCE_EXCEPTION_ENTITY } from './FinanceExceptionEntityServer.js';
+
+// Manual journal entry approval (golive #353, #320 §3): a manual entry saved while its company has a
+// ManualJournalEntryApprovalThreshold is routed to the approver role or the Approval CFO and stays out
+// of every batch until approved. Decided through Accounting.RecordManualJournalEntryDecision.
+export {
+  ManualJournalEntryApprovalService,
+  ManualJournalEntryApprovalError,
+  RouteManualJournalEntryApproval,
+  AssertMayDecideManualJournalEntry,
+  IsManualJournalEntry,
+  type ManualJournalEntryApprovalLevel,
+  type ManualJournalEntryApprovalPolicy,
+  type ManualJournalEntryApprovalPlan,
+  type ManualJournalEntryRoutingInput,
+  type ManualJournalEntryDeciderInput,
+  type ManualJournalEntryDecisionResult,
+  type ManualJournalEntrySaveAction,
+} from './ManualJournalEntryApproval.js';
+export {
+  RecordManualJournalEntryDecisionOperation,
+  LoadManualJournalEntryOperations,
+  type RecordManualJournalEntryDecisionInput,
+  type RecordManualJournalEntryDecisionOutput,
+} from './ManualJournalEntryOperations.js';

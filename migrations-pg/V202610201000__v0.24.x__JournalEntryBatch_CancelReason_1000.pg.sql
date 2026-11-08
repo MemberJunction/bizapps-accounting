@@ -1,0 +1,293 @@
+-- ============================================================================
+-- MemberJunction PostgreSQL Migration
+-- PostgreSQL counterpart of migrations/V202610201000__v0.24.x__JournalEntryBatch_CancelReason_1000.sql
+-- ============================================================================
+--
+-- CONVERTED, THEN ONE STATEMENT FIXED BY HAND. `mj sql-convert` turns
+-- `ALTER COLUMN CancelReason NVARCHAR(1000) NULL` into `DROP NOT NULL` and loses
+-- the new length (MemberJunction/MJ#5539). The ALTER below is written by hand as
+-- `TYPE VARCHAR(1000)`; everything else is the converter's output. Re-convert
+-- once MJ#5539 is fixed, and keep this file only if the output matches.
+--
+
+-- Extensions
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Schema
+--
+-- The schema name is quoted so it keeps its case. `mj migrate --schema` (Skyway) and the Open App
+-- installer create the schema quoted, and MJ quotes it in runtime SQL. Unquoted, PostgreSQL folds it
+-- to __mj_bizappsaccounting, a different and empty schema. The converter emits it unquoted, so the
+-- quotes are added after conversion (see migrations-pg/README.md).
+CREATE SCHEMA IF NOT EXISTS "__mj_BizAppsAccounting";
+SET search_path TO "__mj_BizAppsAccounting", public;
+
+-- Ensure backslashes in string literals are treated literally (not as escape sequences)
+SET standard_conforming_strings = on;
+
+-- NOTE: Earlier converter versions made INTEGER to BOOLEAN cast implicit by
+-- modifying the system catalog so SS-style INSERT INTO bool_col VALUES (1)
+-- would work. That modification required pg_catalog write privileges, which
+-- managed PG (RDS, Aurora, Cloud SQL, Azure) does not grant. As of v5.30 all
+-- bulk INSERTs are emitted with native TRUE/FALSE values directly, so the
+-- cast modification is no longer needed. Removed to support managed-PG
+-- installs out of the box.
+
+
+-- ===================== DDL: Tables, PKs, Indexes =====================
+
+ALTER TABLE "__mj_BizAppsAccounting"."JournalEntryBatch"
+    ALTER COLUMN "CancelReason" TYPE VARCHAR(1000);
+
+
+-- ===================== Views =====================
+
+DO $do$
+DECLARE
+  v_target_schema CONSTANT TEXT := '__mj_BizAppsAccounting';
+  v_target_name CONSTANT TEXT := 'vwJournalEntryBatches';
+  vsql CONSTANT TEXT := $vsql$CREATE OR REPLACE VIEW "__mj_BizAppsAccounting"."vwJournalEntryBatches"
+AS SELECT
+    j.*,
+    "MJCompany_CompanyID"."Name" AS "Company",
+    "mjBizAppsAccountingJournalEntry_SummaryJournalEntryID"."EntryNumber" AS "SummaryJournalEntry",
+    "MJUser_BatchedByUserID"."Name" AS "BatchedByUser",
+    "MJUser_ApprovedByUserID"."Name" AS "ApprovedByUser",
+    "mjBizAppsTasksTask_ApprovalTaskID"."Name" AS "ApprovalTask",
+    "MJUser_ArchivedByUserID"."Name" AS "ArchivedByUser",
+    "MJUser_CancelledByUserID"."Name" AS "CancelledByUser",
+    "MJUser_ERPNotPostedConfirmedByUserID"."Name" AS "ERPNotPostedConfirmedByUser",
+    "MJUser_SentByUserID"."Name" AS "SentByUser"
+FROM
+    "__mj_BizAppsAccounting"."JournalEntryBatch" AS j
+INNER JOIN
+    ${mjSchema}."Company" AS "MJCompany_CompanyID"
+  ON
+    j."CompanyID" = "MJCompany_CompanyID"."ID"
+LEFT OUTER JOIN
+    "__mj_BizAppsAccounting"."JournalEntry" AS "mjBizAppsAccountingJournalEntry_SummaryJournalEntryID"
+  ON
+    j."SummaryJournalEntryID" = "mjBizAppsAccountingJournalEntry_SummaryJournalEntryID"."ID"
+INNER JOIN
+    ${mjSchema}."User" AS "MJUser_BatchedByUserID"
+  ON
+    j."BatchedByUserID" = "MJUser_BatchedByUserID"."ID"
+LEFT OUTER JOIN
+    ${mjSchema}."User" AS "MJUser_ApprovedByUserID"
+  ON
+    j."ApprovedByUserID" = "MJUser_ApprovedByUserID"."ID"
+LEFT OUTER JOIN
+    "${mjSchema}_BizAppsTasks"."Task" AS "mjBizAppsTasksTask_ApprovalTaskID"
+  ON
+    j."ApprovalTaskID" = "mjBizAppsTasksTask_ApprovalTaskID"."ID"
+LEFT OUTER JOIN
+    ${mjSchema}."User" AS "MJUser_ArchivedByUserID"
+  ON
+    j."ArchivedByUserID" = "MJUser_ArchivedByUserID"."ID"
+LEFT OUTER JOIN
+    ${mjSchema}."User" AS "MJUser_CancelledByUserID"
+  ON
+    j."CancelledByUserID" = "MJUser_CancelledByUserID"."ID"
+LEFT OUTER JOIN
+    ${mjSchema}."User" AS "MJUser_ERPNotPostedConfirmedByUserID"
+  ON
+    j."ERPNotPostedConfirmedByUserID" = "MJUser_ERPNotPostedConfirmedByUserID"."ID"
+LEFT OUTER JOIN
+    ${mjSchema}."User" AS "MJUser_SentByUserID"
+  ON
+    j."SentByUserID" = "MJUser_SentByUserID"."ID"$vsql$;
+  v_target_oid OID;
+  v_dep RECORD;
+  v_captured JSONB[] := ARRAY[]::JSONB[];
+  v_n INTEGER;
+BEGIN
+  EXECUTE vsql;
+EXCEPTION WHEN invalid_table_definition THEN
+  -- Column list changed; need CASCADE. Preserve dependent views first.
+  SELECT c.oid INTO v_target_oid
+  FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid
+  WHERE n.nspname = v_target_schema AND c.relname = v_target_name AND c.relkind = 'v';
+  IF v_target_oid IS NOT NULL THEN
+    FOR v_dep IN
+      WITH RECURSIVE deps AS (
+        SELECT c.oid, c.relname AS name, n.nspname AS schema, 1 AS depth
+        FROM pg_rewrite r
+        JOIN pg_depend d ON d.objid = r.oid
+        JOIN pg_class c ON c.oid = r.ev_class
+        JOIN pg_namespace n ON c.relnamespace = n.oid
+        WHERE d.refobjid = v_target_oid AND d.deptype = 'n'
+          AND c.oid <> v_target_oid AND c.relkind = 'v'
+        UNION
+        SELECT c.oid, c.relname, n.nspname, p.depth + 1
+        FROM deps p
+        JOIN pg_rewrite r ON TRUE
+        JOIN pg_depend d ON d.objid = r.oid AND d.refobjid = p.oid
+        JOIN pg_class c ON c.oid = r.ev_class
+        JOIN pg_namespace n ON c.relnamespace = n.oid
+        WHERE c.relkind = 'v' AND c.oid <> p.oid
+      )
+      SELECT oid, name, schema, MAX(depth) AS max_depth,
+             pg_catalog.pg_get_viewdef(oid, true) AS viewdef
+      FROM deps GROUP BY oid, name, schema
+      ORDER BY MAX(depth) ASC
+    LOOP
+      v_captured := v_captured || jsonb_build_object(
+        'schema', v_dep.schema, 'name', v_dep.name, 'def', v_dep.viewdef);
+    END LOOP;
+  END IF;
+  EXECUTE format('DROP VIEW IF EXISTS %I.%I CASCADE', v_target_schema, v_target_name);
+  EXECUTE vsql;
+  IF v_captured IS NOT NULL AND array_length(v_captured, 1) > 0 THEN
+    FOR v_n IN 1..array_length(v_captured, 1) LOOP
+      BEGIN
+        EXECUTE format('CREATE VIEW %I.%I AS %s',
+          v_captured[v_n]->>'schema', v_captured[v_n]->>'name', v_captured[v_n]->>'def');
+      EXCEPTION WHEN others THEN
+        RAISE WARNING 'Could not restore dependent view %.%: %',
+          v_captured[v_n]->>'schema', v_captured[v_n]->>'name', SQLERRM;
+      END;
+    END LOOP;
+  END IF;
+END;
+$do$;
+
+
+-- ===================== Stored Procedures (sp*) =====================
+
+-- SKIPPED: procedure (auto-conversion not supported)
+-- CREATE PROCEDURE [__mj_BizAppsAccounting].[spCreateJournalEntryBatch]
+--     @ID UUID = NULL,
+--     @JournalEntryBatchNumber VARCHAR(40),
+--     @CompanyID UUID,
+--     @PostingDate date...
+
+-- SKIPPED: procedure (auto-conversion not supported)
+-- CREATE PROCEDURE [__mj_BizAppsAccounting].[spUpdateJournalEntryBatch]
+--     @ID UUID,
+--     @JournalEntryBatchNumber VARCHAR(40) = NULL,
+--     @CompanyID UUID = NULL,
+--     @PostingDa...
+
+-- SKIPPED: procedure (auto-conversion not supported)
+-- CREATE PROCEDURE [__mj_BizAppsAccounting].[spDeleteJournalEntryBatch]
+--     @ID UUID
+-- AS
+-- BEGIN
+--     SET NOCOUNT ON;
+-- 
+--     DELETE FROM
+--         [__mj_BizAppsAccounting].[JournalEntryBatch]
+--     WH...
+
+
+-- ===================== Triggers =====================
+
+-- SKIPPED: trigger (auto-conversion not supported)
+-- CREATE TRIGGER [__mj_BizAppsAccounting].trgUpdateJournalEntryBatch
+ON "__mj_BizAppsAccounting"."JournalEntryBatch"
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        "__mj_BizAppsAccounting"
+
+
+-- ===================== Grants =====================
+
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwJournalEntryBatches" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwJournalEntryBatches" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwJournalEntryBatches" FROM "cdp_UI"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT SELECT ON "__mj_BizAppsAccounting"."vwJournalEntryBatches" TO "cdp_UI", "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Journal Entry Batches */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+-- Item: Permissions for vwJournalEntryBatches
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------;
+
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwJournalEntryBatches" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwJournalEntryBatches" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE SELECT ON "__mj_BizAppsAccounting"."vwJournalEntryBatches" FROM "cdp_UI"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT SELECT ON "__mj_BizAppsAccounting"."vwJournalEntryBatches" TO "cdp_UI", "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+/* spCreate SQL for MJ_BizApps_Accounting: Journal Entry Batches */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+-- Item: spCreateJournalEntryBatch
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR JournalEntryBatch
+------------------------------------------------------------;
+
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+/* spCreate Permissions for MJ_BizApps_Accounting: Journal Entry Batches */
+
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spCreateJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+/* spUpdate SQL for MJ_BizApps_Accounting: Journal Entry Batches */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+-- Item: spUpdateJournalEntryBatch
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR JournalEntryBatch
+------------------------------------------------------------;
+
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spUpdateJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+/* spDelete SQL for MJ_BizApps_Accounting: Journal Entry Batches */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+-- Item: spDeleteJournalEntryBatch
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR JournalEntryBatch
+------------------------------------------------------------;
+
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+/* spDelete Permissions for MJ_BizApps_Accounting: Journal Entry Batches */
+
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteJournalEntryBatch" FROM "cdp_Developer"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN REVOKE EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteJournalEntryBatch" FROM "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN GRANT EXECUTE ON FUNCTION "__mj_BizAppsAccounting"."spDeleteJournalEntryBatch" TO "cdp_Developer", "cdp_Integration"; EXCEPTION WHEN others THEN NULL; END $$;
+/* SQL text to update existing entity fields from schema */
+
+
+-- ===================== Other =====================
+
+-- =============================================================================
+-- CODEGEN OUTPUT — GENERATED CODE BELOW THIS LINE. DO NOT EDIT BY HAND.
+-- =============================================================================
+
+
+/* SQL text to update existing entities from schema */
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Journal Entry Batches */

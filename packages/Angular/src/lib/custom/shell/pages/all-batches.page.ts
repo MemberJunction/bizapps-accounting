@@ -21,10 +21,24 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 type BatchStatus = NonNullable<mjBizAppsAccountingJournalEntryBatchEntityType['Status']>;
 
 /**
- * The dispatch lifecycle, in journey order — chips read left-to-right as a batch's life. Typed as
- * `BatchStatus[]` so a widened CHECK constraint fails compilation instead of silently missing here.
+ * Each status's place in the dispatch lifecycle — chips read left-to-right as a batch's life. A
+ * `Record` over the union must name every member, so a status added to the CHECK constraint fails
+ * compilation here until it is placed; a plain `BatchStatus[]` accepts a subset, which is how
+ * Archived went missing from this page (#407).
  */
-const STATUSES: readonly BatchStatus[] = ['Pending', 'Approved', 'Sent', 'Posted', 'Failed', 'Cancelled'] as const;
+const JOURNEY_ORDER: Readonly<Record<BatchStatus, number>> = {
+  Pending: 0,
+  Approved: 1,
+  Sent: 2,
+  Posted: 3,
+  Failed: 4,
+  Cancelled: 5,
+  Archived: 6,
+};
+
+/** The statuses in journey order. */
+const STATUSES: readonly BatchStatus[] = (Object.keys(JOURNEY_ORDER) as BatchStatus[])
+  .sort((a, b) => JOURNEY_ORDER[a] - JOURNEY_ORDER[b]);
 
 type WindowChoice = TimeWindowId | 'custom';
 
@@ -34,7 +48,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * All batches — the batches list on the standard list idiom (the All-JEs clone): summary strip +
  * list toolbar (search · status chips · Filters disclosure) + the house grid, row slide-in detail.
  *
- * Replaces the old BatchStatus dashboard as this rail item (Marcelo 2026-08-04): a list page and a
+ * Replaces the old BatchStatus dashboard as this rail item: a list page and a
  * dashboard are different idioms, and "All batches" is a list.
  *
  * The date filters run on **PostingDate** — the batch's business date (what the GL cares about) —
@@ -72,7 +86,7 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   public SelectedStatuses = new Set<BatchStatus>();
 
   /** Per-page company narrowing — ANDs inside the app-wide scope, never widens it. */
-  /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = no narrowing ("All companies"). */
+  /** MULTI-select company narrowing: empty = no narrowing ("All companies"). */
   public CompanyIDs: string[] = [];
 
   public Search = '';

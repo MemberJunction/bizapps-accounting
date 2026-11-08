@@ -55,6 +55,13 @@ module.exports = {
     { type: 'GraphQLServer', directory: './packages/Server/src/generated' },
     { type: 'ActionSubclasses', directory: './packages/Actions/src/generated' },
     { type: 'EntitySubclasses', directory: './packages/Entities/src/generated' },
+    // Typed bases for the `MJ: Remote Operations` rows in metadata/remote-operations/
+    // (GenerationType=Manual: a contract shell; the server subclass in
+    // core-entities-server supplies the body). Entities is the browser-safe package
+    // every other package already depends on, so a client can call .Execute() on
+    // the generated base without the server engine. Operations registered in code
+    // only (no metadata row) are unaffected.
+    { type: 'RemoteOperations', directory: './packages/Entities/src/generated' },
     { type: 'DBSchemaJSON', directory: './Schema Files' },
   ],
 
@@ -178,6 +185,15 @@ module.exports = {
       { name: 'EntityNames', enabled: false },
     ],
   },
+
+  // ---------------------------------------------------------------------------
+  // Migrations source
+  // ---------------------------------------------------------------------------
+  // `pnpm run mj:migrate` passes no --dir, so `mj migrate` reads this location and,
+  // with DB_PLATFORM=postgresql, swaps it to ./migrations-pg. An explicit --dir
+  // turns that swap off. Leave `mjRepoVersion` unset here: when it is set and no
+  // --dir is given, `mj migrate` fetches MJ core's migrations instead of this repo's.
+  migrationsLocation: 'filesystem:./migrations',
 
   // ---------------------------------------------------------------------------
   // SQL Output (for migrations)

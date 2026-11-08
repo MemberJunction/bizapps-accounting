@@ -1,20 +1,41 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, Input, inject, OnInit, OnDestroy } from '@angular/core';
-import { RunView, type IRemoteOperationProvider } from '@memberjunction/core';
-import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import { CompositeKey, LogError, RunView, type IRemoteOperationProvider } from '@memberjunction/core';
+import { AccountingEngineBase, UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
+import { BusinessTimeZoneEngine, IsBeforeDay, IsCalendarDay, ToCalendarDay } from '@mj-biz-apps/common-entities';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
+import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
+import { ClosedBooksProblem, PostingDateMonthWarning, PostingMonthLabel } from '../../shared/posting-date-warning';
 import { CompanyScopeService } from '../../shared/company-scope.service';
+import { openBizDetail } from '../../shared/biz-detail-form';
+import { LoadJournalEntrySources, SourceLabel, type JournalEntrySource } from '../../shared/je-source';
 import { WorkspaceTabStore } from '../../../transfer-pending/workspace-tabs/workspace-tab-store';
 import { WorkspaceTab } from '../../../transfer-pending/workspace-tabs/workspace-tabs.types';
 import {
   JournalEntryBatchWorkspaceClient,
   type JournalEntryBatchCriteria,
   type BatchPreview,
+  type HeldBackEntry,
   type EntryTypeScope,
   type JournalEntryBatchTargetSystem,
 } from './journal-entry-batch-workspace.client';
+import {
+  ALL_ENTRIES,
+  NO_ENTRIES,
+  IncludedCandidateIds,
+  IsEntryIncluded,
+  SelectionRequestIds,
+  ToggleEntrySelection,
+  type EntrySelection,
+} from '../../shared/entry-selection';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
+
+/**
+ * `openExistingBatch` interpolates its id into an ExtraFilter, so anything that is not a plain UUID
+ * is refused outright — validate-don't-escape, the same posture as the server's SqlGuards.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** One workspace tab's session state — the draft the operator is composing. */
 interface BatchDraft {
@@ -22,13 +43,13 @@ interface BatchDraft {
   /** Optional free-text label (JournalEntryBatch.Memo) — "what was this batch for". NOT identity
    *  (JournalEntryBatchNumber is); purely for findability. Editable pre-build, and it drives the tab caption. */
   Memo: string;
-  /** Ids the operator has UN-ticked. Kept as the exclusion set (not the inclusion set) so newly
-   *  appearing candidates default to INCLUDED, which is what an oldest-forward sweep means. */
-  ExcludedIDs: string[];
+  /** The ticked entries: every candidate (null), or an explicit include set sent to the preview as
+   *  it is (golive #284). Once the operator unticks one, entries a later Apply brings in start unticked. */
+  Selection: EntrySelection;
   /** Set once built — the tab becomes a read-only record of the batch. */
   BuiltJournalEntryBatchNumber?: string;
-  /** The loaded preview — stored PER-TAB so switching tabs does NOT re-query the server (Marcelo
-   *  2026-07-21). Null until the operator clicks Load / Apply (the query is deferred, never automatic). */
+  /** The loaded preview — stored PER-TAB so switching tabs does NOT re-query the server.
+   *  Null until the operator clicks Load / Apply (the query is deferred, never automatic). */
   Preview?: BatchPreview | null;
   /** True when the criteria changed since the last load — the shown preview is stale; Apply refreshes it. */
   PreviewStale?: boolean;
@@ -60,6 +81,13 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   private pageRefresh = inject(PageRefreshService);
   private refreshSub: { unsubscribe: () => void } | null = null;
   public Scope = inject(CompanyScopeService);
+  private forms = inject(MJFormPresenterService);
+
+  /**
+   * Source record per candidate entry ID (bc-aidp-next-golive#452), shared by every tab: an entry's
+   * source never changes, so a name read once stays good. Filled after each preview, off its path.
+   */
+  private sources = new Map<string, JournalEntrySource>();
 
   private tabs = new WorkspaceTabStore<BatchDraft>();
   private client = new JournalEntryBatchWorkspaceClient();
@@ -140,6 +168,11 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
 
   /** Load the batch and open it as a locked record tab labeled by batch number. */
   private async openExistingBatch(id: string): Promise<void> {
+    if (!UUID_RE.test(id)) {
+      // The id is embedded in the filter below; a malformed one never reaches a query.
+      this.cdr.markForCheck();
+      return;
+    }
     const rv = RunView.FromMetadataProvider(this.ProviderToUse);
     const res = await rv.RunView<{ ID: string; JournalEntryBatchNumber: string; Memo: string | null }>(
       {
@@ -162,7 +195,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
       Status: 'complete', // read-only record — a built batch is immutable from here
       State: {
         Criteria: this.defaultCriteria(),
-        ExcludedIDs: [],
+        Selection: ALL_ENTRIES,
         Memo: row.Memo ?? '',
         Preview: null,
         PreviewStale: false,
@@ -194,9 +227,9 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
       Label: 'New JE batch (draft)',
       Icon: 'fa-solid fa-pen-ruler',
       Status: 'draft',
-      State: { Criteria: this.defaultCriteria(), ExcludedIDs: [], Memo: '', Preview: null, PreviewStale: false },
+      State: { Criteria: this.defaultCriteria(), Selection: ALL_ENTRIES, Memo: '', Preview: null, PreviewStale: false },
     });
-    // NO auto-query (Marcelo 2026-07-21): a new tab does NOT hit the server. The operator clicks
+    // NO auto-query: a new tab does NOT hit the server. The operator clicks
     // "Load entries" in the table (or Apply in the filters) to run the first query.
     this.cdr.markForCheck();
   }
@@ -235,7 +268,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   }
 
   public SelectTab(id: string): void {
-    // Just show the tab's OWN stored preview — no re-query (Marcelo 2026-07-21).
+    // Just show the tab's OWN stored preview — no re-query.
     this.tabs.Activate(id);
     this.cdr.markForCheck();
   }
@@ -249,7 +282,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   /** "Keep as draft tab" — the tab already holds the state; this just makes that explicit + clean. */
   public KeepAsDraft(): void {
     if (this.tabs.ActiveId) this.tabs.MarkClean(this.tabs.ActiveId);
-    this.ActionMessage = 'Kept as a draft tab — it stays for this session (drafts are not saved to the database in v1).';
+    this.ActionMessage = 'Kept as a draft tab. Drafts last only for this browser session and are not saved, so closing the app discards it.';
     this.ActionIsError = false;
     this.cdr.markForCheck();
   }
@@ -262,8 +295,11 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
 
   private defaultCriteria(): JournalEntryBatchCriteria {
     return {
-      // "Include unbatched through [now]" — the §2 default flow.
-      Cutoff: this.toLocalInput(new Date()),
+      // "Include unbatched through [today]" — the §2 default flow. Today is the BUSINESS day, not
+      // the browser's: the cutoff is matched against EffectiveDate, a DATE column (golive #168).
+      Cutoff: BusinessTimeZoneEngine.Instance.Today(),
+      // The journal date the ERP receives (golive #315). Today by default; month-end work back-dates it.
+      PostingDate: BusinessTimeZoneEngine.Instance.Today(),
       // Seed from the app-wide company scope: the operator already told us which companies they
       // work in, so re-asking with a blank multi-select would be rude.
       CompanyIDs: [...this.Scope.SelectedIDs],
@@ -274,15 +310,8 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     };
   }
 
-  /** `datetime-local` wants `YYYY-MM-DDTHH:mm` in LOCAL time (the only place local time is right:
-   *  it is what the operator typed). Converted back to a UTC instant on the way out. */
-  private toLocalInput(d: Date): string {
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
-
   public OnCriteriaChanged(): void {
-    // NO auto-query (Marcelo 2026-07-21): changing a filter does NOT hit the server. Mark the shown
+    // NO auto-query: changing a filter does NOT hit the server. Mark the shown
     // preview stale so the UI prompts "Apply to refresh"; the operator clicks Apply to re-query. This
     // is what keeps the page fast — no round-trip on every keystroke/filter tweak.
     const d = this.Draft;
@@ -303,12 +332,23 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     const d = this.Draft;
     if (!d) return [];
     const chips: string[] = [];
-    if (d.Criteria.Cutoff) chips.push(`through ${d.Criteria.Cutoff.replace('T', ' ')}`);
+    chips.push(this.poolEndChip(d.Criteria.Cutoff, d.Criteria.PostingDate));
+    chips.push(`posting date ${d.Criteria.PostingDate || 'not set'}`);
     chips.push(this.companyChipLabel(d.Criteria.CompanyIDs));
     chips.push(this.EntryTypeScopes.find((s) => s.Id === d.Criteria.EntryTypeScope)?.Label ?? 'All');
     chips.push(d.Criteria.Source === 'View' ? 'from a saved view' : 'oldest-forward');
     chips.push(`→ ${d.Criteria.TargetSystem}`);
     return chips;
+  }
+
+  /** The chip for where the candidate pool ends: the earlier of the cutoff and the posting date
+   *  (#401). An empty cutoff is shown, not left to the absence of a chip: the pool then runs through
+   *  the posting date, which always ends it (golive #315). Both are `YYYY-MM-DD`, so they compare as
+   *  strings. */
+  private poolEndChip(cutoff: string | null | undefined, postingDate: string | null | undefined): string {
+    if (!cutoff) return 'no cutoff — through the posting date';
+    if (postingDate && postingDate < cutoff) return `through ${postingDate} (posting date)`;
+    return `through ${cutoff}`;
   }
 
   private companyChipLabel(ids: string[]): string {
@@ -321,28 +361,79 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     return this.Scope.Companies.find((c) => c.ID === id)?.Name ?? 'Unknown company';
   }
 
+  public SourceOf(entryId: string): JournalEntrySource | undefined {
+    return this.sources.get(entryId);
+  }
+
+  public SourceText(source: JournalEntrySource): string {
+    return SourceLabel(source);
+  }
+
+  /** Open a candidate's source record (the payment line, order line, …) over the workspace. */
+  public OpenSource(source: JournalEntrySource): void {
+    openBizDetail(this.forms, {
+      entityName: source.EntityName,
+      primaryKey: CompositeKey.FromID(source.RecordID),
+      title: SourceLabel(source),
+      mode: 'slide-in',
+    });
+  }
+
+  /** Resolve the sources of candidates not seen before; a failed read leaves those cells as entity labels. */
+  private async loadSources(preview: BatchPreview): Promise<void> {
+    const unseen = preview.Candidates.filter((c) => !this.sources.has(c.ID));
+    if (unseen.length === 0) return;
+    try {
+      const found = await LoadJournalEntrySources(this.ProviderToUse, unseen);
+      for (const [id, source] of found) this.sources.set(id, source);
+    } catch (e) {
+      LogError(`Batch workspace: could not load the source records: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    this.cdr.markForCheck();
+  }
+
   // ─── preview ───────────────────────────────────────────────────────────────
+
+  /**
+   * Numbers each preview request (#254). Overlapping requests (fast ticking) can settle out of
+   * order, so a response is applied only when it is still the latest request for ITS tab, and the
+   * spinner clears only when the latest request overall settles.
+   */
+  private previewRequestSeq = 0;
+  private latestPreviewSeqByTab = new Map<string, number>();
 
   private async refreshPreview(): Promise<void> {
     const d = this.Draft;
-    if (!d || this.IsBuilt) return;
+    // The tab the request belongs to — the operator may switch tabs before it settles.
+    const tabId = this.tabs.ActiveId;
+    if (!d || !tabId || this.IsBuilt) return;
+
+    const seq = ++this.previewRequestSeq;
+    this.latestPreviewSeqByTab.set(tabId, seq);
+    const isLatestForTab = () => this.latestPreviewSeqByTab.get(tabId) === seq;
 
     this.IsPreviewing = true;
     this.cdr.markForCheck();
     try {
-      const preview = await this.client.Preview(this.opProvider, d.Criteria, this.includedIds(d), this.entryTypeValues(d.Criteria.EntryTypeScope));
+      // The selection goes as it is — never derived from the previous preview's candidates, which
+      // after a criteria change are the old pool (golive #284).
+      const preview = await this.client.Preview(this.opProvider, d.Criteria, SelectionRequestIds(d.Selection), this.entryTypeValues(d.Criteria.EntryTypeScope));
+      if (!isLatestForTab()) return; // superseded by a newer request for this tab
       // Store the preview ON THE TAB (per-tab), and clear the stale flag — the shown data now matches
       // the criteria again.
       d.Preview = preview;
       d.PreviewStale = false;
-      if (this.tabs.ActiveId) this.tabs.UpdateState(this.tabs.ActiveId, d);
+      this.tabs.UpdateState(tabId, d);
       this.ActionMessage = null;
+      void this.loadSources(preview);
     } catch (e) {
+      if (!isLatestForTab()) return;
       this.setError(e instanceof Error ? e.message : String(e));
       d.Preview = null;
-      if (this.tabs.ActiveId) this.tabs.UpdateState(this.tabs.ActiveId, d);
+      this.tabs.UpdateState(tabId, d);
     } finally {
-      this.IsPreviewing = false;
+      if (isLatestForTab()) this.latestPreviewSeqByTab.delete(tabId);
+      if (seq === this.previewRequestSeq) this.IsPreviewing = false;
       this.cdr.markForCheck();
     }
   }
@@ -369,36 +460,53 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     return all.filter((c) => c !== 'Manual');
   }
 
-  private includedIds(d: BatchDraft): string[] | null {
-    if (!this.Preview) return null;
-    const excluded = new Set(d.ExcludedIDs);
-    return this.Preview.Candidates.filter((c) => !excluded.has(c.ID)).map((c) => c.ID);
+  /** The ticked candidates of the shown preview: what the build sends. */
+  private includedIds(d: BatchDraft): string[] {
+    return IncludedCandidateIds(d.Selection, (d.Preview?.Candidates ?? []).map((c) => c.ID));
   }
 
   // ─── include / exclude ─────────────────────────────────────────────────────
 
   public IsExcluded(id: string): boolean {
-    return this.Draft?.ExcludedIDs.includes(id) ?? false;
+    const d = this.Draft;
+    return !!d && !IsEntryIncluded(d.Selection, id);
   }
 
   public ToggleEntry(id: string): void {
     const d = this.Draft;
     if (!d || this.IsBuilt) return;
-    d.ExcludedIDs = d.ExcludedIDs.includes(id) ? d.ExcludedIDs.filter((x) => x !== id) : [...d.ExcludedIDs, id];
+    d.Selection = ToggleEntrySelection(d.Selection, id, (d.Preview?.Candidates ?? []).map((c) => c.ID));
     if (this.tabs.ActiveId) this.tabs.UpdateState(this.tabs.ActiveId, d);
     // Re-preview: the netted summary, totals and the MOD-8 warning are all a function of the
     // selection, and they are computed SERVER-side by the same code the build uses.
     void this.refreshPreview();
   }
 
+  /**
+   * The header checkbox (#327), as in the Build Batch dialog: ticking it selects every candidate,
+   * including entries a later criteria change brings in; unticking it clears the selection, so
+   * those later entries come in unticked.
+   */
+  public SetAllEntriesIncluded(included: boolean): void {
+    const d = this.Draft;
+    if (!d || this.IsBuilt) return;
+    d.Selection = included ? ALL_ENTRIES : NO_ENTRIES;
+    if (this.tabs.ActiveId) this.tabs.UpdateState(this.tabs.ActiveId, d);
+    void this.refreshPreview();
+  }
+
+  /** Whether every candidate on screen is ticked: the header checkbox's state. */
+  public get AllEntriesIncluded(): boolean {
+    return (this.Preview?.Candidates.length ?? 0) > 0 && this.ExcludedCount === 0;
+  }
+
   public get IncludedCount(): number {
-    if (!this.Preview) return 0;
-    return this.Preview.Candidates.length - this.ExcludedCount;
+    const d = this.Draft;
+    return d?.Preview ? this.includedIds(d).length : 0;
   }
   public get ExcludedCount(): number {
-    if (!this.Preview || !this.Draft) return 0;
-    const ids = new Set(this.Preview.Candidates.map((c) => c.ID));
-    return this.Draft.ExcludedIDs.filter((x) => ids.has(x)).length;
+    if (!this.Preview) return 0;
+    return this.Preview.Candidates.length - this.IncludedCount;
   }
   public get IsBalanced(): boolean {
     if (!this.Preview) return false;
@@ -407,18 +515,103 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   public get HasOutOfOrder(): boolean {
     return (this.Preview?.OutOfOrderSkipCount ?? 0) > 0;
   }
+  public get BeforePostingStartCount(): number {
+    return this.Preview?.BeforePostingStartCount ?? 0;
+  }
+  public get AfterPostingDateCount(): number {
+    return this.Preview?.AfterPostingDateCount ?? 0;
+  }
+  public get AfterPostingDateEntries(): HeldBackEntry[] {
+    return this.Preview?.AfterPostingDateEntries ?? [];
+  }
 
   // ─── build ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Whether the signed-in user holds the batch-operator Authorization (the Finance role) that a build
+   * requires on the server (#448). The server stays the authority; this only decides what shows.
+   */
+  public get MayBuild(): boolean {
+    return UserCanOperateJournalEntryBatches(this.ProviderToUse.CurrentUser, this.ProviderToUse.Authorizations);
+  }
+
   public get CanBuild(): boolean {
-    return !!this.Preview && this.IncludedCount > 0 && !this.IsBuilding && !this.IsBuilt && this.IsBalanced;
+    return this.MayBuild && !!this.Preview && this.IncludedCount > 0 && !this.IsBuilding && !this.IsBuilt && this.IsBalanced && !this.PostingDateProblem
+      && (!this.PostingDateWarning || this.PostingDateConfirmed);
+  }
+
+  /** Today's business day. */
+  public get Today(): string {
+    return BusinessTimeZoneEngine.Instance.Today();
+  }
+
+  /** The draft tab and posting date whose prior/future-month warning was confirmed; any other asks again. */
+  private confirmedPostingDate: { tabId: string; day: string } | null = null;
+
+  /** "Are you sure?" text when the posting date is in a prior or future month (golive #315), or null. */
+  public get PostingDateWarning(): string | null {
+    return PostingDateMonthWarning(this.Draft?.Criteria.PostingDate, this.Today);
+  }
+
+  /** The posting date's month, e.g. `September 2026`, for the confirmation label. */
+  public get PostingMonth(): string {
+    const postingDate = this.Draft?.Criteria.PostingDate;
+    return postingDate && IsCalendarDay(postingDate) ? PostingMonthLabel(postingDate) : '';
+  }
+
+  /** True when the current posting date's month warning has been confirmed. */
+  public get PostingDateConfirmed(): boolean {
+    const c = this.confirmedPostingDate;
+    return !!c && c.tabId === this.tabs.ActiveId && c.day === this.Draft?.Criteria.PostingDate;
+  }
+
+  public ConfirmPostingDate(confirmed: boolean): void {
+    const tabId = this.tabs.ActiveId;
+    const day = this.Draft?.Criteria.PostingDate;
+    this.confirmedPostingDate = confirmed && tabId && day ? { tabId, day } : null;
+    this.cdr.markForCheck();
+  }
+
+  public OnPostingDateConfirmChange(event: Event): void {
+    this.ConfirmPostingDate((event.target as HTMLInputElement).checked);
+  }
+
+  /**
+   * Why the chosen posting date cannot be built, or null. The server refuses the same cases; checking
+   * here says so before the click. An included entry can postdate it only when the posting date moved
+   * after the preview loaded — the preview's own pool already ends at it.
+   */
+  public get PostingDateProblem(): string | null {
+    const postingDate = this.Draft?.Criteria.PostingDate ?? null;
+    if (!postingDate || !IsCalendarDay(postingDate)) return 'Choose a posting date.';
+    const closed = ClosedBooksProblem(postingDate, this.Draft?.Criteria.CompanyIDs ?? []);
+    if (closed) return closed;
+    const latest = this.latestIncludedDay();
+    if (latest && IsBeforeDay(postingDate, latest)) {
+      return `The posting date ${postingDate} is earlier than an included entry dated ${latest} — move it to ${latest} or later, or apply the filters again.`;
+    }
+    return null;
+  }
+
+  private latestIncludedDay(): string | null {
+    const d = this.Draft;
+    if (!d || !this.Preview) return null;
+    let latest: string | null = null;
+    for (const c of this.Preview.Candidates) {
+      const day = IsEntryIncluded(d.Selection, c.ID) ? ToCalendarDay(c.EffectiveDate) : null;
+      if (day && (!latest || IsBeforeDay(latest, day))) latest = day;
+    }
+    return latest;
   }
 
   public get BuildBlockedReason(): string | null {
+    if (!this.MayBuild) return 'Building a journal entry batch requires the Finance role.';
     if (this.IsBuilt) return 'This tab is already built.';
     if (!this.Preview || this.Preview.Candidates.length === 0) return 'Nothing matches these criteria.';
     if (this.IncludedCount === 0) return 'Every entry is excluded — nothing to build.';
-    if (!this.IsBalanced) return 'The selection does not balance (Dr ≠ Cr) — it would be rejected by the ledger.';
+    if (!this.IsBalanced) return 'The selected entries do not balance: total debits must equal total credits. Include or exclude entries until they match.';
+    if (this.PostingDateProblem) return this.PostingDateProblem;
+    if (this.PostingDateWarning && !this.PostingDateConfirmed) return `Confirm posting this batch in ${this.PostingMonth}.`;
     return null;
   }
 
@@ -434,7 +627,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
       // still Pending and loud-rejects a stale selection — the preview is a snapshot.
       // An empty / zero-net selection now throws server-side (EmptyBatchError) and lands in the catch
       // below with the engine's message — no silent "nothing to batch" success to check for.
-      const res = await this.client.Build(this.opProvider, d.Criteria, this.includedIds(d) ?? []);
+      const res = await this.client.Build(this.opProvider, d.Criteria, this.includedIds(d));
 
       // A selection spanning companies builds one batch per company (D7) — show them all.
       d.BuiltJournalEntryBatchNumber = res.JournalEntryBatchIDs.join(', ');
@@ -444,14 +637,14 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
         // Keep a memo caption if the operator gave one; otherwise fall to the now-known batch number.
         this.renameActiveTab(this.batchTabLabel(d));
       }
-      // On confirm, refresh to a FRESH tab (Marcelo 2026-07-21) — the built batch stays in its own
+      // On confirm, refresh to a FRESH tab — the built batch stays in its own
       // read-only tab for review while a new draft is ready. (openNewDraft clears messages; set after.)
       const builtNumber = d.BuiltJournalEntryBatchNumber;
       const taskRaised = res.ApprovalTaskRaised;
       this.openNewDraft();
       this.ActionMessage = taskRaised
         ? `Built batch ${builtNumber} — sent for CFO approval. Its tab is kept for review; this is a fresh batch.`
-        : `Built batch ${builtNumber}. ⚠ Its approval task could not be raised — the batch is valid and can be retried from Batch approvals.`;
+        : `Built batch ${builtNumber}, but its approval request was not created, so no one will be asked to approve it. The batch is valid; retry the approval request from Batch approvals.`;
       this.ActionIsError = false;
     } catch (e) {
       this.setError(e instanceof Error ? e.message : String(e));
@@ -474,7 +667,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   }
 
   /**
-   * Single-company selection for the build criteria (Marcelo 2026-07-21). The criteria model still holds
+   * Single-company selection for the build criteria. The criteria model still holds
    * `CompanyIDs: string[]` (the engine's multi-company shape), so this maps the single choice to a
    * 0-or-1-element array: null → [] (all companies), an id → [id]. Removing "all" + requiring exactly one
    * is the single-company engine invariant, landing with the zero-net work.

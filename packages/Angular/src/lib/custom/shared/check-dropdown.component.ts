@@ -9,7 +9,7 @@ export interface CheckDropdownOption {
 
 /**
  * `mja-check-dropdown` — a CHECKBOX multi-select dropdown for list-page filters
- * (Marcelo 2026-08-05: the company filter is multi-select on every list tab, not select-one).
+ * (the company filter is multi-select on every list tab, not select-one).
  *
  * Semantics are FILTER semantics, not form semantics: an EMPTY selection means "no narrowing"
  * (the trigger reads the `AllLabel`, e.g. "All companies"), never "nothing matches". That is why

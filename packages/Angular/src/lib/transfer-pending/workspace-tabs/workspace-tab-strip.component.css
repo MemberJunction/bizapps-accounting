@@ -3,7 +3,7 @@
 :host {
   display: block;
   /* MAX tab width. Tabs size to their text and only grow to this cap, then clip with an ellipsis
-     (Marcelo 2026-07-21 — a fixed width left short tabs mostly empty). */
+     (a fixed width left short tabs mostly empty). */
   --ws-tab-max: 210px;
 }
 
@@ -12,14 +12,14 @@
 .ws-tabbar {
   display: flex;
   align-items: stretch;
-  /* Full-width baseline across the top of the page — the consistent separator (Marcelo 2026-07-21:
-     preferred over an active-tab merge, which the horizontal scroller clips; the merge's only
+  /* Full-width baseline across the top of the page — the consistent separator (preferred
+     over an active-tab merge, which the horizontal scroller clips; the merge's only
      workarounds are fragile/poor-Safari). The active tab comes forward by COLOR, not by clearing this. */
   border-bottom: 1px solid var(--mj-border-default);
   /* Breathing room above the tabs so they don't jam against the card's top edge / get clipped by its
-     rounded corner — they read as tabs on the card, not cut off (Marcelo 2026-07-21). */
+     rounded corner — they read as tabs on the card, not cut off. */
   padding-top: 8px;
-  /* A touch taller so the horizontal scrollbar isn't cramped against the tabs (Marcelo 2026-07-21). */
+  /* A touch taller so the horizontal scrollbar isn't cramped against the tabs. */
   min-height: 46px;
 }
 
@@ -27,7 +27,7 @@
   display: flex;
   align-items: stretch;
   gap: 4px;
-  /* Indented, NOT flush: the first tab lines up with the card's content gutter (Marcelo 2026-07-16). */
+  /* Indented, NOT flush: the first tab lines up with the card's content gutter. */
   padding: 0 4px 0 12px;
   /* The tab list is what scrolls — behind the pinned new-tab button (browser new-tab behavior). */
   flex: 1;
@@ -52,12 +52,12 @@
   border-radius: 8px 8px 0 0;
   /* Inactive = the PAGE background (the darkest surface tier) so unselected tabs recede to the page,
      while the active tab (bg-surface) clearly comes forward — consistent ordering in both light and
-     dark mode (Marcelo 2026-07-21). */
+     dark mode. */
   background: var(--mj-bg-page);
   margin-bottom: -1px;
 }
 .ws-tab--active {
-  /* Active = the base surface + a brand top-accent line (the VS Code pattern Marcelo referenced) — an
+  /* Active = the base surface + a brand top-accent line (the VS Code pattern) — an
      inset box-shadow so it adds NO height/shift. This makes the selected tab obvious in BOTH light and
      dark mode without needing a seamless baseline-merge (which the horizontal-scroll clip blocks). */
   background: var(--mj-bg-surface);
@@ -82,7 +82,7 @@
   color: var(--mj-text-secondary);
   font-size: 13px;
   font-family: inherit;
-  /* Regular arrow over a tab body, like browser tabs — NOT the clicky finger (Marcelo 2026-07-21). */
+  /* Regular arrow over a tab body, like browser tabs — NOT the clicky finger. */
   cursor: default;
   /* Content-sized (NOT flex:1) so the tab hugs its text; min-width:0 lets the label ellipsize at cap. */
   flex: 0 1 auto;
@@ -116,7 +116,7 @@
 }
 
 /* Inline dot — present only when dirty; it pushes the label (ellipsis shifts left on a capped tab).
-   No reserved slot: the text moves over rather than leaving a permanent gap (Marcelo 2026-07-21). */
+   No reserved slot: the text moves over rather than leaving a permanent gap. */
 .ws-tab__dirty {
   flex: none;
   padding-left: 3px;
@@ -163,12 +163,12 @@
   white-space: nowrap;
   /* Fill to the TOP of the card — cancel the bar's top padding for the button only, so it doesn't
      "cut off early" above the tab row. Top corners rounded (like the tabs) so a hover highlight
-     isn't a surprising sharp rectangle; bottom stays square to meet the baseline (Marcelo 2026-07-21). */
+     isn't a surprising sharp rectangle; bottom stays square to meet the baseline. */
   align-self: stretch;
   margin-top: -8px;
   /* Round only the OUTER (top-right) corner; the top-left stays square + flush against the border
      divider that separates it from the tabs — rounding it would notch it off the divider (browsers
-     keep the +-button's tab-side edge flush too). Marcelo 2026-07-21. */
+     keep the +-button's tab-side edge flush too). */
   border-radius: 0 8px 0 0;
 }
 .ws-tabs__new:hover {
@@ -179,7 +179,7 @@
    inline + a neutral shadow, shared with the account-name hover. No per-strip tooltip styles here. */
 
 /* ─── Drag-reorder (CDK) ──────────────────────────────────────────────────────
-   Default arrow cursor over tabs — NOT a grab/move hand (Marcelo 2026-07-21, browser convention). */
+   Default arrow cursor over tabs — NOT a grab/move hand (browser convention). */
 .ws-tab.cdk-drag {
   cursor: default;
 }

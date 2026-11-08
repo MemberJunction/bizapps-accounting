@@ -2,16 +2,20 @@
  * Tier-3 API harness — the FULL DEMO JOURNEY on one fresh company, entirely over the wire
  * (GraphQL + X-API-Key): the exact calls the UI buttons make, with the same parameters.
  *
- * Amith's demo flow (2026-07-30), as one continuous chain:
+ * The demo flow (2026-07-30), as one continuous chain:
  *   A. Company profile setup — the "New company" dialog's save: ONE ACP create over the
- *      generated mutation (IS-A creates the __mj.Company parent). Since 2026-07-30 (Marcelo
- *      ruling) the chart starts EMPTY — asserted — and the journey then creates its AR/Revenue
- *      accounts over the wire (the accounts-editor path), matching the demo narrative.
+ *      generated mutation (IS-A creates the __mj.Company parent). Since 2026-07-30 the chart
+ *      starts EMPTY (the W1 auto-seed was retired: it collided with the L8 identity lock) —
+ *      asserted — and the journey then creates its AR/Revenue accounts over the wire (the
+ *      accounts-editor path), matching the demo narrative.
  *   B. JE + Lines — 'Accounting.CreateJournalEntry' (the JE workspace's Create-entry op),
  *      three balanced JEs incl. the merge shape (70+30→100, LineCount 2).
  *   C. Batching — Preview → Build (netted 600/600) → approval state flip → Approve →
  *      Dispatch (mock poster → Posted) → JEs read back GLPosted through the same dynamic
  *      views the dashboards consume.
+ *   C2. Dimension-split consolidation — two JEs tag the SAME AR account with different values of
+ *      an existing dimension; the batch's persisted summary JE nets ACROSS JEs per dimension
+ *      combination (AR×SALES 140, AR×MKTG 60, Revenue 200 untagged, exactly 3 lines).
  *   D. Teardown — the shared batching-fixture teardown (FK-aware, company-rooted).
  *
  * NOTE: coverage for negatives/variations lives in engine-op-api.ts + batch-ops-api.ts;
@@ -19,22 +23,21 @@
  * The browser layer for each step is covered by the tier-5 specs; company-create SAVE at
  * tier-5 is a waived gap (5x — generated-form locators; dialog to be rebuilt).
  *
- * Run from the INSTANCE WORKTREE ROOT:
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/full-flow-api.ts
- * Env overrides: MJ_API_URL (default http://localhost:4180) · MJ_API_KEY · MJDEV_SLUG.
+ * Run from the repo root (paths resolve from this file, so any directory works):
+ *   npx tsx test-harnesses/api/full-flow-api.ts
+ * Env overrides: MJ_API_URL (default http://localhost:4180) · MJ_API_KEY (default: minted with
+ * `mjdev key <slug>`) · MJDEV_SLUG (default accounting-revamp) · MJDEV_BIN (see ../harness-paths.mts).
  * Exit codes: 0 all passed · 1 assertion failures · 2 bootstrap/connection error.
  */
-import { execFileSync, execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import type { CreateJournalEntryOutput, JournalEntryDraft } from '@mj-biz-apps/accounting-engine-base';
+import { MJDEV_BIN, REPO_ROOT, TSX_BIN } from '../harness-paths.mjs';
 
 const API_URL = (process.env.MJ_API_URL ?? 'http://localhost:4180').replace(/\/+$/, '');
 const GRAPHQL_URL = `${API_URL}/`;
-const MJDEV_LAUNCHER = '/Users/marcelotorres/MJDev/bin/mjdev';
 const INSTANCE_SLUG = process.env.MJDEV_SLUG ?? 'accounting-revamp';
-const WORKTREE_ROOT = process.cwd();
-const TSX = path.resolve(WORKTREE_ROOT, 'node_modules', '.bin', 'tsx');
-const FIXTURE = path.resolve(WORKTREE_ROOT, 'packages/dev-apps/bizapps-accounting/test-harnesses/playwright/lib/batching-fixture.ts');
+const FIXTURE = path.join(REPO_ROOT, 'test-harnesses', 'playwright', 'lib', 'batching-fixture.ts');
 
 const RUN_TAG = `FULLFLOW-${Date.now().toString(36).toUpperCase()}`;
 
@@ -45,13 +48,13 @@ function check(label: string, ok: boolean, detail?: string): void {
 }
 function failBootstrap(reason: string): never {
   console.error(`\nBOOTSTRAP ERROR: ${reason}`);
-  console.error(`Fix: ${MJDEV_LAUNCHER} run ${INSTANCE_SLUG} api  (and run from the instance worktree root)`);
+  console.error(`Fix: ${MJDEV_BIN} run ${INSTANCE_SLUG} api  (or set MJ_API_URL / MJ_API_KEY for another MJAPI)`);
   process.exit(2);
 }
 function resolveApiKey(): string {
   const fromEnv = process.env.MJ_API_KEY?.trim();
   if (fromEnv) return fromEnv;
-  const out = execSync(`${MJDEV_LAUNCHER} key ${INSTANCE_SLUG}`, { encoding: 'utf8' });
+  const out = execFileSync(MJDEV_BIN, ['key', INSTANCE_SLUG], { encoding: 'utf8' });
   const key = out.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith('mj_sk_')).pop();
   if (!key) failBootstrap('launcher produced no mj_sk_ key');
   return key;
@@ -88,7 +91,7 @@ async function wireRows<T>(apiKey: string, entityName: string, extraFilter: stri
 
 function fixtureTeardown(companyId: string): void {
   try {
-    execFileSync(TSX, [FIXTURE, 'teardown', companyId], { cwd: WORKTREE_ROOT, encoding: 'utf8', timeout: 180_000 });
+    execFileSync(TSX_BIN, [FIXTURE, 'teardown', companyId], { cwd: REPO_ROOT, encoding: 'utf8', timeout: 180_000 });
     console.log('  (company torn down via batching-fixture teardown)');
   } catch (e) {
     console.log(`  [teardown warning] ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);

@@ -1,40 +1,43 @@
 /**
  * _maint-clean-batches.ts — one-off demo cleanup. Resolves STUCK batches (Pending + no approval task, so the
  * UI can't approve/reject them) and tidies the list:
- *   1. cancelJournalEntryBatch() each stuck batch  → its JEs unlock back to Pending, summaries deleted, batch → Cancelled
+ *   1. cancelJournalEntryBatch() each stuck batch  → its JEs unlock back to Pending, summaries deleted, batch → Cancelled.
+ *      Since #233 the engine refuses to cancel a Pending batch with no approval Task (nothing recorded a
+ *      rejection), so this step now fails for exactly these batches; archive them instead.
  *   2. buildJournalEntryBatch(AutoApproveGate) → approve → send  → sweep all Pending JEs to Posted (can't re-stick)
  *   3. delete every empty Cancelled batch row  → list shows only real (Posted) batches
- * Run from the instance worktree root:
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/_maint-clean-batches.ts
+ * Run from the repo root:
+ *   npx tsx test-harnesses/server/_maint-clean-batches.ts
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'path';
 import { Metadata, RunView } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 import { finishAndExit } from './harness-exit.js';
+import { RegisterHarnessDispatchServices } from './harness-dispatch-services.js';
 import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
 import { cancelJournalEntryBatch, buildJournalEntryBatch, approveJournalEntryBatch, sendJournalEntryBatch, AutoApproveGate } from '@mj-biz-apps/accounting-core-entities-server';
 import type { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
+import { LoadHarnessEnv } from '../harness-paths.mjs';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const TASK_LINK_ENTITY = 'MJ_BizApps_Tasks: Task Links';
 
 async function main(): Promise<void> {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   const pool = await new sql.ConnectionPool({
     server: process.env.DB_HOST, port: Number(process.env.DB_PORT ?? 1433),
     user: process.env.DB_USERNAME, password: process.env.DB_PASSWORD, database: process.env.DB_DATABASE,
     options: { encrypt: false, trustServerCertificate: true },
   }).connect();
-  await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
-  await UserCache.Instance.Refresh(pool);
+  const sqlProvider = await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
+  await UserCache.Instance.Refresh(sqlProvider);
   const user = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!user) throw new Error('no context user');
+  RegisterHarnessDispatchServices(); // the send's gate and poster: always approved, mock ERP (#233)
   const rv = new RunView();
   const md = new Metadata();
 
@@ -59,7 +62,7 @@ async function main(): Promise<void> {
     const built = await buildJournalEntryBatch('BusinessCentral', user.ID, user, AutoApproveGate);
     if (built) {
       await approveJournalEntryBatch(built.batchId, user.ID, user);
-      const posted = await sendJournalEntryBatch(built.batchId, user, { gate: AutoApproveGate });
+      const posted = await sendJournalEntryBatch(built.batchId, user, {});
       console.log(`  swept ${built.jeCount} JE(s) → batch ${built.batchId} → ${posted.Status} (${posted.ExternalJournalEntryBatchRef})`);
     } else {
       console.log('  buildJournalEntryBatch netted nothing (JEs may not net to a balanced summary) — left Pending.');

@@ -22,6 +22,8 @@ import { mjBizAppsAccountingCurrencyFormComponent } from "./Entities/mjBizAppsAc
 import { mjBizAppsAccountingCurrencySpotRateFormComponent } from "./Entities/mjBizAppsAccountingCurrencySpotRate/mjbizappsaccountingcurrencyspotrate.form.component";
 import { mjBizAppsAccountingDimensionFormComponent } from "./Entities/mjBizAppsAccountingDimension/mjbizappsaccountingdimension.form.component";
 import { mjBizAppsAccountingDimensionValueFormComponent } from "./Entities/mjBizAppsAccountingDimensionValue/mjbizappsaccountingdimensionvalue.form.component";
+import { mjBizAppsAccountingFinanceExceptionFormComponent } from "./Entities/mjBizAppsAccountingFinanceException/mjbizappsaccountingfinanceexception.form.component";
+import { mjBizAppsAccountingFinanceExceptionTypeFormComponent } from "./Entities/mjBizAppsAccountingFinanceExceptionType/mjbizappsaccountingfinanceexceptiontype.form.component";
 import { mjBizAppsAccountingGLAccountFormComponent } from "./Entities/mjBizAppsAccountingGLAccount/mjbizappsaccountingglaccount.form.component";
 import { mjBizAppsAccountingGLAccountLinkDimensionFormComponent } from "./Entities/mjBizAppsAccountingGLAccountLinkDimension/mjbizappsaccountingglaccountlinkdimension.form.component";
 import { mjBizAppsAccountingGLAccountLinkFormComponent } from "./Entities/mjBizAppsAccountingGLAccountLink/mjbizappsaccountingglaccountlink.form.component";
@@ -79,6 +81,24 @@ export class GeneratedForms_SubModule_1 { }
 
 @NgModule({
 declarations: [
+    mjBizAppsAccountingFinanceExceptionTypeFormComponent
+],
+imports: [
+    CommonModule,
+    FormsModule,
+    BaseFormsModule,
+    EntityViewerModule,
+    LinkDirectivesModule
+],
+exports: [
+]
+})
+export class GeneratedForms_SubModule_2 { }
+    
+
+
+@NgModule({
+declarations: [
     mjBizAppsAccountingAccountingEngineExtensionFormComponent,
     mjBizAppsAccountingJournalEntrySequenceFormComponent
 ],
@@ -131,6 +151,24 @@ exports: [
 ]
 })
 export class GeneratedForms_SubModule_6 { }
+    
+
+
+@NgModule({
+declarations: [
+    mjBizAppsAccountingFinanceExceptionFormComponent
+],
+imports: [
+    CommonModule,
+    FormsModule,
+    BaseFormsModule,
+    EntityViewerModule,
+    LinkDirectivesModule
+],
+exports: [
+]
+})
+export class GeneratedForms_SubModule_10 { }
     
 
 
@@ -326,9 +364,11 @@ declarations: [
 imports: [
     GeneratedForms_SubModule_0,
     GeneratedForms_SubModule_1,
+    GeneratedForms_SubModule_2,
     GeneratedForms_SubModule_3,
     GeneratedForms_SubModule_4,
     GeneratedForms_SubModule_6,
+    GeneratedForms_SubModule_10,
     GeneratedForms_SubModule_11,
     GeneratedForms_SubModule_12,
     GeneratedForms_SubModule_13,

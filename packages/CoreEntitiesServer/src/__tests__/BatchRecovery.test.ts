@@ -1,6 +1,9 @@
 /**
  * #145 — the recovery paths for a batch that got past Approved and then failed.
  *
+ *   The engine resolves its gate, poster and lookup through JournalEntryBatchDispatchServices (#233);
+ *   `send` below registers each test's in a higher-priority fake rather than passing them.
+ *
  *   · Retry:  sendJournalEntryBatch accepts a Failed batch, re-runs the gate and the coherence check,
  *             and takes the Failed → Sent edge LEGAL_TRANSITIONS already allowed. Its pre-flight ERP
  *             lookup (#182) decides whether the caller's confirmation that it has not posted is needed.
@@ -8,22 +11,41 @@
  *             no ERP call — re-sending a Posted batch would duplicate the ERP journal.
  *   · Visibility: findStrandedJournalEntries reports the entries each of those states holds.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
+import { MJGlobal } from '@memberjunction/global';
 import type { IMetadataProvider, RunViewParams, UserInfo } from '@memberjunction/core';
+
+// The auto-post waiver is restricted to the MJ system user (#269); `systemUser.current` is who the
+// user cache answers with, or null when it does not hold one.
+const systemUser = vi.hoisted(() => ({ current: { ID: 'USER-1' } as { ID: string } | null }));
+vi.mock('@memberjunction/generic-database-provider', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@memberjunction/generic-database-provider')>()),
+    UserCache: { Instance: { GetSystemUser: () => systemUser.current } },
+}));
 
 vi.mock('../JournalEntryTypes.js', () => ({
     GetJournalEntryBatchSummaryEntryType: async () => ({ ID: 'aaaaaaaa-0000-0000-0000-00000000000a', Code: 'JournalEntryBatchSummary' }),
 }));
 
 import {
+    assertAutoPostCaller,
+    assertAutoPostPolicy,
+    autoPostJournalEntryBatch,
     findStrandedJournalEntries,
+    mockErpPoster,
     resumeJournalEntryBatchPosting,
     sendJournalEntryBatch,
+    unavailableErpLookup,
+    AutoPostDispatchError,
+    ERP_POSTING_REJECTED,
+    JournalEntryBatchSendRefusedError,
+    JournalEntryBatchFailureNotRecordedError,
     type ErpJournalLookup,
     type ErpJournalLookupResult,
     type ErpPoster,
     type JournalEntryBatchApprovalGate,
 } from '../JournalEntryBatchEngine.js';
+import { JournalEntryBatchDispatchServices } from '../JournalEntryBatchDispatchServices.js';
 
 const USER = { ID: 'USER-1' } as UserInfo;
 const BATCH_ID = 'bbbbbbbb-0000-0000-0000-000000000001';
@@ -40,17 +62,39 @@ interface FakeBatch {
     ExternalJournalEntryBatchRef: string | null;
     PostedAt: Date | null;
     SentAt: Date | null;
+    SealMismatchDetectedAt: Date | null;
     SummaryJournalEntryID: string | null;
     LatestResult: { CompleteMessage: string } | null;
     statusHistory: string[];
     Load: (id: string) => Promise<boolean>;
     Save: () => Promise<boolean>;
-    CheckControlTotalCoherence: () => Promise<string[]>;
+    SaveDispatchTransition: () => Promise<boolean>;
+    CheckApprovedContent: () => Promise<{ CoherenceProblems: string[]; SealProblems: string[] }>;
+}
+
+/** What the database holds for the batch: the columns the SealMismatchDetectedAt rule reads. */
+interface StoredBatch { Status: string; SendAttemptCount: number; SealMismatchDetectedAt: Date | null }
+
+/**
+ * trg_JournalEntryBatch_Immutability's SealMismatchDetectedAt rule (50034, #216): set only by the save
+ * that records a retried batch Posted (Sent -> Posted, SendAttemptCount above 1), never changed or
+ * cleared after. The fake's Save applies it, so every test here also shows the engine never writes the
+ * flag where the database would refuse it.
+ */
+function sealFlagRefusal(before: StoredBatch, after: StoredBatch): string | null {
+    const was = before.SealMismatchDetectedAt;
+    const now = after.SealMismatchDetectedAt;
+    const changed = was !== null && (now === null || Math.abs(now.getTime() - was.getTime()) >= 1);
+    const setOutsideAdoption = was === null && now !== null
+        && !(before.Status === 'Sent' && after.Status === 'Posted' && after.SendAttemptCount > 1);
+    return changed || setOutsideAdoption ? 'JournalEntryBatch SealMismatchDetectedAt refused.' : null;
 }
 
 /** An in-memory world: one batch, its member entries, and which entry saves should fail. */
-function world(status: string, entries: Record<string, JournalEntryRow>, opts: { failingEntryIds?: string[]; missingEntryIds?: string[]; drift?: string[]; summaryLinesScanFails?: boolean; failFirstSaveAt?: string } = {}) {
+function world(status: string, entries: Record<string, JournalEntryRow>, opts: { failingEntryIds?: string[]; missingEntryIds?: string[]; drift?: string[]; sealDrift?: string[]; summaryLinesScanFails?: boolean; failFirstSaveAt?: string; failSavesAt?: string[]; sentSaveMessage?: string; currentStatus?: string } = {}) {
     let saveFailed = false;
+    // Every batch past Approved was sent at least once (Posted and Failed are reachable only from Sent).
+    const stored: StoredBatch = { Status: status, SendAttemptCount: status === 'Approved' || status === 'Pending' ? 0 : 1, SealMismatchDetectedAt: null };
     const batch: FakeBatch = {
         ID: BATCH_ID,
         JournalEntryBatchNumber: 'JEB-0001',
@@ -59,16 +103,28 @@ function world(status: string, entries: Record<string, JournalEntryRow>, opts: {
         ExternalJournalEntryBatchRef: status === 'Posted' ? 'ERP-REF-1' : null,
         PostedAt: status === 'Posted' ? new Date('2026-09-01T10:00:00Z') : null,
         SentAt: null,
+        SealMismatchDetectedAt: null,
         SummaryJournalEntryID: opts.summaryLinesScanFails ? 'cccccccc-0000-0000-0000-000000000001' : null,
         LatestResult: null,
         statusHistory: [],
-        Load: async () => true,
+        // A reload reads back what the database holds.
+        Load: async () => { batch.Status = stored.Status; return true; },
         Save: vi.fn(async () => {
             if (opts.failFirstSaveAt === batch.Status && !saveFailed) { saveFailed = true; return false; }
+            if (opts.failSavesAt?.includes(batch.Status)) { batch.LatestResult = { CompleteMessage: 'database unavailable' }; return false; }
+            if (opts.sentSaveMessage && batch.Status === 'Sent') { batch.LatestResult = { CompleteMessage: opts.sentSaveMessage }; return false; }
+            // The entity stamps SendAttemptCount on every move into Sent.
+            const sendAttemptCount = batch.Status === 'Sent' && stored.Status !== 'Sent' ? stored.SendAttemptCount + 1 : stored.SendAttemptCount;
+            const next: StoredBatch = { Status: batch.Status, SendAttemptCount: sendAttemptCount, SealMismatchDetectedAt: batch.SealMismatchDetectedAt };
+            const refusal = sealFlagRefusal(stored, next);
+            if (refusal) { batch.LatestResult = { CompleteMessage: refusal }; return false; }
+            Object.assign(stored, next);
             batch.statusHistory.push(batch.Status);
             return true;
         }),
-        CheckControlTotalCoherence: async () => opts.drift ?? [],
+        // The entity's dispatch save is its Save with the dispatch flag up; the fake has no Validate to lift.
+        SaveDispatchTransition: () => batch.Save(),
+        CheckApprovedContent: async () => ({ CoherenceProblems: opts.drift ?? [], SealProblems: opts.sealDrift ?? [] }),
     };
 
     const journalEntry = () => {
@@ -95,12 +151,14 @@ function world(status: string, entries: Record<string, JournalEntryRow>, opts: {
     const provider = {
         GetEntityObject: async (name: string) => (name === BATCH_ENTITY ? batch : journalEntry()),
         RunView: async (params: RunViewParams) =>
-            params.EntityName !== JE_ENTITY && opts.summaryLinesScanFails
+            params.EntityName === BATCH_ENTITY
+                ? { Success: true, Results: opts.currentStatus ? [{ Status: opts.currentStatus }] : [] }
+                : params.EntityName !== JE_ENTITY && opts.summaryLinesScanFails
                 ? { Success: false, ErrorMessage: 'timeout', Results: [] }
                 : { Success: true, Results: params.EntityName === JE_ENTITY ? batchedIds() : [] },
     } as unknown as IMetadataProvider;
 
-    return { batch, entries, provider };
+    return { batch, entries, provider, stored };
 }
 
 const batched = (): JournalEntryRow => ({ Status: 'Batched', JournalEntryBatchID: BATCH_ID, GLPostedAt: null, GLReferenceID: null });
@@ -109,12 +167,140 @@ const posted = (): JournalEntryRow => ({ Status: 'GLPosted', JournalEntryBatchID
 const approvedGate = (): JournalEntryBatchApprovalGate => ({ assertApproved: vi.fn(async () => undefined) });
 const acceptingPoster = (): ErpPoster => vi.fn(async () => ({ success: true, externalJournalEntryBatchRef: 'ERP-REF-2' }));
 
+/** What the registered fake hands the engine for the current send. Unset outside one. */
+let registered: { gate: JournalEntryBatchApprovalGate; poster: ErpPoster; lookup: ErpJournalLookup; raise: RaiseExceptions } | null = null;
+
+type RaiseExceptions = JournalEntryBatchDispatchServices['RaiseFinanceExceptions'];
+const raisesCleanly = (): RaiseExceptions => vi.fn(async () => ({ Success: true, Results: [], Errors: [] }));
+
+class FakeDispatchServices extends JournalEntryBatchDispatchServices {
+    private get current() {
+        if (!registered) throw new Error('FakeDispatchServices: nothing set up for this test');
+        return registered;
+    }
+    public override CreateApprovalGate(): JournalEntryBatchApprovalGate { return this.current.gate; }
+    public override CreatePoster(): ErpPoster { return this.current.poster; }
+    public override CreateLookup(): ErpJournalLookup { return this.current.lookup; }
+    public override RaiseFinanceExceptions(...args: Parameters<RaiseExceptions>): ReturnType<RaiseExceptions> { return this.current.raise(...args); }
+}
+
+beforeAll(() => {
+    MJGlobal.Instance.ClassFactory.Register(JournalEntryBatchDispatchServices, FakeDispatchServices, null, 1000, true);
+});
+afterEach(() => { registered = null; });
+
+/**
+ * Send BATCH_ID with this gate, poster and lookup registered. The defaults are an approved batch,
+ * a poster that accepts it, and an ERP that offers no lookup.
+ */
+function send(o: { gate?: JournalEntryBatchApprovalGate; poster?: ErpPoster; lookup?: ErpJournalLookup; raise?: RaiseExceptions; provider: IMetadataProvider; confirmNotAlreadyPostedInERP?: boolean }) {
+    registered = { gate: o.gate ?? approvedGate(), poster: o.poster ?? mockErpPoster, lookup: o.lookup ?? unavailableErpLookup, raise: o.raise ?? raisesCleanly() };
+    return sendJournalEntryBatch(BATCH_ID, USER, { provider: o.provider, confirmNotAlreadyPostedInERP: o.confirmNotAlreadyPostedInERP });
+}
+
+describe('sendJournalEntryBatch — the engine resolves its own gate, poster and lookup (#233)', () => {
+    it('refuses when the resolved gate does, whatever the caller passes', async () => {
+        const { batch, provider } = world('Approved', { 'je-1': batched() });
+        const poster = acceptingPoster();
+        registered = { gate: { assertApproved: vi.fn(async () => { throw new Error('is not approved'); }) }, poster, lookup: unavailableErpLookup, raise: raisesCleanly() };
+        const permissive: JournalEntryBatchApprovalGate = { assertApproved: vi.fn(async () => undefined) };
+
+        await expect(sendJournalEntryBatch(BATCH_ID, USER, { provider, gate: permissive, poster: acceptingPoster() } as never))
+            .rejects.toThrow(/is not approved/);
+        expect(permissive.assertApproved).not.toHaveBeenCalled();
+        expect(poster).not.toHaveBeenCalled();
+        expect(batch.statusHistory).toEqual([]);
+    });
+
+    it('posts through the resolved poster', async () => {
+        const { provider } = world('Approved', { 'je-1': batched() });
+        const poster = acceptingPoster();
+
+        const result = await send({ poster, provider });
+
+        expect(poster).toHaveBeenCalledTimes(1);
+        expect(result.Status).toBe('Posted');
+    });
+
+    it('resolves the tasks-backed gate and the AccountingERPEngine poster when nothing replaced them', async () => {
+        const { TasksAppApprovalGate } = await import('../TasksAppApprovalGate.js');
+        const real = new JournalEntryBatchDispatchServices();
+        const provider = {} as IMetadataProvider;
+        expect(real.CreateApprovalGate(provider)).toBeInstanceOf(TasksAppApprovalGate);
+        expect(typeof real.CreatePoster(provider)).toBe('function');
+    });
+});
+
+describe('autoPostJournalEntryBatch — only the MJ system user may auto-post (#269)', () => {
+    const OTHER_USER = { ID: 'USER-2' } as UserInfo;
+    const OPTIONS = { entryTypeCodes: ['OrderBooking'] };
+    afterEach(() => { systemUser.current = { ID: USER.ID }; });
+
+    const untouchedProvider = () => {
+        const getEntityObject = vi.fn();
+        const runView = vi.fn();
+        return { getEntityObject, runView, provider: { GetEntityObject: getEntityObject, RunView: runView } as unknown as IMetadataProvider };
+    };
+
+    it('lets the system user through to the build', async () => {
+        expect(() => assertAutoPostCaller(USER)).not.toThrow();
+        // Compared as UUIDs, so the case the cache holds it in does not matter.
+        systemUser.current = { ID: 'user-1' };
+        expect(() => assertAutoPostCaller(USER)).not.toThrow();
+        const provider = { GetEntityObject: vi.fn(), RunView: async () => ({ Success: true, Results: [] }) } as unknown as IMetadataProvider;
+        // Past the caller check, the build runs and throws its own error for this empty world.
+        await expect(autoPostJournalEntryBatch('11111111-0000-4000-8000-000000000001', 'BusinessCentral', USER, provider, OPTIONS))
+            .rejects.toThrow(/^The batch was not built: /);
+    });
+
+    it('refuses any other user before anything is read', async () => {
+        const { getEntityObject, runView, provider } = untouchedProvider();
+        expect(() => assertAutoPostCaller(OTHER_USER)).toThrow(/restricted to the MJ system user/);
+        await expect(autoPostJournalEntryBatch('CO-1', 'BusinessCentral', OTHER_USER, provider, OPTIONS)).rejects.toThrow(/restricted to the MJ system user/);
+        expect(getEntityObject).not.toHaveBeenCalled();
+        expect(runView).not.toHaveBeenCalled();
+    });
+
+    it('fails closed when the user cache does not hold the system user', async () => {
+        systemUser.current = null;
+        const { getEntityObject, runView, provider } = untouchedProvider();
+        expect(() => assertAutoPostCaller(USER)).toThrow(/user cache does not hold it/);
+        await expect(autoPostJournalEntryBatch('CO-1', 'BusinessCentral', USER, provider, OPTIONS)).rejects.toThrow(/user cache does not hold it/);
+        expect(getEntityObject).not.toHaveBeenCalled();
+        expect(runView).not.toHaveBeenCalled();
+    });
+});
+
+describe('autoPostJournalEntryBatch — the scheduled-posting waiver refuses before building', () => {
+    it.each([
+        [{}, /needs a list of the entry types it may post/],
+        [{ entryTypeCodes: [] }, /needs a list of the entry types it may post/],
+        [{ entryTypeCodes: ['OrderBooking'], excludeEntryTypeCodes: ['Refund'] }, /does not accept ExcludeEntryTypeCodes/],
+    ])('refuses %j', async (options, message) => {
+        expect(() => assertAutoPostPolicy(options)).toThrow(message);
+        const getEntityObject = vi.fn();
+        const provider = { GetEntityObject: getEntityObject, RunView: vi.fn() } as unknown as IMetadataProvider;
+        await expect(autoPostJournalEntryBatch('CO-1', 'BusinessCentral', USER, provider, options)).rejects.toThrow(message);
+        expect(getEntityObject).not.toHaveBeenCalled();
+    });
+
+    // No batch exists yet, so the error is the build's own, not an AutoPostDispatchError.
+    it('throws the build\'s own error, unwrapped, when the build fails', async () => {
+        const provider = { GetEntityObject: vi.fn(), RunView: async () => ({ Success: true, Results: [] }) } as unknown as IMetadataProvider;
+        const error = await autoPostJournalEntryBatch('11111111-0000-4000-8000-000000000001', 'BusinessCentral', USER, provider, { entryTypeCodes: ['OrderBooking'] })
+            .then(() => null, (e: unknown) => e);
+        expect(error).toBeInstanceOf(Error);
+        expect(error).not.toBeInstanceOf(AutoPostDispatchError);
+        expect((error as Error).message).toMatch(/^The batch was not built: /);
+    });
+});
+
 describe('sendJournalEntryBatch — retrying a Failed batch', () => {
     it('takes a Failed batch through Sent to Posted and flips every member entry', async () => {
         const { batch, entries, provider } = world('Failed', { 'je-1': batched(), 'je-2': batched() });
         const gate = approvedGate();
 
-        const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate, poster: acceptingPoster(), provider, confirmNotAlreadyPostedInERP: true });
+        const result = await send({ gate, poster: acceptingPoster(), provider, confirmNotAlreadyPostedInERP: true });
 
         expect(result.Status).toBe('Posted');
         expect(batch.statusHistory).toEqual(['Sent', 'Posted']);
@@ -127,7 +313,7 @@ describe('sendJournalEntryBatch — retrying a Failed batch', () => {
         const { provider } = world('Failed', { 'je-1': batched() });
         const gate = approvedGate();
 
-        await sendJournalEntryBatch(BATCH_ID, USER, { gate, poster: acceptingPoster(), provider, confirmNotAlreadyPostedInERP: true });
+        await send({ gate, poster: acceptingPoster(), provider, confirmNotAlreadyPostedInERP: true });
 
         expect(gate.assertApproved).toHaveBeenCalledWith(BATCH_ID, USER);
     });
@@ -135,7 +321,7 @@ describe('sendJournalEntryBatch — retrying a Failed batch', () => {
     it('clears the earlier attempt\'s ErrorMessage once the retry posts', async () => {
         const { batch, provider } = world('Failed', { 'je-1': batched() });
 
-        await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster: acceptingPoster(), provider, confirmNotAlreadyPostedInERP: true });
+        await send({ gate: approvedGate(), poster: acceptingPoster(), provider, confirmNotAlreadyPostedInERP: true });
 
         expect(batch.ErrorMessage).toBeNull();
     });
@@ -144,20 +330,57 @@ describe('sendJournalEntryBatch — retrying a Failed batch', () => {
         const { batch, entries, provider } = world('Failed', { 'je-1': batched() });
         const poster: ErpPoster = async () => ({ success: false, error: 'still down' });
 
-        const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: true });
+        const result = await send({ gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: true });
 
         expect(result.Status).toBe('Failed');
         expect(batch.ErrorMessage).toBe('still down');
         expect(entries['je-1'].Status).toBe('Batched');
     });
 
-    // Drift from the approved content is caught on a retry — footing, member set, summary header
-    // and the approved-content seal (#183) are all inside CheckControlTotalCoherence.
+    // golive #316: a Failed status is seen only by whoever opens the batch list, so the rejection
+    // reaches finance as an exception, with the ERP's message.
+    it('raises ERP_POSTING_REJECTED with the ERP\'s message when the ERP rejects the batch', async () => {
+        const { provider } = world('Approved', { 'je-1': batched() });
+        const raise = raisesCleanly();
+
+        const result = await send({ poster: async () => ({ success: false, error: 'Posting Date is not within your range of allowed posting dates.' }), raise, provider });
+
+        expect(result.Status).toBe('Failed');
+        expect(raise).toHaveBeenCalledTimes(1);
+        const [input] = vi.mocked(raise).mock.calls[0];
+        expect(input.Exceptions).toHaveLength(1);
+        expect(input.Exceptions[0]).toMatchObject({ TypeCode: ERP_POSTING_REJECTED, SourceRecordID: BATCH_ID });
+        expect(input.Exceptions[0].Summary).toContain('not within your range of allowed posting dates');
+    });
+
+    it('raises nothing when the ERP accepts the batch', async () => {
+        const { provider } = world('Approved', { 'je-1': batched() });
+        const raise = raisesCleanly();
+
+        await send({ poster: acceptingPoster(), raise, provider });
+
+        expect(raise).not.toHaveBeenCalled();
+    });
+
+    it('keeps the batch Failed with the ERP\'s message when the raise itself fails', async () => {
+        const { batch, provider } = world('Approved', { 'je-1': batched() });
+        const raise: RaiseExceptions = vi.fn(async () => { throw new Error('exception tables unavailable'); });
+        const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+        const result = await send({ poster: async () => ({ success: false, error: 'BC 400' }), raise, provider });
+
+        expect(result.Status).toBe('Failed');
+        expect(batch.ErrorMessage).toBe('BC 400');
+        logged.mockRestore();
+    });
+
+    // Drift from the approved content is caught on a retry — footing, member set and summary header
+    // refuse it before the ERP lookup; the approved-content seal (#183) is judged after it (#216).
     it('refuses a retry whose content no longer matches what was approved, without calling the ERP', async () => {
         const { batch, provider } = world('Failed', { 'je-1': batched() }, { drift: ['Member set changed.'] });
         const poster = acceptingPoster();
 
-        await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: true }))
+        await expect(send({ gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: true }))
             .rejects.toThrow(/no longer matches its approved content/);
         expect(poster).not.toHaveBeenCalled();
         expect(batch.Status).toBe('Failed');
@@ -168,7 +391,7 @@ describe('sendJournalEntryBatch — retrying a Failed batch', () => {
         const { batch, provider } = world('Failed', { 'je-1': batched() });
         const poster = acceptingPoster();
 
-        await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: confirm }))
+        await expect(send({ gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: confirm }))
             .rejects.toThrow(/Confirm in the ERP that document JEB-0001 has not posted/);
         expect(poster).not.toHaveBeenCalled();
         expect(batch.Status).toBe('Failed');
@@ -181,8 +404,8 @@ describe('sendJournalEntryBatch — retrying a Failed batch', () => {
         const { batch, provider } = world('Failed', { 'je-1': batched() }, { summaryLinesScanFails: true });
         const poster = acceptingPoster();
 
-        await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: true }))
-            .rejects.toThrow(/summary JE lines for batch .* failed to load: timeout/);
+        await expect(send({ gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: true }))
+            .rejects.toThrow(/Could not load the summary entry lines of batch .*: timeout/);
         expect(poster).not.toHaveBeenCalled();
         expect(batch.Save).not.toHaveBeenCalled();
         expect(batch.Status).toBe('Failed');
@@ -193,7 +416,7 @@ describe('sendJournalEntryBatch — retrying a Failed batch', () => {
         const { batch, entries, provider } = world('Failed', { 'je-1': batched() });
         const poster: ErpPoster = async () => { throw new Error('beforePost extension failed'); };
 
-        const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: true });
+        const result = await send({ gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: true });
 
         expect(result.Status).toBe('Failed');
         expect(batch.statusHistory).toEqual(['Sent', 'Failed']);
@@ -205,9 +428,34 @@ describe('sendJournalEntryBatch — retrying a Failed batch', () => {
         const { provider } = world(status, { 'je-1': batched() });
         const poster = acceptingPoster();
 
-        await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider }))
+        await expect(send({ gate: approvedGate(), poster, provider }))
             .rejects.toThrow(/only an Approved batch can be sent or a Failed batch retried/);
         expect(poster).not.toHaveBeenCalled();
+    });
+});
+
+// #184: trg_JournalEntryBatch_SendOnce refuses the →Sent save of a send that lost a race.
+describe('sendJournalEntryBatch — a send refused because another dispatch sent the batch first', () => {
+    const refusal = 'Error executing SQL: JournalEntryBatch send refused: the batch is already Sent.';
+
+    it.each(['Sent', 'Posted'])('throws JournalEntryBatchSendRefusedError naming the status the batch reads now (%s), without calling the ERP', async (now) => {
+        const { provider } = world('Failed', { 'je-1': batched() }, { sentSaveMessage: refusal, currentStatus: now });
+        const poster = acceptingPoster();
+
+        const sent = send({ poster, provider, confirmNotAlreadyPostedInERP: true });
+
+        await expect(sent).rejects.toBeInstanceOf(JournalEntryBatchSendRefusedError);
+        await expect(sent).rejects.toMatchObject({ JournalEntryBatchID: BATCH_ID, Status: now });
+        expect(poster).not.toHaveBeenCalled();
+    });
+
+    it('keeps any other →Sent save failure a plain error', async () => {
+        const { provider } = world('Approved', { 'je-1': batched() }, { sentSaveMessage: 'deadlock victim', currentStatus: 'Approved' });
+
+        const sent = send({ poster: acceptingPoster(), provider });
+
+        await expect(sent).rejects.toThrow(/saving it as Sent \(from Approved\) failed: deadlock victim/);
+        await expect(sent).rejects.not.toBeInstanceOf(JournalEntryBatchSendRefusedError);
     });
 });
 
@@ -217,7 +465,7 @@ describe('sendJournalEntryBatch — sending an Approved batch', () => {
         const { batch, entries, provider } = world('Approved', { 'je-1': batched() });
         const poster = acceptingPoster();
 
-        const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider });
+        const result = await send({ gate: approvedGate(), poster, provider });
 
         expect(result.Status).toBe('Posted');
         expect(poster).toHaveBeenCalledOnce();
@@ -234,7 +482,7 @@ describe('sendJournalEntryBatch — the pre-flight ERP lookup (#182)', () => {
         const { batch, entries, provider } = world('Failed', { 'je-1': batched() });
         const poster = acceptingPoster();
 
-        const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, lookup: found(), provider });
+        const result = await send({ gate: approvedGate(), poster, lookup: found(), provider });
 
         expect(poster).not.toHaveBeenCalled();
         expect(result.Status).toBe('Posted');
@@ -250,7 +498,7 @@ describe('sendJournalEntryBatch — the pre-flight ERP lookup (#182)', () => {
         const { batch, entries, provider } = world('Approved', { 'je-1': batched() });
         const poster = acceptingPoster();
 
-        await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, lookup: found(), provider, confirmNotAlreadyPostedInERP: confirm }))
+        await expect(send({ gate: approvedGate(), poster, lookup: found(), provider, confirmNotAlreadyPostedInERP: confirm }))
             .rejects.toThrow(/already holds a posting under document JEB-0001 \(JEB-0001\) that carries this batch's token and matches it, but this batch has never been sent/);
         expect(poster).not.toHaveBeenCalled();
         expect(batch.Save).not.toHaveBeenCalled();
@@ -269,7 +517,7 @@ describe('sendJournalEntryBatch — the pre-flight ERP lookup (#182)', () => {
         const poster = acceptingPoster();
         const lookup = lookupReturning({ status: 'Foreign', detail: 'its lines carry the token of batch other-batch.' });
 
-        await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, lookup, provider, confirmNotAlreadyPostedInERP: confirm === 'confirmed' }))
+        await expect(send({ gate: approvedGate(), poster, lookup, provider, confirmNotAlreadyPostedInERP: confirm === 'confirmed' }))
             .rejects.toThrow(wayOut);
         expect(poster).not.toHaveBeenCalled();
         expect(batch.Save).not.toHaveBeenCalled();
@@ -282,7 +530,7 @@ describe('sendJournalEntryBatch — the pre-flight ERP lookup (#182)', () => {
         const { provider } = world('Failed', { 'je-1': batched() });
         const poster = acceptingPoster();
 
-        const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, lookup: found(), provider, confirmNotAlreadyPostedInERP: true });
+        const result = await send({ gate: approvedGate(), poster, lookup: found(), provider, confirmNotAlreadyPostedInERP: true });
 
         expect(poster).not.toHaveBeenCalled();
         expect(result.Status).toBe('Posted');
@@ -292,7 +540,7 @@ describe('sendJournalEntryBatch — the pre-flight ERP lookup (#182)', () => {
         const { batch, provider } = world('Failed', { 'je-1': batched() });
         const poster = acceptingPoster();
 
-        const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, lookup: lookupReturning({ status: 'NotFound' }), provider });
+        const result = await send({ gate: approvedGate(), poster, lookup: lookupReturning({ status: 'NotFound' }), provider });
 
         expect(poster).toHaveBeenCalledOnce();
         expect(result.Status).toBe('Posted');
@@ -306,7 +554,7 @@ describe('sendJournalEntryBatch — the pre-flight ERP lookup (#182)', () => {
         const { batch, provider } = world('Failed', { 'je-1': batched() });
         const poster = acceptingPoster();
 
-        await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, lookup: lookupReturning(preflight), provider }))
+        await expect(send({ gate: approvedGate(), poster, lookup: lookupReturning(preflight), provider }))
             .rejects.toThrow(message);
         expect(poster).not.toHaveBeenCalled();
         expect(batch.Save).not.toHaveBeenCalled();
@@ -321,7 +569,7 @@ describe('sendJournalEntryBatch — the pre-flight ERP lookup (#182)', () => {
         const { batch, entries, provider } = world('Approved', { 'je-1': batched() });
         const poster = acceptingPoster();
 
-        const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, lookup: lookupReturning(preflight), provider });
+        const result = await send({ gate: approvedGate(), poster, lookup: lookupReturning(preflight), provider });
 
         expect(poster).not.toHaveBeenCalled();
         expect(result.Status).toBe('Failed');
@@ -337,7 +585,30 @@ describe('sendJournalEntryBatch — the pre-flight ERP lookup (#182)', () => {
         const { provider } = world('Failed', { 'je-1': batched() });
         const poster = acceptingPoster();
 
-        const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, lookup: lookupReturning(preflight), provider, confirmNotAlreadyPostedInERP: true });
+        const result = await send({ gate: approvedGate(), poster, lookup: lookupReturning(preflight), provider, confirmNotAlreadyPostedInERP: true });
+
+        expect(poster).toHaveBeenCalledOnce();
+        expect(result.Status).toBe('Posted');
+    });
+
+    // A lookup that finds nothing while the company has an unread post is not trusted (#205).
+    const blind: ErpJournalLookupResult = { status: 'Unavailable', reason: 'the ERP accepted 1 batch(es) in this company that could not then be read back (batch-earlier).' };
+
+    it('refuses a Failed retry the lookup cannot be trusted on, and says why', async () => {
+        const { batch, provider } = world('Failed', { 'je-1': batched() });
+        const poster = acceptingPoster();
+
+        await expect(send({ gate: approvedGate(), poster, lookup: lookupReturning(blind), provider }))
+            .rejects.toThrow(/may already be in the ERP, and the ERP lookup cannot be trusted to find it: the ERP accepted 1 batch\(es\) .* Confirm in the ERP that document JEB-0001 has not posted/);
+        expect(poster).not.toHaveBeenCalled();
+        expect(batch.Status).toBe('Failed');
+    });
+
+    it('sends a first send the lookup cannot be trusted on: it has never posted from here', async () => {
+        const { provider } = world('Approved', { 'je-1': batched() });
+        const poster = acceptingPoster();
+
+        const result = await send({ gate: approvedGate(), poster, lookup: lookupReturning(blind), provider });
 
         expect(poster).toHaveBeenCalledOnce();
         expect(result.Status).toBe('Posted');
@@ -348,7 +619,7 @@ describe('sendJournalEntryBatch — the pre-flight ERP lookup (#182)', () => {
         const poster = acceptingPoster();
         const lookup: ErpJournalLookup = async () => { throw new Error('socket hang up'); };
 
-        await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, lookup, provider }))
+        await expect(send({ gate: approvedGate(), poster, lookup, provider }))
             .rejects.toThrow(/could not check the ERP .*socket hang up/);
         expect(poster).not.toHaveBeenCalled();
     });
@@ -357,27 +628,259 @@ describe('sendJournalEntryBatch — the pre-flight ERP lookup (#182)', () => {
         const { provider } = world('Approved', { 'je-1': batched() }, { drift: ['Member set changed.'] });
         const lookup = found();
 
-        await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster: acceptingPoster(), lookup, provider }))
+        await expect(send({ gate: approvedGate(), poster: acceptingPoster(), lookup, provider }))
             .rejects.toThrow(/no longer matches its approved content/);
         expect(lookup).not.toHaveBeenCalled();
     });
 
-    // The issue's path: the ERP accepts, the Sent→Posted save fails, triage records Failed, an operator
-    // retries. The retry must find the posting instead of sending the journal a second time.
+    // The issue's path: the ERP accepts, the Sent→Posted save fails, an operator retries. The retry must
+    // find the posting instead of sending the journal a second time.
     it('recovers a batch whose Sent→Posted save failed after the ERP accepted it, with one post in total', async () => {
         const { batch, entries, provider } = world('Approved', { 'je-1': batched() }, { failFirstSaveAt: 'Posted' });
         const poster = acceptingPoster();
 
-        await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, lookup: lookupReturning({ status: 'NotFound' }), provider }))
-            .rejects.toThrow(/Sent→Posted failed/);
-        // What recordDispatchFailure writes for a batch the database still holds at Sent.
-        batch.Status = 'Failed';
+        const first = await send({ gate: approvedGate(), poster, lookup: lookupReturning({ status: 'NotFound' }), provider });
+        expect(first.Status).toBe('Failed');
 
-        const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, lookup: lookupReturning({ status: 'Found', externalJournalEntryBatchRef: 'ERP-REF-2' }), provider });
+        const result = await send({ gate: approvedGate(), poster, lookup: lookupReturning({ status: 'Found', externalJournalEntryBatchRef: 'ERP-REF-2' }), provider });
 
         expect(poster).toHaveBeenCalledOnce();
         expect(result.Status).toBe('Posted');
         expect(entries['je-1']).toMatchObject({ Status: 'GLPosted', GLReferenceID: 'ERP-REF-2' });
+    });
+
+    // #30 item 6: thrown, the save failure left the batch at Sent on a manual dispatch, which nothing
+    // retries, archives or reports.
+    it('marks a batch Failed, keeping the ERP reference, when the ERP accepted it and the Posted save failed', async () => {
+        const { batch, entries, provider } = world('Approved', { 'je-1': batched() }, { failFirstSaveAt: 'Posted' });
+        batch.LatestResult = { CompleteMessage: 'deadlock victim' };
+
+        const result = await send({ gate: approvedGate(), poster: acceptingPoster(), lookup: lookupReturning({ status: 'NotFound' }), provider });
+
+        expect(result.Status).toBe('Failed');
+        expect(batch.statusHistory).toEqual(['Sent', 'Failed']);
+        expect(batch.ExternalJournalEntryBatchRef).toBe('ERP-REF-2');
+        expect(batch.PostedAt).toBeNull();
+        expect(batch.ErrorMessage).toBe(
+            'The ERP accepted document JEB-0001 as ERP-REF-2, but recording the batch Posted failed: deadlock victim ' +
+            'Retry it: the retry records it Posted under that reference without sending it again. It cannot be cancelled.',
+        );
+        expect(entries['je-1'].Status).toBe('Batched');
+    });
+
+    it('marks a Failed retry Failed again, with the found reference, when recording the found posting fails', async () => {
+        const { batch, provider } = world('Failed', { 'je-1': batched() }, { failFirstSaveAt: 'Posted' });
+        const poster = acceptingPoster();
+
+        const result = await send({ gate: approvedGate(), poster, lookup: found(), provider });
+
+        expect(poster).not.toHaveBeenCalled();
+        expect(result.Status).toBe('Failed');
+        expect(batch.statusHistory).toEqual(['Sent', 'Failed']);
+        expect(batch.ExternalJournalEntryBatchRef).toBe('JEB-0001');
+        expect(batch.ErrorMessage).toMatch(/^The ERP accepted document JEB-0001 as JEB-0001, but recording the batch Posted failed/);
+    });
+
+    it('keeps the batch number as the reference when the ERP accepted the batch without returning one', async () => {
+        const { batch, provider } = world('Approved', { 'je-1': batched() }, { failFirstSaveAt: 'Posted' });
+
+        const result = await send({ gate: approvedGate(), poster: async () => ({ success: true }), lookup: lookupReturning({ status: 'NotFound' }), provider });
+
+        expect(result.Status).toBe('Failed');
+        expect(batch.ExternalJournalEntryBatchRef).toBe('JEB-0001');
+    });
+
+    // A Failed batch carrying the ERP's reference was accepted: the retry records it Posted under that
+    // reference, and never asks the lookup, which could answer Mismatch or Error and invite a "not posted".
+    it.each<[string, ErpJournalLookupResult]>([
+        ['a posting that differs', { status: 'Mismatch', detail: 'BC added a VAT line.' }],
+        ['a failed lookup', { status: 'Error', error: 'BC 503' }],
+        ['nothing posted', { status: 'NotFound' }],
+    ])('records an accepted Failed batch Posted under its reference, without a lookup or a second post, whatever the lookup would say (%s)', async (_case, answer) => {
+        const { batch, entries, provider } = world('Failed', { 'je-1': batched() });
+        batch.ExternalJournalEntryBatchRef = 'ERP-REF-9';
+        const poster = acceptingPoster();
+        const lookup = lookupReturning(answer);
+
+        const result = await send({ gate: approvedGate(), poster, lookup, provider, confirmNotAlreadyPostedInERP: true });
+
+        expect(lookup).not.toHaveBeenCalled();
+        expect(poster).not.toHaveBeenCalled();
+        expect(result.Status).toBe('Posted');
+        expect(batch.statusHistory).toEqual(['Sent', 'Posted']);
+        expect(entries['je-1']).toMatchObject({ Status: 'GLPosted', GLReferenceID: 'ERP-REF-9' });
+    });
+
+    it('still asks the approval gate before recording an accepted Failed batch Posted', async () => {
+        const { batch, provider } = world('Failed', { 'je-1': batched() });
+        batch.ExternalJournalEntryBatchRef = 'ERP-REF-9';
+        const gate: JournalEntryBatchApprovalGate = { assertApproved: vi.fn(async () => { throw new Error('is not approved'); }) };
+
+        await expect(send({ gate, poster: acceptingPoster(), provider })).rejects.toThrow(/is not approved/);
+        expect(batch.statusHistory).toEqual([]);
+    });
+
+    it('flags a broken seal when it records an accepted Failed batch Posted', async () => {
+        const { batch, provider } = world('Failed', { 'je-1': batched() }, { sealDrift: ['Tags changed.'] });
+        batch.ExternalJournalEntryBatchRef = 'ERP-REF-9';
+
+        const result = await send({ gate: approvedGate(), poster: acceptingPoster(), provider });
+
+        expect(result.Status).toBe('Posted');
+        expect(batch.SealMismatchDetectedAt).toBeInstanceOf(Date);
+    });
+
+    // When the Failed save fails as well, the batch is still Sent in the database: the send throws
+    // rather than report a Failed that a retry would then be refused on.
+    it('throws, naming the status the batch reads, when the Failed save fails after the ERP refused the post', async () => {
+        const { batch, provider } = world('Approved', { 'je-1': batched() }, { failSavesAt: ['Failed'] });
+
+        const sent = send({ gate: approvedGate(), poster: async () => ({ success: false, error: 'BC 400' }), lookup: lookupReturning({ status: 'NotFound' }), provider });
+
+        await expect(sent).rejects.toBeInstanceOf(JournalEntryBatchFailureNotRecordedError);
+        await expect(sent).rejects.toMatchObject({ Status: 'Sent', ExternalJournalEntryBatchRef: null, DispatchError: 'BC 400' });
+        expect(batch.Status).toBe('Sent');
+    });
+
+    it('carries the ERP reference when the Posted and the Failed saves both fail after the ERP accepted the post', async () => {
+        const { provider } = world('Approved', { 'je-1': batched() }, { failSavesAt: ['Posted', 'Failed'] });
+
+        const sent = send({ gate: approvedGate(), poster: acceptingPoster(), lookup: lookupReturning({ status: 'NotFound' }), provider });
+
+        await expect(sent).rejects.toMatchObject({ name: 'JournalEntryBatchFailureNotRecordedError', Status: 'Sent', ExternalJournalEntryBatchRef: 'ERP-REF-2' });
+    });
+});
+
+// #216: dimension tags edited after approval break the seal. A Failed retry whose journal the ERP
+// already holds is recorded Posted anyway, with no second post, and flagged; every other outcome
+// still refuses it.
+describe('sendJournalEntryBatch — a Failed retry whose approved-content seal no longer matches (#216)', () => {
+    const SEAL = ['Batch JEB-0001 no longer matches the content that was approved.'];
+    const lookupReturning = (result: ErpJournalLookupResult): ErpJournalLookup => vi.fn(async () => result);
+    const found = (): ErpJournalLookup => lookupReturning({ status: 'Found', externalJournalEntryBatchRef: 'ERP-REF-1' });
+
+    it('records it Posted from the ERP\'s posting, without posting it again, and flags the seal mismatch', async () => {
+        const { batch, entries, provider } = world('Failed', { 'je-1': batched(), 'je-2': batched() }, { sealDrift: SEAL });
+        const poster = acceptingPoster();
+
+        const result = await send({ poster, lookup: found(), provider });
+
+        expect(poster).not.toHaveBeenCalled();
+        expect(result.Status).toBe('Posted');
+        expect(batch.statusHistory).toEqual(['Sent', 'Posted']);
+        expect(batch.ExternalJournalEntryBatchRef).toBe('ERP-REF-1');
+        expect(batch.SealMismatchDetectedAt).toBeInstanceOf(Date);
+        expect(batch.ErrorMessage).toBeNull();
+        expect(Object.values(entries).map(e => e.Status)).toEqual(['GLPosted', 'GLPosted']);
+    });
+
+    it('leaves the flag unset when the seal matches', async () => {
+        const { batch, provider } = world('Failed', { 'je-1': batched() });
+
+        const result = await send({ lookup: found(), provider });
+
+        expect(result.Status).toBe('Posted');
+        expect(batch.SealMismatchDetectedAt).toBeNull();
+    });
+
+    it.each<[string, ErpJournalLookupResult]>([
+        ['finds nothing', { status: 'NotFound' }],
+        ['finds a posting that differs', { status: 'Mismatch', detail: 'line 2 differs.' }],
+        ['fails', { status: 'Error', error: 'BC 503.' }],
+        ['finds another batch\'s journal', { status: 'Foreign', detail: 'its lines carry another token.' }],
+    ])('refuses it, without calling the ERP or leaving Failed, when the lookup %s', async (_label, preflight) => {
+        const { batch, provider } = world('Failed', { 'je-1': batched() }, { sealDrift: SEAL });
+        const poster = acceptingPoster();
+        const lookup = lookupReturning(preflight);
+
+        await expect(send({ poster, lookup, provider, confirmNotAlreadyPostedInERP: true }))
+            .rejects.toThrow(/no longer matches its approved content\. Batch JEB-0001 no longer matches/);
+        expect(lookup).toHaveBeenCalledOnce();
+        expect(poster).not.toHaveBeenCalled();
+        expect(batch.Save).not.toHaveBeenCalled();
+        expect(batch.Status).toBe('Failed');
+    });
+
+    it('refuses it when the ERP offers no lookup, even with the operator\'s confirmation', async () => {
+        const { batch, provider } = world('Failed', { 'je-1': batched() }, { sealDrift: SEAL });
+        const poster = acceptingPoster();
+
+        await expect(send({ poster, provider, confirmNotAlreadyPostedInERP: true }))
+            .rejects.toThrow(/no longer matches its approved content/);
+        expect(poster).not.toHaveBeenCalled();
+        expect(batch.Save).not.toHaveBeenCalled();
+    });
+
+    it('still refuses a first send from Approved before the lookup', async () => {
+        const { batch, provider } = world('Approved', { 'je-1': batched() }, { sealDrift: SEAL });
+        const lookup = found();
+
+        await expect(send({ poster: acceptingPoster(), lookup, provider }))
+            .rejects.toThrow(/no longer matches its approved content/);
+        expect(lookup).not.toHaveBeenCalled();
+        expect(batch.Status).toBe('Approved');
+    });
+
+    it('still refuses a retry whose content is incoherent, before the lookup', async () => {
+        const { batch, provider } = world('Failed', { 'je-1': batched() }, { drift: ['Member set changed.'], sealDrift: SEAL });
+        const lookup = found();
+
+        await expect(send({ poster: acceptingPoster(), lookup, provider }))
+            .rejects.toThrow(/Member set changed\. Batch JEB-0001 no longer matches/);
+        expect(lookup).not.toHaveBeenCalled();
+        expect(batch.Status).toBe('Failed');
+    });
+
+    it('clears the flag when recording the posting fails, so the Failed batch does not carry it', async () => {
+        const { batch, provider } = world('Failed', { 'je-1': batched() }, { sealDrift: SEAL, failFirstSaveAt: 'Posted' });
+
+        const result = await send({ poster: acceptingPoster(), lookup: found(), provider });
+
+        expect(result.Status).toBe('Failed');
+        expect(batch.statusHistory).toEqual(['Sent', 'Failed']);
+        expect(batch.SealMismatchDetectedAt).toBeNull();
+    });
+
+    // The flag is frozen (trg_JournalEntryBatch_Immutability, 50034): the fake's Save applies the rule.
+    it('writes the flag in the save that records the retried batch Posted, which the database allows', async () => {
+        const { batch, provider, stored } = world('Failed', { 'je-1': batched() }, { sealDrift: SEAL });
+
+        await send({ lookup: found(), provider });
+
+        expect(stored.Status).toBe('Posted');
+        expect(stored.SendAttemptCount).toBe(2);
+        expect(stored.SealMismatchDetectedAt).toBe(batch.SealMismatchDetectedAt);
+        expect(stored.SealMismatchDetectedAt).toBeInstanceOf(Date);
+    });
+
+    it('persists no flag when recording the posting fails, and the next retry records it Posted and flags it', async () => {
+        const { batch, provider, stored } = world('Failed', { 'je-1': batched() }, { sealDrift: SEAL, failFirstSaveAt: 'Posted' });
+
+        await send({ lookup: found(), provider });
+        expect(stored).toEqual({ Status: 'Failed', SendAttemptCount: 2, SealMismatchDetectedAt: null });
+
+        const result = await send({ lookup: found(), provider });
+
+        expect(result.Status).toBe('Posted');
+        expect(batch.statusHistory).toEqual(['Sent', 'Failed', 'Sent', 'Posted']);
+        expect(stored.SendAttemptCount).toBe(3);
+        expect(stored.SealMismatchDetectedAt).toBeInstanceOf(Date);
+    });
+
+    it('cannot flag a batch outside that save, or change or clear the flag once set', async () => {
+        const failed = world('Failed', { 'je-1': batched() });
+        failed.batch.SealMismatchDetectedAt = new Date();
+        expect(await failed.batch.Save()).toBe(false);
+        expect(failed.stored.SealMismatchDetectedAt).toBeNull();
+
+        const adopted = world('Failed', { 'je-1': batched() }, { sealDrift: SEAL });
+        await send({ lookup: found(), provider: adopted.provider });
+        const flaggedAt = adopted.stored.SealMismatchDetectedAt;
+        adopted.batch.SealMismatchDetectedAt = null;
+        expect(await adopted.batch.Save()).toBe(false);
+        adopted.batch.SealMismatchDetectedAt = new Date((flaggedAt?.getTime() ?? 0) + 1000);
+        expect(await adopted.batch.Save()).toBe(false);
+        expect(adopted.stored.SealMismatchDetectedAt).toBe(flaggedAt);
     });
 });
 
@@ -405,7 +908,7 @@ describe('resumeJournalEntryBatchPosting', () => {
     it('stops loudly on an entry that still will not save, leaving the rest for the next resume', async () => {
         const { entries, provider } = world('Posted', { 'je-1': batched(), 'je-2': batched() }, { failingEntryIds: ['je-1'] });
 
-        await expect(resumeJournalEntryBatchPosting(BATCH_ID, USER, provider)).rejects.toThrow(/JE je-1 Batched→GLPosted failed: lock trigger/);
+        await expect(resumeJournalEntryBatchPosting(BATCH_ID, USER, provider)).rejects.toThrow(/Journal entry je-1 could not be marked posted to the GL: lock trigger/);
         expect(entries['je-1'].Status).toBe('Batched');
     });
 
@@ -413,7 +916,7 @@ describe('resumeJournalEntryBatchPosting', () => {
     it('stops loudly on an entry that will not load instead of saving a new record', async () => {
         const { entries, provider } = world('Posted', { 'je-1': batched() }, { missingEntryIds: ['je-1'] });
 
-        await expect(resumeJournalEntryBatchPosting(BATCH_ID, USER, provider)).rejects.toThrow(/JE je-1 not found/);
+        await expect(resumeJournalEntryBatchPosting(BATCH_ID, USER, provider)).rejects.toThrow(/Journal entry je-1 was not found/);
         expect(entries['je-1'].Status).toBe('Batched');
     });
 
@@ -473,6 +976,6 @@ describe('findStrandedJournalEntries', () => {
             RunViews: async () => [{ Success: false, ErrorMessage: 'timeout' }, { Success: true, Results: [] }],
         } as unknown as IMetadataProvider;
 
-        await expect(findStrandedJournalEntries(USER, provider)).rejects.toThrow(/Failed scan failed: timeout/);
+        await expect(findStrandedJournalEntries(USER, provider)).rejects.toThrow(/Could not check Failed batches for stuck journal entries: timeout/);
     });
 });

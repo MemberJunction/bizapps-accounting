@@ -3,9 +3,9 @@ Don't say "You're absolutely right" each time I correct you. Mix it up, that's s
 
 # BizApps Accounting Development Guide
 
-This is a **MemberJunction Open App** built on top of the [MemberJunction](https://github.com/MemberJunction/MJ) platform. It provides the AR subsidiary ledger of record and journal-entry primitives (GL accounts, accounting periods, balanced JEs with multi-currency, dimensions, tax) for the MJ ecosystem. It is **not a general ledger** — entries are batched to the ERP (Business Central, QuickBooks, NetSuite, etc.).
+This is a **MemberJunction Open App** built on top of the [MemberJunction](https://github.com/MemberJunction/MJ) platform. It provides the AR subsidiary ledger of record and journal-entry primitives (GL accounts, balanced JEs with multi-currency, dimensions, tax) for the MJ ecosystem. It is **not a general ledger** — entries are batched to the ERP (Business Central, QuickBooks, NetSuite, etc.).
 
-This repo depends on [bizapps-common](https://github.com/MemberJunction/bizapps-common) for shared entities (Currency, Organization, Address) and extends `__mj.Company` with an `AccountingCompanyProfile` (IsA Disjoint child).
+This repo depends on [bizapps-common](https://github.com/MemberJunction/bizapps-common) for shared helpers (`BusinessTimeZoneEngine`, the calendar-day functions, external field-length limits) and on [bizapps-tasks](https://github.com/MemberJunction/bizapps-tasks) for batch approval tasks, and extends `__mj.Company` with an `AccountingCompanyProfile` (IsA Disjoint child). `Currency` and `CurrencySpotRate` live in this repo's schema.
 
 See `plans/bizapps-accounting-master.md` for the full design and current decision log — the single source of truth.
 
@@ -21,6 +21,7 @@ bizapps-accounting/
     CoreEntitiesServer/ - @mj-biz-apps/accounting-core-entities-server (server-only entity lifecycle hooks)
     EngineBase/         - @mj-biz-apps/accounting-engine-base (shared engine base)
     Angular/            - @mj-biz-apps/accounting-ng (Angular bootstrap + form components)
+    IntegrationTests/   - @mj-biz-apps/accounting-integration-tests (private; live integration suite, see Testing)
 ```
 
 There are no bundled host apps — the packages run inside a MemberJunction host, wired up via
@@ -109,7 +110,7 @@ git checkout -b my-feature-branch
 BAC uses a two-tier branching model (matching BCSaaS and MJ):
 
 - **`next`** — integration branch. All feature work merges here.
-- **`main`** — release branch. Only updated by a single coordinating PR from `next`. Pushes to `main` trigger the publish workflow.
+- **`main`** — release branch. Only updated by the "Version Packages" PR (`changeset-release/main` → `main`). Pushes to `main` trigger the publish workflow.
 
 **Feature work flow:**
 1. Cut feature branch from `next` (not from `main`): `git checkout next && git pull && git checkout -b <feature-name>`
@@ -117,38 +118,29 @@ BAC uses a two-tier branching model (matching BCSaaS and MJ):
 3. `changes.yml` + `build.yml` run validation on the PR
 4. Merge to `next`
 
-**Release flow:** versioning and publishing are separate, and neither writes to a
-protected branch. The version bump arrives as a PR on `next`; publishing reads it.
+**Release flow:** the "Version Packages" PR IS the release. Nobody opens a `next` → `main` PR
+and nobody dispatches a publish.
 
-1. `version.yml` fires on every push to `next` and maintains a **"Version Packages" PR**
-   into `next` — every package bumped, CHANGELOGs generated, `mj-app.json`'s `version` and
-   `mjVersionRange` synced, and **`pnpm-lock.yaml` refreshed**. Review and merge it when you
-   are ready to cut a release. Its checks do not start on their own under the default
-   `GITHUB_TOKEN` — click **Approve and run** on the PR.
-2. Open a single PR from `next` → `main` ("Release vX.Y.Z"). `release-readiness.yml` asserts
-   no changesets are still pending, and that a release carrying migrations is at least a
-   minor.
-3. Merging it triggers `publish.yml`, which validates, builds, runs `changeset publish`
-   (publishing every package whose version is not already on the registry), and tags
-   `vX.Y.Z`. It computes no version and writes to no branch.
+1. `version.yml` fires on every push to `next` and maintains ONE **"Version Packages" PR**
+   (head `changeset-release/main`, base `main`), opened by a GitHub App so its checks run on
+   their own: every package bumped, CHANGELOGs generated, `mj-app.json`'s `version` and
+   `mjVersionRange` synced (`version:prepare`), and **`pnpm-lock.yaml` refreshed**. PRs into
+   `main` run `release-readiness.yml` (the `rr:` checks) and `build.yml`.
+2. Merging it pushes to `main`, which triggers `publish.yml`: it validates, builds, runs
+   `changeset publish` over npm OIDC, tags `vX.Y.Z` only if something actually shipped, and then
+   the App opens and merges a `release-back-merge/vX.Y.Z` → `next` PR to carry the release home.
 
 **Rules:**
-- **Never commit directly to `main`.** Always go through `next` first (except for the release coordinating PR itself).
+- **Never commit directly to `main`.** Always go through `next` first (except for the Version Packages PR itself).
 - **Never hand-edit the version bump.** It is `changeset version`'s output, delivered by the
   Version Packages PR. Bumping a package.json by hand desynchronises it from the lockfile —
   `changeset version` rewrites internal dependency ranges and does NOT touch the lockfile,
   which is why the version script refreshes it in the same PR.
-- **Hotfixes that genuinely must bypass `next`** go through a PR to `main`. **Open an
-  ordinary `main` → `next` PR immediately afterwards** to carry the fix home: there is no
-  automated merge-back any more. It used to exist because the old flow created the version
-  commit ON `main` and had to push it back to `next`; the bump now originates on `next`, so
-  nothing travels in that direction except a hotfix. Do not wait for the next release PR to
-  reconcile it — until that PR merges, the fix exists only on `main`.
-- **`main` will read as a commit or two "ahead" of `next` indefinitely.** Those are the
-  release PRs' own merge commits, and their trees are identical to `next` — GitHub creates a
-  merge commit even when the base is strictly behind. `git diff next main` (empty) is the
-  check that means something; `git log next..main` is noise. Nothing in the release path
-  depends on the ancestry.
+- **Hotfixes that genuinely must bypass `next`** go through a PR to `main`. If the hotfix ships a
+  release, `publish.yml`'s back-merge PR carries it to `next`; if nothing published, open an
+  ordinary `main` → `next` PR yourself straight away.
+- **Never publish by dispatching `publish.yml` on `next`** — the job is guarded to
+  `refs/heads/main` and will not run.
 
 ---
 
@@ -161,16 +153,40 @@ protected branch. The version bump arrives as a PR on `next`; publishing reads i
 
 ### pnpm Workspace Management
 - This is a **pnpm** workspace monorepo (`pnpm-workspace.yaml`; `pnpm@10.x` via the `packageManager` field). `pnpm-lock.yaml` is the only committed lockfile.
-- **Do not run `npm install` here** — it ignores the pnpm lockfile AND the dependency overrides (they live in package.json's `pnpm.overrides`, which npm does not read), so it builds an unpinned, differently-resolved tree and litters a `package-lock.json` that must not be committed.
+- **Do not run `npm install` here** — it ignores the pnpm lockfile AND the dependency overrides (they live in `pnpm-workspace.yaml`, which npm does not read), so it builds an unpinned, differently-resolved tree and litters a `package-lock.json` that must not be committed.
 - **IMPORTANT**: To add dependencies to a specific package:
   - Define dependencies in the individual package's package.json
   - Run `pnpm install` at the repository root (NOT within the package directory)
   - Never run an install inside individual package directories
 
+## MemberJunction versions — the LTS line AIDP Next runs
+
+AIDP Next runs MemberJunction's 6.1 LTS line, pinned exactly in `aidp-next/package.json`. This repo builds, tests and runs CodeGen against that same version, so what passes here is what runs there (bc-aidp-next-golive#298).
+
+- **Declared ranges.** In a published package, `@memberjunction/*` (and any other app's `@mj-biz-apps/*`) is a **peer** with a caret range, `^6.1.N`, and never appears in `dependencies`: the host installs one copy, and a `~6.1.N` or exact peer makes every 6.2 host install a second 6.1 tree, which splits the ClassFactory. Each peer also has a `devDependencies` entry in the same package: the same caret floor for MJ, `^6.1.N`, where 6.1.N is the version AIDP Next runs, and an exact version for another app's package. The lockfile resolves MJ to that LTS release, so builds, tests and CodeGen run against what AIDP Next runs. Never an edge or prerelease range (`6.1.0-edge.x` sorts *before* 6.1.0 and has none of the LTS fixes). `.github/scripts/check-dependency-model.mjs` enforces this in CI. Packages MJ versions separately (`@memberjunction/connector-*`, `@memberjunction/skyway-*`) keep their own ranges.
+- **Overrides (`overrides:` in `pnpm-workspace.yaml`).** `@memberjunction/core` and `@memberjunction/global` carry the same caret floor as every other MJ range, `^6.1.N` (for example `"^6.1.5"`), so every request in the graph resolves to one copy. Two copies of `core` split the ClassFactory: registrations land in one factory while the resolver reads the other, and nothing errors. Overrides are workspace-local and never published. They do not go under `package.json`'s `pnpm` field: pnpm 10.33 warns that it no longer reads that field, and the field is deprecated. Do not exact-pin sibling `@mj-biz-apps/*` packages here; how the apps declare each other is bc-aidp-next-golive#265.
+- **One copy of each.** After any install, `pnpm why @memberjunction/core` must show a single version. A sibling app package that exact-pins an old MJ build brings a second copy in (for example `@mj-biz-apps/common-ng@5.37.0` pinned edge.3 packages); fix it by raising that package's floor, not with more overrides.
+- **Bumping to a new 6.1.N**, when AIDP Next moves: raise every `^6.1.N` floor, in peers, devDependencies and both overrides; `pnpm install`; confirm one copy; `mjVersionRange` in `mj-app.json` follows in the Version Packages PR (`ci/sync-mj-app-version.mjs`); rebuild the database from migrations on MJ core `v6.1.N` and regenerate (below); run the full test suite; add a `patch` changeset; commit the lockfile. If CI then fails on the lockfile although a clean local install works, GitHub is testing the merge with `next`: merge `next` in, run `pnpm install --no-frozen-lockfile`, and commit the lockfile.
+- **Never patch MemberJunction.** No `pnpm patch`, `patchedDependencies`, patch-package or `sed` against `@memberjunction/*` `dist/`. That is AIDP Next's hard rule (`.github/workflows/MJ_PATCH_REGISTER.md` in aidp-next). Fix MJ on its `next` branch and bring the fix to the line with the `backport lts/6.1` label, or with a hand-port PR against `lts/6.1` when the fix can't be isolated; then wait for the patch release.
+
+### CodeGen output must be reproducible from this repo
+
+Generated files are committed, and AIDP Next ships them as they are: it excludes every `__mj_BizApps*` schema from its own CodeGen and installs the published packages. So the committed output has to be what this repo's toolchain produces from its migrations.
+
+- Run CodeGen only with this repo's pinned MJ version, against a database built from migrations (MJ core `v6.1.N`, then the apps this one depends on, then this repo), after `mj sync push` of `metadata/`.
+- Set an AI key in your gitignored `.env`: `AI_VENDOR_API_KEY__GeminiLLM` (every CodeGen prompt ranks Gemini first), or `AI_VENDOR_API_KEY__OpenRouterLLM`. Without one, CodeGen silently drops AI-written output: check-constraint `Validate*()` methods, display names, descriptions and form layouts.
+- Never hand-edit generated files, and never paste in generated output from another toolchain or another database. That is how OrderLine lost `OrderHeader`'s `@Field` (bc-aidp-next-golive#295).
+- Review what AI wrote. Validators, names and descriptions are not deterministic between runs.
+- If CodeGen has to create metadata in the database that the generated code depends on (fields, value lists, relationships, validator code), ship it in a migration in the same PR. Otherwise every host installed from migrations drifts from the code.
+
 ## Development Workflow
 - **CRITICAL**: After making code changes, always compile the affected package by running `pnpm run build` in that package's directory to check for TypeScript errors
 - Fix all compilation errors before proceeding with additional changes
-- **Tasks**: whenever you need to spin up tasks - if they do not require interaction with the user and if they are not interdependent in any way, ALWAYS spin up multiple parallel tasks to work together for faster responses
+
+## Testing
+- `pnpm run test` runs each package's `test`, `test:dom` and `test:types` scripts through Turborepo, leaving out the integration tests. It is the only test step CI runs (`.github/workflows/build.yml`).
+- `pnpm run test:integration` runs the live suite in `packages/IntegrationTests` through `test-harnesses/integration.mjs`, after `pnpm run build`. It needs a running MJAPI, that MJAPI's system API key in `MJ_API_KEY`, and the bizapps-orders integration world loaded, and it writes data on every run (`RUN_MUTATION_TESTS=0` does not stop it). CI does not run it. Prerequisites: [`packages/IntegrationTests/README.md`](packages/IntegrationTests/README.md).
+- Every test tier and how to run each: [`test-harnesses/README.md`](test-harnesses/README.md).
 
 ## Ports
 - MJAPI GraphQL server: **4102** (configured via `GRAPHQL_PORT` in `.env`)
@@ -342,8 +358,10 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 ### SQL Server is the source of truth; PostgreSQL is converted
 - Write all migrations as **T-SQL** in `migrations/` (`V<TS>__v<X.Y.x>__<description>.sql`).
 - The PostgreSQL counterparts in `migrations-pg/` are produced by the MJ converter (`@memberjunction/sql-converter`) via `pnpm exec mj sql-convert <file> --from tsql --to postgres --output migrations-pg/<file>.pg.sql --schema __mj_BizAppsAccounting`. PG-only patches use the `.pg-only.sql` extension.
-- **Never hand-edit `migrations-pg/*.pg.sql`** — fix the converter rule and re-convert. PG-only patches are the exception, and live next to the converted files.
+- **Never hand-edit `migrations-pg/*.pg.sql`** — fix the converter rule and re-convert. PG-only patches are the exception, and live next to the converted files. The other exception: quote the schema name (`"__mj_BizAppsAccounting"`) after converting, because the converter emits it unquoted and PostgreSQL folds that to a different, lowercase schema (`migrations-pg/README.md`, "Quote the schema name").
+- `pnpm run mj:migrate` passes no `--dir`, so `mj migrate` swaps `migrations` → `migrations-pg` when `DB_PLATFORM=postgresql` (`migrationsLocation` in `mj.config.cjs`). An explicit `--dir` turns the swap off.
 - `.github/workflows/pg-migrations.yml` validates PG parity on `workflow_dispatch` (manual trigger) rather than gating PRs, per MJ cross-repo policy.
+- The counterpart gate is `.github/scripts/check-pg-counterpart.sh`: on PRs into `next` it only warns when a new migration has no `.pg.sql`; on the release PR (`rr: pg counterparts`) it fails for any migration added since the last release that has none.
 - See `migrations-pg/README.md` for the conversion workflow and the MJ repo's `/pg-migrate` slash command for the deeper toolchain.
 
 ### Accounting-specific schema invariants (see `plans/bizapps-accounting-master.md` §6)
@@ -356,16 +374,18 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
   DELETE is blocked outright. On a locked row only these may change: `GLPostedAt`, `GLReferenceID`,
   `ReversedByJournalEntryID`, `Status` `Batched→GLPosted`, and the **reversible preliminary unlock**
   (`Status` `Batched→Pending` **plus** `JournalEntryBatchID→NULL`, and nothing else, while the owning
-  batch is `Pending` or `Cancelled` — an Approved or Failed batch reaches `Cancelled` only through
-  `JournalEntryBatchEntityServer.Cancel`, #183). `GLPosted` never regresses. Corrections are new `Pending` reversal JEs.
+  batch is `Pending` or `Cancelled` — a batch reaches `Cancelled` only through
+  `JournalEntryBatchEntityServer.Cancel` or regenerate's empty cancel, with its summary pointer cleared, #183 / #213). `GLPosted` never regresses. Corrections are new `Pending` reversal JEs.
 - **There are no accounting periods and no close machinery** (D2, plan §4 — the ERP owns periods).
   No `AccountingPeriod` table, no period FK, no close guard, no `OriginalAccountingPeriodID`, no
   adjusting-entry routing: all removed 2026-07-06 with the period tables, and `AccountingPeriod`
   heads the plan's §5.9 "deliberately ABSENT" table. JEs carry dates only (`EffectiveDate`), and a
   dispatched batch lands in whatever period the ERP has active. **Closed-period collisions
   hold-and-flag, never auto-roll:** when the ERP rejects a batch for a closed posting date, the batch
-  is flagged for review — there is no local period gate to detect it first. Any future timing rule
-  detects by DATE, never a period FK.
+  is flagged for review: it goes `Failed` with the ERP's message and raises an `ERP_POSTING_REJECTED`
+  finance exception. Any timing rule detects by DATE, never a period FK. The one such rule is
+  `AccountingCompanyProfile.BooksClosedThroughDate` (golive #316): finance's date for how far the
+  ERP's periods are closed. Builds refuse a posting date on or before it; it is not a period table.
 - `AccountingCompanyProfile` is an IsA Disjoint child of `__mj.Company` — same UUID as the parent row, never INSERT a Profile without a matching Company.
 
 ### Instants are UTC; calendar days are calendar days; "today" is the business day (convention)
@@ -395,14 +415,8 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 
 ## Debugging
 
-### VSCode Launch Configurations
-- **MJAPI**: Node.js debugger with source maps for local packages
-- **MJExplorer**: Chrome debugger (port 4302) with source maps
-- **MJExplorer (attach)**: Attach to existing Chrome on port 9222
-- **Full Stack**: Compound configuration running both MJAPI + MJExplorer
-
-### Source Map Scoping
-Source maps are scoped to local packages only (`apps/MJAPI/**`, `packages/Entities/**`, `packages/Actions/**`, `packages/Server/**`, `packages/Angular/**`). Third-party packages and node_modules are excluded to avoid noise.
+There is no host app in this repo to debug: the packages run inside a MemberJunction host, so debug
+that host's MJAPI and Explorer with the host's own launch configurations.
 
 ---
 
@@ -426,19 +440,19 @@ Source maps are scoped to local packages only (`apps/MJAPI/**`, `packages/Entiti
 - Repository: https://github.com/MemberJunction/bizapps-accounting
 - Default branch: `main` (release branch — publishes on push)
 - Integration branch: `next` (where feature PRs land)
-- Feature PRs target `next`. Release PRs target `main`.
+- Feature PRs target `next`. The only PR into `main` is the bot-maintained Version Packages PR (plus a rare hotfix).
 - See "Branching Model" section above for the full flow.
 
 ## Purpose
 
-This repository provides the **AR subsidiary ledger of record + journal-entry primitives** for the MemberJunction ecosystem. Downstream apps (BizAppsOrders, future BizAppsPayroll/ExpenseManagement/FixedAssets) emit balanced journal entries by calling into this app's `AccountingService`. Entries batch to an external ERP (Business Central, QuickBooks, NetSuite, Sage) for the full general-ledger close.
+This repository provides the **AR subsidiary ledger of record + journal-entry primitives** for the MemberJunction ecosystem. Downstream apps (BizAppsOrders, future BizAppsPayroll/ExpenseManagement/FixedAssets) emit balanced journal entries through this app's `Accounting.CreateJournalEntry` / `Accounting.CreateJournalEntries` Remote Operations, which run on the server through `AccountingEngine`. Entries batch to an external ERP (Business Central, QuickBooks, NetSuite, Sage) for the full general-ledger close.
 
 **What lives here** (per `plans/bizapps-accounting-master.md`):
 1. `GLAccount` + seeded default chart of accounts
 2. `AccountingCompanyProfile` — IsA Disjoint child of `__mj.Company` (functional currency, fiscal year, business-profile fields). A company's **default accounts are company-level `GLAccountLink` rows** keyed by role (AR, Sales, Deferred Revenue, …), NOT columns on the profile (D12)
 3. `JournalEntry` / `JournalEntryLine` / `JournalEntryBatch` with balanced-JE + immutability invariants enforced at the DB level
 4. `Dimension` / `DimensionValue` / `JournalEntryLineDimension` for analytical tagging
-5. Tax entities (`TaxAuthority`, `TaxJurisdiction`, `TaxRate`, `TaxLiability`, `CustomerTaxProfile`) + pluggable `TaxCalculationProvider` — accounting keeps the tax ACCRUAL only; remitting to the authority is an ERP/GL concern (TaxRemittance removed 2026-07-29, Amith PR-27 review)
+5. Tax entities (`TaxAuthority`, `TaxJurisdiction`, `TaxRate`, `TaxLiability`, `CompanyTaxNexus`) + the pluggable `TaxCalculationProvider` seam (D17; not built yet) — accounting keeps the tax ACCRUAL only; remitting to the authority is an ERP/GL concern, so `TaxRemittance` was removed (2026-07-29). Buyer-side exemption is not here: `CustomerTaxProfile` was dropped
 6. Forward-dated real JEs for rev-rec and other scheduled recognition (D15 — this REPLACED the `Recurring*` template trio, which was never built)
 7. Read-model views (`vw_TrialBalance_AR`, `vw_AROpenByCustomer`, `vw_DefRevRollforward`, etc.) for Skip-generated reports. **Creation is deferred** (2026-07-22): none are in the baseline today; each is built when a report that needs it ships.
 
@@ -451,11 +465,11 @@ by company-level `GLAccountLink` rows).
 
 **What does NOT live here**: trial balance / P&L / balance sheet generation, year-end closing, statistical accounts, fixed-asset depreciation as first-class, inventory/COGS, expense management. Those stay in the ERP or future BizApps* siblings.
 
-**Dependencies**: `__mj` (MJ core) → `bizapps-common` (Currency, CurrencyExchangeRate, Organization, Address) → **this repo** → `bizapps-orders` → `bizapps-contracts` → `aidp`.
+**Dependencies**: `__mj` (MJ core) → `bizapps-common` (business time zone, calendar-day and field-limit helpers) and `bizapps-tasks` (`Task`, for batch approvals) → **this repo** → `bizapps-orders` → `bizapps-contracts` → `aidp`.
 
 ## Angular pinning model
 
-**Angular pinning model** (family-wide, 2026-08-07, with MemberJunction/MJ#3580): `@angular/*` peers in `packages/*` are **caret ranges at the platform pin** (`^21.1.3`) — compatibility claims, never exact. Each package that consumes Angular **anchors** the concrete version with exact `21.1.3` entries in its own `devDependencies`; the anchor is what actually installs. In the shared pnpm dev workspace `auto-install-peers=true` turns unanchored peer ranges into install instructions, which is how two copies of `@angular/core` ended up installed family-wide. Rev anchors with the era platform pin, never with MJ pins.
+**Angular pinning model** (family-wide, 2026-08-07, the same model MJ core uses): `@angular/*` peers in `packages/*` are **caret ranges at the platform pin** (`^21.1.3`) — compatibility claims, never exact. Each package that consumes Angular **anchors** the concrete version with exact `21.1.3` entries in its own `devDependencies`; the anchor is what actually installs. In the shared pnpm dev workspace `auto-install-peers=true` turns unanchored peer ranges into install instructions, which is how two copies of `@angular/core` ended up installed family-wide. Rev anchors with the era platform pin, never with MJ pins.
 
 ## UI architecture — READ BEFORE TOUCHING ANGULAR
 
@@ -489,7 +503,8 @@ remains only for standing up a brand-new empty database; it is not a development
 
 Write migrations **deterministically** against the state earlier migrations leave: Skyway runs each
 `V` migration once, in order, so guards against this repo's own earlier migrations are unnecessary
-(header: `DETERMINISTIC, NOT IDEMPOTENT`). Assume the database already has data, pre-check existing
+(header: `DETERMINISTIC, NOT IDEMPOTENT`). Add a table's new columns in one `ALTER TABLE … ADD`, with
+their constraints inline. Assume the database already has data, pre-check existing
 rows before adding a constraint, and keep guards where the starting point genuinely varies — see the
 doc. A migration that reads `__mj.Entity` must skip cleanly when the row is absent —
 CodeGen runs *after* migrations — and if the change is really about metadata (field categories,
@@ -510,5 +525,23 @@ carry whatever `metadata/` has gained since. Two things about that step, because
   release process, not a gate — so a `metadata/` edit that matters to a host is not "done" when it
   merges, only when a release carries it.
 
+The model, and the Open App steps that differ from core (`--schema`, the `${mjSchema}` substitution): [Release Metadata Migrations Guide](https://github.com/MemberJunction/MJ/blob/next/guides/RELEASE_METADATA_MIGRATIONS_GUIDE.md).
+
 The review test: *if a colleague pulls this branch onto a database that already has last week's
 schema and runs `pnpm run mj:migrate`, do they get exactly the schema this branch describes?*
+
+## Filing issues (pilot of the BizApps issue system)
+- **Never work around a bug in this repo or in MJ silently.** File it with the `/report-issue` skill
+  (`.claude/skills/report-issue/`), which picks the repo where the fix lives, captures the
+  environment, searches for duplicates, and writes the same headings as the web form
+  (`.github/ISSUE_TEMPLATE/bug.yml`). If the bug already exists, it posts an occurrence comment on
+  the original instead of a new issue.
+- Filing from the web: **New issue → Bug report**. Every bug lands as `needs-triage`; a second
+  person reproduces it before it is `confirmed`. Confidence is a field, not a gate — say what you
+  actually did.
+- Not filed during the pilot: nits (cosmetic, no user impact) go in a local `BUGS.md`, not GitHub.
+  An agent files only with a minimal repro or after seeing the same failure twice, at most five
+  per session, and never closes, relabels, transfers or assigns anything.
+- MJ-core bugs go to `MemberJunction/MJ` (always pass `--repo`); mjdev-tool bugs to
+  `MemberJunction/MJDev`. Say which repo you chose and why under "Duplicate search".
+

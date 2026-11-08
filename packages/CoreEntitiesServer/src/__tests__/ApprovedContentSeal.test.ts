@@ -100,6 +100,17 @@ describe('JournalEntryBatchEntityServer — approved-content seal (#183)', () =>
     return hash;
   };
 
+  it('reads the dimensions of 1,200 summary lines in 3 reads, so none is left out of the seal (#488)', async () => {
+    lines = Array.from({ length: 1200 }, (_, i) => ({
+      ID: `30000000-0000-4000-8000-${(i + 1).toString(16).padStart(12, '0')}`, GLAccountID: 'GL-AR', DebitAmount: 1, CreditAmount: null,
+    }));
+    const runView = vi.fn(async (params: { EntityName: string }) => ({ Success: true, Results: params.EntityName === JEL_ENTITY ? lines : tags }));
+    Object.defineProperty(batch, 'ProviderToUse', { configurable: true, get: () => ({ RunView: runView }) });
+    asSaved('Approved');
+    await batch.ComputeApprovedContentHash();
+    expect(runView.mock.calls.filter(([params]) => params.EntityName !== JEL_ENTITY)).toHaveLength(3);
+  });
+
   it('an approved batch whose content is unchanged passes', async () => {
     await seal('Failed');
     expect(await batch.CheckControlTotalCoherence()).toEqual([]);
@@ -126,6 +137,26 @@ describe('JournalEntryBatchEntityServer — approved-content seal (#183)', () =>
     const problems = await batch.CheckControlTotalCoherence();
     expect(problems).toHaveLength(1);
     expect(problems[0]).toMatch(/no longer matches the content that was approved/);
+  });
+
+  // #216: dispatch tells a broken seal from incoherent content, so it can adopt a Failed batch the ERP holds.
+  it('CheckApprovedContent reports a changed tag as a seal problem only', async () => {
+    await seal('Failed');
+    tags = [{ JournalEntryLineID: L2_ID, DimensionID: 'DIM-DEPT', DimensionValueID: 'DV-EVENTS' }];
+
+    const check = await batch.CheckApprovedContent();
+    expect(check.CoherenceProblems).toEqual([]);
+    expect(check.SealProblems).toHaveLength(1);
+    expect(check.SealProblems[0]).toMatch(/no longer matches the content that was approved/);
+  });
+
+  it('CheckApprovedContent keeps the summary-header problem apart from the seal', async () => {
+    const hash = await seal('Failed');
+    asSaved('Failed', { ApprovedContentHash: hash, PostingDate: new Date('2026-10-31T00:00:00.000Z') });
+
+    const check = await batch.CheckApprovedContent();
+    expect(check.CoherenceProblems).toEqual([expect.stringMatching(/posts on 2026-10-31/)]);
+    expect(check.SealProblems).toHaveLength(1);
   });
 
   it('a changed member set breaks the seal even when TotalEntries still matches', async () => {

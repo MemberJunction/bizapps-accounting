@@ -14,21 +14,20 @@
  *   5. Re-enable triggers and re-enable all FKs WITH CHECK (fails loudly if anything dangles).
  *   6. Verification counts (shells, orphan JEs/batches, remaining companies, demo JEs).
  *
- * Run from the INSTANCE WORKTREE ROOT:
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/_maint-clean-test-residue2.ts
+ * Run from the repo root:
+ *   npx tsx test-harnesses/server/_maint-clean-test-residue2.ts
  * Exit: 0 ok · 2 error.
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'path';
 import { finishAndExit } from './harness-exit.js';
+import { LoadHarnessEnv } from '../harness-paths.mjs';
 
 interface FkRow { fkName: string; childSchema: string; childTable: string; childCol: string; childColNullable: boolean; parentSchema: string; parentTable: string; parentCol: string }
 
 async function main(): Promise<void> {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   const { DB_HOST: host, DB_DATABASE: database, CODEGEN_DB_USERNAME: user, CODEGEN_DB_PASSWORD: password } = process.env;
-  if (!host || !database || !user || !password) throw new Error('Missing DB/CODEGEN settings in .env — run from the instance worktree root.');
+  if (!host || !database || !user || !password) throw new Error('Missing DB/CODEGEN settings in .env (looked in the working directory, then the repo root and each folder above it).');
   const pool = await new sql.ConnectionPool({
     server: host, port: Number(process.env.DB_PORT ?? 1433), user, password, database,
     options: { encrypt: false, trustServerCertificate: true },

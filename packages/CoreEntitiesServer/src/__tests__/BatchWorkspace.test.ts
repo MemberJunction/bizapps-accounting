@@ -9,7 +9,7 @@
  * is excluded from the package build, so none of this ships.
  */
 import { describe, it, expect } from 'vitest';
-import { classifyViewEntries, netLines, outOfOrderSkipCount, perCompanySubtotals, type NettableLine } from '../JournalEntryBatchEngine.js';
+import { classifyViewEntries, grossTotals, netLines, outOfOrderSkipCount, perCompanySubtotals, type NettableLine } from '../JournalEntryBatchEngine.js';
 
 const A = 'aaaaaaaa-0000-0000-0000-000000000001';
 const B = 'bbbbbbbb-0000-0000-0000-000000000002';
@@ -78,5 +78,29 @@ describe('perCompanySubtotals (workspace footer)', () => {
     expect(a).toMatchObject({ Debit: 100, Credit: 100 });
     expect(b?.Debit).toBeCloseTo(40.01, 2);
     expect(b?.Credit).toBeCloseTo(40.01, 2);
+  });
+});
+
+describe('grossTotals vs netted totals (golive #284)', () => {
+  // A booking (Dr AR / Cr Deferred) plus one recognition release (Dr Deferred / Cr Sales).
+  const AR = 'gl-ar', DEFERRED = 'gl-deferred', SALES = 'gl-sales';
+  const lines: NettableLine[] = [
+    { companyId: A, glAccountId: AR, debit: 8000, credit: 0, dims: [] },
+    { companyId: A, glAccountId: DEFERRED, debit: 0, credit: 8000, dims: [] },
+    { companyId: A, glAccountId: DEFERRED, debit: 666.63, credit: 0, dims: [] },
+    { companyId: A, glAccountId: SALES, debit: 0, credit: 666.63, dims: [] },
+  ];
+
+  it('counts every line of every entry before netting', () => {
+    expect(grossTotals(lines)).toEqual({ grossDebits: 8666.63, grossCredits: 8666.63 });
+  });
+
+  it('nets the recognition debit against the booking credit on Deferred Revenue', () => {
+    const [company] = perCompanySubtotals(netLines(lines));
+    expect(company).toMatchObject({ Debit: 8000, Credit: 8000 });
+  });
+
+  it('is zero for no lines', () => {
+    expect(grossTotals([])).toEqual({ grossDebits: 0, grossCredits: 0 });
   });
 });

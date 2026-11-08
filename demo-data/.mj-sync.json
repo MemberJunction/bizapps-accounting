@@ -1,0 +1,16 @@
+{
+  "version": "1.0.0",
+  "push": {
+    "autoCreateMissingRecords": true
+  },
+  "_comments": [
+    "Opt-in data, never shipped to hosts: pushed only by `pnpm run demo:load`, after `metadata/`.",
+    "Dependency order for the predictive-scoring bench (issue #372): the pipelines, the models that name them, the record process that names a model in its Configuration, then the binding that names both."
+  ],
+  "directoryOrder": [
+    "ml-training-pipelines",
+    "ml-models",
+    "record-processes",
+    "ml-model-scoring-bindings"
+  ]
+}

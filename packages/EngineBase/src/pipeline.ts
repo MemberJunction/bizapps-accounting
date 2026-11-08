@@ -85,19 +85,19 @@ const uuidKey = (id: string): string => (id ?? '').trim().toLowerCase();
 export function validateDraftShape(draft: JournalEntryDraft): JEValidationError[] {
   const errors: JEValidationError[] = [];
   if (!draft || !Array.isArray(draft.Lines)) {
-    return [{ Code: 'MALFORMED_DRAFT', Message: 'draft must carry a Lines array' }];
+    return [{ Code: 'MALFORMED_DRAFT', Message: 'The journal entry has no lines.' }];
   }
   if (draft.Lines.length < 2) {
-    errors.push({ Code: 'MALFORMED_DRAFT', Message: 'a journal entry needs at least two lines (double-entry)' });
+    errors.push({ Code: 'MALFORMED_DRAFT', Message: 'A journal entry needs at least two lines: one debit and one credit.' });
   }
   const effective = new Date(draft.EffectiveDate ?? '');
   if (!draft.EffectiveDate || Number.isNaN(effective.getTime())) {
-    errors.push({ Code: 'MALFORMED_DRAFT', Message: `EffectiveDate '${draft.EffectiveDate}' is not a valid ISO date` });
+    errors.push({ Code: 'MALFORMED_DRAFT', Message: `The effective date '${draft.EffectiveDate}' is not a valid date.` });
   }
   // EntryType is a JournalEntryType CODE (issue #24) — shape check only here; existence /
   // active status validate against live reference data in validateEntryType (stage 1b).
   if (typeof draft.EntryType !== 'string' || draft.EntryType.trim().length === 0) {
-    errors.push({ Code: 'MALFORMED_DRAFT', Message: 'draft must carry a non-empty EntryType code' });
+    errors.push({ Code: 'MALFORMED_DRAFT', Message: 'The journal entry has no entry type.' });
   }
   let debits = 0;
   let credits = 0;
@@ -105,23 +105,23 @@ export function validateDraftShape(draft: JournalEntryDraft): JEValidationError[
     const hasDebit = line.DebitAmount != null;
     const hasCredit = line.CreditAmount != null;
     if (hasDebit === hasCredit) {
-      errors.push({ Code: 'MALFORMED_DRAFT', LineIndex: i, Message: 'each line must carry exactly one of DebitAmount / CreditAmount' });
+      errors.push({ Code: 'MALFORMED_DRAFT', LineIndex: i, Message: 'Each line needs either a debit amount or a credit amount, not both and not neither.' });
       return;
     }
     const amount = hasDebit ? line.DebitAmount! : line.CreditAmount!;
     if (!(typeof amount === 'number' && Number.isFinite(amount) && amount > 0)) {
-      errors.push({ Code: 'MALFORMED_DRAFT', LineIndex: i, Message: `line amount must be a finite number > 0, got ${String(amount)}` });
+      errors.push({ Code: 'MALFORMED_DRAFT', LineIndex: i, Message: `Line amounts must be greater than zero; this line has ${String(amount)}.` });
       return;
     }
     if (!line.GLAccountID || typeof line.GLAccountID !== 'string') {
-      errors.push({ Code: 'MALFORMED_DRAFT', LineIndex: i, Message: 'line is missing its GLAccountID' });
+      errors.push({ Code: 'MALFORMED_DRAFT', LineIndex: i, Message: 'This line has no GL account.' });
       return;
     }
     if (hasDebit) debits++;
     else credits++;
   });
   if (draft.Lines.length >= 2 && (debits === 0 || credits === 0)) {
-    errors.push({ Code: 'MALFORMED_DRAFT', Message: 'a journal entry needs at least one debit AND one credit line' });
+    errors.push({ Code: 'MALFORMED_DRAFT', Message: 'A journal entry needs at least one debit line and one credit line.' });
   }
   return errors;
 }
@@ -131,10 +131,10 @@ export function validateDraftShape(draft: JournalEntryDraft): JEValidationError[
 export function validateEntryType(draft: JournalEntryDraft, lookups: PipelineLookups): JEValidationError[] {
   const type = lookups.entryTypeByCode(draft.EntryType);
   if (!type) {
-    return [{ Code: 'ENTRY_TYPE_UNKNOWN', Message: `journal-entry type '${String(draft.EntryType)}' does not exist — its owning app must seed it first (issue #24)` }];
+    return [{ Code: 'ENTRY_TYPE_UNKNOWN', Message: `The journal entry type '${String(draft.EntryType)}' does not exist. The app that books this type must set it up first.` }];
   }
   if (!type.IsActive) {
-    return [{ Code: 'ENTRY_TYPE_INACTIVE', Message: `journal-entry type '${draft.EntryType}' is inactive` }];
+    return [{ Code: 'ENTRY_TYPE_INACTIVE', Message: `The journal entry type '${draft.EntryType}' is inactive. Ask an administrator to reactivate it.` }];
   }
   return [];
 }
@@ -146,9 +146,9 @@ export function validateAccounts(draft: JournalEntryDraft, lookups: PipelineLook
   draft.Lines.forEach((line, i) => {
     const account = lookups.accountByID(line.GLAccountID);
     if (!account) {
-      errors.push({ Code: 'ACCOUNT_UNKNOWN', LineIndex: i, Message: `GL account '${line.GLAccountID}' does not exist` });
+      errors.push({ Code: 'ACCOUNT_UNKNOWN', LineIndex: i, Message: `GL account ${line.GLAccountID} does not exist.` });
     } else if (!account.IsActive) {
-      errors.push({ Code: 'ACCOUNT_INACTIVE', LineIndex: i, Message: `GL account '${line.GLAccountID}' is inactive` });
+      errors.push({ Code: 'ACCOUNT_INACTIVE', LineIndex: i, Message: `GL account ${line.GLAccountID} is inactive. Reactivate it or book this line to an active account.` });
     }
   });
   return errors;
@@ -161,9 +161,9 @@ export function validateDimensions(draft: JournalEntryDraft, lookups: PipelineLo
   draft.Lines.forEach((line, i) => {
     for (const dim of line.Dimensions ?? []) {
       if (!lookups.dimensionExists(dim.DimensionID)) {
-        errors.push({ Code: 'DIMENSION_UNKNOWN', LineIndex: i, Message: `dimension '${dim.DimensionID}' does not exist` });
+        errors.push({ Code: 'DIMENSION_UNKNOWN', LineIndex: i, Message: `Dimension ${dim.DimensionID} does not exist.` });
       } else if (!lookups.dimensionValueBelongs(dim.DimensionID, dim.DimensionValueID)) {
-        errors.push({ Code: 'DIMENSION_VALUE_UNKNOWN', LineIndex: i, Message: `dimension value '${dim.DimensionValueID}' does not exist under dimension '${dim.DimensionID}'` });
+        errors.push({ Code: 'DIMENSION_VALUE_UNKNOWN', LineIndex: i, Message: `Dimension value ${dim.DimensionValueID} does not exist under dimension ${dim.DimensionID}.` });
       }
     }
   });
@@ -247,11 +247,11 @@ export function checkDraftBalance(normalized: NormalizedLine[]): JEValidationErr
   if (companies.size > 1) {
     errors.push({
       Code: 'MULTI_COMPANY_DRAFT',
-      Message: `draft spans ${companies.size} companies — a JournalEntry is single-company (plan D3); split the draft per company (one JE per company) before submitting.`,
+      Message: `The lines belong to ${companies.size} companies, but a journal entry can cover only one company, so split the draft per company before submitting.`,
     });
   }
   if (Math.abs(overall.debits - overall.credits) > BALANCE_TOLERANCE) {
-    errors.push({ Code: 'UNBALANCED', Message: `entry is unbalanced: Sum(Debits)=${overall.debits.toFixed(2)} != Sum(Credits)=${overall.credits.toFixed(2)}` });
+    errors.push({ Code: 'UNBALANCED', Message: `The entry does not balance: debits total ${overall.debits.toFixed(2)} and credits total ${overall.credits.toFixed(2)}. The two totals must be equal.` });
   }
   return errors;
 }

@@ -28,8 +28,6 @@
  * Exit code: 0 = all passed, 1 = test failures, 2 = bootstrap error.
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'path';
 import { randomUUID } from 'crypto';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
@@ -44,6 +42,7 @@ import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
   mjBizAppsAccountingIntercompanyAccountMatchEntity,
 } from '@mj-biz-apps/accounting-entities';
+import { LoadHarnessEnv } from '../harness-paths.mjs';
 
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const IAM_ENTITY = 'MJ_BizApps_Accounting: Intercompany Account Matches';
@@ -99,23 +98,23 @@ async function expectRefused(pool: sql.ConnectionPool, query: string, what: stri
 interface Ctx { pool: sql.ConnectionPool; user: UserInfo; currencyCode: string }
 
 async function bootstrap(): Promise<Ctx> {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   const host = process.env.DB_HOST;
   const database = process.env.DB_DATABASE;
   const user = process.env.DB_USERNAME;
   const password = process.env.DB_PASSWORD;
   const schema = process.env.MJ_CORE_SCHEMA || '__mj';
   if (!host || !database || !user || !password) {
-    throw new Error('Missing DB settings in .env (DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD). Run from the repo root.');
+    throw new Error('Missing DB settings in .env (DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD). Looked in the working directory, then the repo root and each folder above it.');
   }
   const pool = await new sql.ConnectionPool({
     server: host, port: Number(process.env.DB_PORT ?? 1433), user, password, database,
     options: { encrypt: false, trustServerCertificate: true },
   }).connect();
 
-  await setupSQLServerClient(new SQLServerProviderConfigData(pool, schema));
+  const sqlProvider = await setupSQLServerClient(new SQLServerProviderConfigData(pool, schema));
   await assertInvariantTriggers(pool);
-  await UserCache.Instance.Refresh(pool);
+  await UserCache.Instance.Refresh(sqlProvider);
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('No context user found in UserCache.');
 
@@ -280,8 +279,8 @@ async function main(): Promise<void> {
       const msg = m.LatestResult?.CompleteMessage ?? '';
       // The point of layer 2 is the MESSAGE. Asserting only !ok would pass even if the save had
       // failed for an unrelated reason, which is exactly how a check ends up green for nothing.
-      assert(/SourceCompanyID/i.test(msg) && /swap/i.test(msg),
-        `expected a readable orientation message naming SourceCompanyID and suggesting a swap, got: ${msg}`);
+      assert(/source company/i.test(msg) && /swap/i.test(msg),
+        `expected a readable orientation message naming the source company and suggesting a swap, got: ${msg}`);
       assert(!/50024/.test(msg), `expected the entity layer to refuse BEFORE the trigger, but got the raw SQL error: ${msg}`);
     });
 
@@ -314,7 +313,7 @@ async function main(): Promise<void> {
       const ok = await m.Save();
       assert(!ok, 'a duplicate Active pair with the same StartedAt saved');
       const msg = m.LatestResult?.CompleteMessage ?? '';
-      assert(/StartedAt/i.test(msg), `expected a message about the StartedAt collision, got: ${msg}`);
+      assert(/start date/i.test(msg), `expected a message about the start date collision, got: ${msg}`);
     });
 
     await test('I12 a SUPERSEDING pair with a later StartedAt IS accepted (overlap is legal)', async () => {

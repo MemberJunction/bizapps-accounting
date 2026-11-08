@@ -13,10 +13,15 @@
  *     code, the per-record lookup is ours — plan §2.1). Cardinality=Many roles throw
  *     ROLE_NOT_SINGULAR rather than returning an arbitrary account (BA-D34).
  *   - ResolveLinkedAccounts(...) — every covering Active link for a Many role (BankAccount).
+ *   - ResolveFirstLinkedAccount(records, role, ...) — the first record in a caller-ordered walk
+ *     with a link, reloading the cache once when none has one (bc-aidp-next-golive#438).
+ *   - RefreshAfterLinkMiss() — the throttled reload behind it, for callers that walk themselves.
  *   - ResolveIntercompanyAccounts(sourceCompanyId, targetCompanyId, asOfDate) — the Due To/Due From
  *     pair for an ordered company pair, used when one company collects cash settling another's
  *     line (BA-D26). Separate from the role/link path on purpose: an intercompany account is
  *     per-company-PAIR, which a per-record role lookup cannot express.
+ *   - LegalEntityFor(companyId) — the company whose books a company uses: a Division, Department
+ *     or Branch walks up its parents to the first company of any other type (bc-aidp-next-golive#313).
  *   - CreatePipelineLookups() — the cache-backed lookups the pure draft pipeline consumes.
  *
  * Browser-safe: deps are @memberjunction/core + global + the app's Entities package ONLY.
@@ -42,11 +47,12 @@ import type {
   mjBizAppsAccountingJournalEntryTypeEntity,
 } from '@mj-biz-apps/accounting-entities';
 import type { PipelineLookups } from './pipeline.js';
+import { DEFAULT_FISCAL_YEAR_START, type FiscalYearStart } from './fiscal-year.js';
 
 const uuidKey = (id: string | null | undefined): string => (id ?? '').trim().toLowerCase();
 
 /** Typed resolution failure. Distinct from JE draft `Errors[]` — this is a cache lookup, not a write. */
-export type AccountingResolutionErrorCode = 'ROLE_NOT_SINGULAR';
+export type AccountingResolutionErrorCode = 'ROLE_NOT_SINGULAR' | 'LEGAL_ENTITY_UNRESOLVED';
 
 export class AccountingResolutionError extends Error {
   readonly Code: AccountingResolutionErrorCode;
@@ -61,12 +67,111 @@ export function isAccountingResolutionError(e: unknown): e is AccountingResoluti
   return e instanceof AccountingResolutionError;
 }
 
+/**
+ * The entity types that keep no books of their own. A company of one of these types uses the books
+ * of its legal entity, found by walking `ParentAccountingCompanyID` up to the first company of any
+ * other type. Every other type (LegalEntity, Subsidiary, Partner, JointVenture, CostCenter, Other)
+ * is its own legal entity, whatever its parent.
+ */
+export const PARENT_BOOKS_ENTITY_TYPES: ReadonlyArray<mjBizAppsAccountingAccountingCompanyProfileEntity['EntityType']> = [
+  'Division',
+  'Department',
+  'Branch',
+];
+
+/** True when a company of this entity type uses its legal entity's books rather than its own. */
+export function UsesParentBooks(entityType: string | null | undefined): boolean {
+  return PARENT_BOOKS_ENTITY_TYPES.some(t => t === entityType);
+}
+
+/** The two profile fields the legal-entity walk reads. */
+export interface LegalEntityProfile {
+  ID: string;
+  EntityType: string;
+  ParentAccountingCompanyID: string | null;
+}
+
+/**
+ * The legal entity of `companyId`: the company itself unless its profile's type keeps no books
+ * (`UsesParentBooks`), in which case its parent's legal entity. Pure and exported for unit tests;
+ * `AccountingEngineBase.LegalEntityFor` feeds it the cached profiles.
+ *
+ * A company with no profile is its own legal entity. That is the state of every company before
+ * its profile is filled in, and it books exactly as it did before this rule existed.
+ *
+ * Throws `LEGAL_ENTITY_UNRESOLVED`, naming the company, when a Division, Department or Branch has
+ * no parent, its parent has no profile, or the walk loops. Each means the company setup is
+ * incomplete, and guessing a legal entity would post to the wrong books with nothing to show it.
+ */
+export function ResolveLegalEntity(
+  companyId: string,
+  profileById: (id: string) => LegalEntityProfile | undefined,
+): string {
+  const visited = new Set<string>();
+  let currentId = companyId;
+  let profile = profileById(currentId);
+  if (!profile) return companyId;
+  while (UsesParentBooks(profile.EntityType)) {
+    visited.add(uuidKey(currentId));
+    const parentId = profile.ParentAccountingCompanyID;
+    if (!parentId) {
+      throw legalEntityError(companyId, `${currentId} is a ${profile.EntityType} with no parent company`);
+    }
+    if (visited.has(uuidKey(parentId))) {
+      throw legalEntityError(companyId, `its parent companies loop back to ${parentId}`);
+    }
+    const parent = profileById(parentId);
+    if (!parent) {
+      throw legalEntityError(companyId, `its parent company ${parentId} has no Accounting Company Profile`);
+    }
+    currentId = parent.ID;
+    profile = parent;
+  }
+  return currentId;
+}
+
+function legalEntityError(companyId: string, why: string): AccountingResolutionError {
+  return new AccountingResolutionError(
+    'LEGAL_ENTITY_UNRESOLVED',
+    `Cannot find the legal entity of company ${companyId}: ${why}. A Division, Department or Branch ` +
+      `uses the books of the first company above it that is not one of those types. Set the ` +
+      `company's Parent and Entity Type on its Accounting Company Profile.`,
+  );
+}
+
 /** A resolved link: the winning GLAccountLink + its ordered dimension requirements. */
 export interface ResolvedLinkedAccount {
   Link: mjBizAppsAccountingGLAccountLinkEntity;
   /** The link's GLAccountLinkDimension rows, ordered by Sequence — the dimensions a JE line built from this link must carry (values come from caller context — OQ-I). */
   Dimensions: mjBizAppsAccountingGLAccountLinkDimensionEntity[];
 }
+
+/** One record in a link walk: the polymorphic EntityID + RecordID a GLAccountLink points at. */
+export interface LinkedRecordRef {
+  EntityID: string;
+  RecordID: string;
+}
+
+/** The first record in a walk that resolved, and what it resolved to. */
+export interface FirstLinkedAccount extends ResolvedLinkedAccount {
+  Record: LinkedRecordRef;
+}
+
+/** Options for `ResolveFirstLinkedAccount`. */
+export interface ResolveFirstLinkedAccountOptions {
+  /** Scope to links whose GL account belongs to this company (see `ResolveLinkedAccount`). */
+  ForCompanyID?: string;
+  /** Passed to the reload on a miss; required on the server. */
+  ContextUser?: UserInfo;
+  Provider?: IMetadataProvider;
+}
+
+/**
+ * The shortest gap between two reloads triggered by a miss. A link that is really missing makes
+ * every booking that needs it miss; without a floor, a nightly run over many such lines would
+ * reload the whole cache once per line.
+ */
+export const LINK_MISS_REFRESH_INTERVAL_MS = 30_000;
 
 /** One dimension to stamp on an intercompany leg. `DimensionValueID` null = take it from context. */
 export interface IntercompanyDimensionRequirement {
@@ -162,6 +267,8 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
   private _currencies: mjBizAppsAccountingCurrencyEntity[] = [];
   private _intercompanyMatches: mjBizAppsAccountingIntercompanyAccountMatchEntity[] = [];
   private _intercompanyMatchDimensions: mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity[] = [];
+  private _linkMissRefresh: Promise<void> | null = null;
+  private _lastLinkMissRefreshAt = 0;
 
   public static get Instance(): AccountingEngineBase {
     return super.getInstance<AccountingEngineBase>();
@@ -245,6 +352,45 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
     return this.GLAccountRoles.find(r => r.Name.trim().toLowerCase() === key);
   }
 
+  /**
+   * The company's fiscal-year start from its Accounting Company Profile, or 1 January when it has
+   * none. Feed it to `FiscalYearOf` / `IsInFiscalYearToDate` (./fiscal-year.ts).
+   */
+  public FiscalYearStartFor(companyId: string | null | undefined): FiscalYearStart {
+    const key = uuidKey(companyId);
+    const profile = key ? this.CompanyProfiles.find(p => uuidKey(p.ID) === key) : undefined;
+    return {
+      Month: profile?.FiscalYearStartMonth ?? DEFAULT_FISCAL_YEAR_START.Month,
+      Day: profile?.FiscalYearStartDay ?? DEFAULT_FISCAL_YEAR_START.Day,
+    };
+  }
+
+  /**
+   * The company's books-closed-through date from its Accounting Company Profile, or null when it has
+   * none or nothing is closed (bc-aidp-next-golive#316). A DATE value: read its day with
+   * `ToCalendarDay`, then test it with `IsInClosedBooks` (./books-closed.ts).
+   */
+  public BooksClosedThroughFor(companyId: string | null | undefined): Date | null {
+    const key = uuidKey(companyId);
+    const profile = key ? this.CompanyProfiles.find(p => uuidKey(p.ID) === key) : undefined;
+    return profile?.BooksClosedThroughDate ?? null;
+  }
+
+  // ─── the legal-entity walk (bc-aidp-next-golive#313) ─────────────────────────
+
+  /**
+   * The company whose books `companyId` uses — see `ResolveLegalEntity` for the rule and the
+   * failures it throws. Callers compare legal entities, not companies, wherever the question is
+   * "are these the same books?": whether a payment needs Due To / Due From, and which company a
+   * GL account must belong to.
+   */
+  public LegalEntityFor(companyId: string): string {
+    return ResolveLegalEntity(companyId, id => {
+      const key = uuidKey(id);
+      return key ? this.CompanyProfiles.find(p => uuidKey(p.ID) === key) : undefined;
+    });
+  }
+
   // ─── the link primitive (plan §2.1) ────────────────────────────────────────
 
   /**
@@ -257,7 +403,7 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
    * arbitrary account. A guessed bank still balances — the same invisibility BA-D27/D28 exist
    * to prevent. Callers that need the set use `ResolveLinkedAccounts`.
    *
-   * `forCompanyID` (optional — Amith 2026-07-28/29): scope resolution to links whose GL account
+   * `forCompanyID` (optional): scope resolution to links whose GL account
    * belongs to that company. A record (e.g. a shared product) can carry one link per company for
    * the same role; a multi-company caller passes the booking company to get ITS account. The
    * company is derived through the link's GLAccount FK (both tables live in this engine's cache,
@@ -270,7 +416,7 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
     if (roleRow.Cardinality === 'Many') {
       throw new AccountingResolutionError(
         'ROLE_NOT_SINGULAR',
-        `Role '${roleRow.Name}' has Cardinality=Many. ResolveLinkedAccount refuses it rather than returning an arbitrary account. Use ResolveLinkedAccounts.`,
+        `The account role '${roleRow.Name}' can link to several accounts, so no single account can be picked for it. The calling code must use ResolveLinkedAccounts.`,
       );
     }
     const candidates = this.linkCandidates(entityId, recordId, roleRow.ID, forCompanyID);
@@ -304,6 +450,69 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
           return i === -1 ? [] : [i];
         })();
     return indexes.map(i => this.decorateLink(candidates[i]));
+  }
+
+  /**
+   * The first record in `records` with a link for `role`, in the caller's order (the walk order is
+   * the caller's code, as for `ResolveLinkedAccount`). When no record resolves, the cache is
+   * reloaded once and the walk retried before returning null (bc-aidp-next-golive#438).
+   *
+   * Why: the cache is loaded once per process and updated only by saves made through the
+   * application. A link written straight to the database stays invisible until the server restarts,
+   * so a booking refuses with "not linked" although the link exists. A miss of the whole walk is
+   * rare and already fatal to the booking, so the reload costs nothing on the normal path. A miss on
+   * one record is not a miss of the walk (product → category → company falls through by design),
+   * which is why the retry lives here and not in the per-record `ResolveLinkedAccount`.
+   *
+   * The reload is throttled (`RefreshAfterLinkMiss`), so a retry within the interval of the last
+   * reload returns null without reading again: that reload already saw the database.
+   */
+  public async ResolveFirstLinkedAccount(
+    records: LinkedRecordRef[],
+    role: string,
+    asOfDate: Date,
+    options: ResolveFirstLinkedAccountOptions = {},
+  ): Promise<FirstLinkedAccount | null> {
+    const first = this.firstLinkedAccount(records, role, asOfDate, options.ForCompanyID);
+    if (first || records.length === 0) return first;
+    const reloaded = await this.RefreshAfterLinkMiss(options.ContextUser, options.Provider);
+    return reloaded ? this.firstLinkedAccount(records, role, asOfDate, options.ForCompanyID) : null;
+  }
+
+  /**
+   * Reload the cache after a caller's walk found no link, so links written outside the application
+   * are picked up. Returns true when a reload ran (or one already running finished), false when the
+   * last reload finished less than `LINK_MISS_REFRESH_INTERVAL_MS` ago and there is nothing new to
+   * read. Concurrent callers share one reload. For callers that walk with `ResolveLinkedAccount`
+   * themselves: on a miss, call this and walk again only when it returns true.
+   */
+  public async RefreshAfterLinkMiss(contextUser?: UserInfo, provider?: IMetadataProvider): Promise<boolean> {
+    if (this._linkMissRefresh) {
+      await this._linkMissRefresh;
+      return true;
+    }
+    if (Date.now() - this._lastLinkMissRefreshAt < LINK_MISS_REFRESH_INTERVAL_MS) return false;
+    this._linkMissRefresh = this.Config(true, contextUser, provider).then(() => undefined);
+    try {
+      await this._linkMissRefresh;
+      this._lastLinkMissRefreshAt = Date.now();
+      return true;
+    } finally {
+      this._linkMissRefresh = null;
+    }
+  }
+
+  private firstLinkedAccount(
+    records: LinkedRecordRef[],
+    role: string,
+    asOfDate: Date,
+    forCompanyID?: string,
+  ): FirstLinkedAccount | null {
+    for (const record of records) {
+      const hit = this.ResolveLinkedAccount(record.EntityID, record.RecordID, role, asOfDate, forCompanyID);
+      if (hit) return { ...hit, Record: record };
+    }
+    return null;
   }
 
   private resolveRole(role: string): mjBizAppsAccountingGLAccountRoleEntity | undefined {

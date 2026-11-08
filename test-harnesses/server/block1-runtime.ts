@@ -15,12 +15,10 @@
  *       line immutability on a locked JE (50006) · reversal typing (50012).
  *   ENTITY: unbalanced encapsulated Save refused (double-entry validation), balanced saves.
  *
- * Run from the INSTANCE WORKTREE ROOT: npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block1-runtime.ts
+ * Run from the repo root: npx tsx test-harnesses/server/block1-runtime.ts
  * Exit: 0 all passed · 1 failures · 2 bootstrap error.
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
@@ -36,6 +34,7 @@ import type {
 } from '@mj-biz-apps/accounting-entities';
 import { finishAndExit } from './harness-exit.js';
 import { assertInvariantTriggers } from './trigger-preflight.js';
+import { LoadHarnessEnv } from '../harness-paths.mjs';
 
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
@@ -103,17 +102,17 @@ async function createCompany(user: UserInfo, currencyCode: string, label: string
 }
 
 async function bootstrap(): Promise<Ctx> {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   const { DB_HOST: host, DB_DATABASE: database, DB_USERNAME: user, DB_PASSWORD: password } = process.env;
-  if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env (run from the instance worktree root).');
+  if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env (looked in the working directory, then the repo root and each folder above it).');
   const pool = await new sql.ConnectionPool({ server: host, port: Number(process.env.DB_PORT ?? 1433), user, password, database, options: { encrypt: false, trustServerCertificate: true } }).connect();
   // db_owner pool for teardown only (DISABLE TRIGGER + locked-row deletes the app user can't do).
   const { CODEGEN_DB_USERNAME: cgUser, CODEGEN_DB_PASSWORD: cgPassword } = process.env;
   if (!cgUser || !cgPassword) throw new Error('Missing CODEGEN_DB_USERNAME/PASSWORD in .env (needed for the db_owner teardown pool).');
   const teardownPool = await new sql.ConnectionPool({ server: host, port: Number(process.env.DB_PORT ?? 1433), user: cgUser, password: cgPassword, database, options: { encrypt: false, trustServerCertificate: true } }).connect();
-  await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
+  const sqlProvider = await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
   await assertInvariantTriggers(pool); // pre-flight: fail fast if any invariant trigger is missing/disabled
-  await UserCache.Instance.Refresh(pool);
+  await UserCache.Instance.Refresh(sqlProvider);
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('No context user found.');
   const rv = new RunView();
@@ -189,11 +188,11 @@ async function setStatus(ctx: Ctx, jeId: string, status: JEStatus): Promise<bool
 interface RawBatch { batchId: string; memberId: string; summaryId: string }
 
 /**
- * A batch past approval, built by raw SQL (#183): one locked member entry and a locked summary entry,
- * approved, then moved on to `status`. Raw SQL is the path the batch triggers exist to police, so this
+ * A batch built by raw SQL (#183): one locked member entry and a locked summary entry, left Pending or
+ * approved and then moved on to `status`. Raw SQL is the path the batch triggers exist to police, so this
  * sets up exactly what they see. Rows are company A's, so the teardown removes them.
  */
-async function rawBatchAt(ctx: Ctx, status: 'Approved' | 'Failed'): Promise<RawBatch> {
+async function rawBatchAt(ctx: Ctx, status: 'Pending' | 'Approved' | 'Failed'): Promise<RawBatch> {
   const { pool, companyA: co, user } = ctx;
   const summaryTypeId = await RequireJournalEntryTypeID('JournalEntryBatchSummary', user, Metadata.Provider);
   const batch: RawBatch = { batchId: randomUUID(), memberId: randomUUID(), summaryId: randomUUID() };
@@ -211,11 +210,13 @@ async function rawBatchAt(ctx: Ctx, status: 'Approved' | 'Failed'): Promise<RawB
     INSERT INTO ${SCHEMA}.JournalEntryLine (ID, JournalEntryID, LineNumber, GLAccountID, CreditAmount)
       VALUES (NEWID(), '${memberId}', 2, '${co.revGL}', 100), (NEWID(), '${summaryId}', 2, '${co.revGL}', 100);
     UPDATE ${SCHEMA}.JournalEntry SET Status='Batched', JournalEntryBatchID='${batchId}' WHERE ID IN ('${memberId}', '${summaryId}');
-    UPDATE ${SCHEMA}.JournalEntryBatch SET SummaryJournalEntryID='${summaryId}' WHERE ID='${batchId}';
+    UPDATE ${SCHEMA}.JournalEntryBatch SET SummaryJournalEntryID='${summaryId}' WHERE ID='${batchId}';`);
+  if (status === 'Pending') return batch;
+  await pool.request().query(`
     UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Approved', ApprovedAt=SYSDATETIMEOFFSET(), ApprovedByUserID='${user.ID}' WHERE ID='${batchId}';`);
   if (status === 'Failed') {
     await pool.request().query(`
-      UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Sent', SentAt=SYSDATETIMEOFFSET() WHERE ID='${batchId}';
+      UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Sent', SentAt=SYSDATETIMEOFFSET(), SendAttemptCount=SendAttemptCount + 1 WHERE ID='${batchId}';
       UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Failed', ErrorMessage='ERP timeout' WHERE ID='${batchId}';`);
   }
   return batch;
@@ -310,7 +311,7 @@ async function main(): Promise<void> {
     const impostor = await makeJE(ctx, companyA, 45, 45); // typed Manual, not Reversal
     await expectThrow(
       () => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET ReversesJournalEntryID='${orig.ID}' WHERE ID='${impostor.ID}'`),
-      'must be typed with JournalEntryType',
+      "Code = 'Reversal'",
     );
   });
 
@@ -383,14 +384,85 @@ async function main(): Promise<void> {
       'status change refused');
   });
 
+  await test('INV batch status — raw cancel of a Pending batch that keeps the summary pointer → rejected (50031, #213)', async () => {
+    const b = await rawBatchAt(ctx, 'Pending');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Cancelled' WHERE ID='${b.batchId}'`), 'status change refused');
+  });
+
+  await test('INV batch status — a Pending batch cancelled in Cancel()\'s order (pointer cleared, then release and drop) → allowed (#213)', async () => {
+    const b = await rawBatchAt(ctx, 'Pending');
+    await pool.request().query(`
+      UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Cancelled', SummaryJournalEntryID=NULL, CancelledAt=SYSDATETIMEOFFSET(), CancelledByUserID='${ctx.user.ID}' WHERE ID='${b.batchId}';
+      UPDATE ${SCHEMA}.JournalEntry SET Status='Pending', JournalEntryBatchID=NULL WHERE ID IN ('${b.memberId}', '${b.summaryId}');
+      DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID='${b.summaryId}';
+      DELETE FROM ${SCHEMA}.JournalEntry WHERE ID='${b.summaryId}';`);
+    const res = await pool.request().query(`SELECT Status FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${b.batchId}'`);
+    const row = res.recordset[0] as { Status: string } | undefined;
+    assert(row?.Status === 'Cancelled', `batch should be Cancelled, got ${row?.Status}`);
+  });
+
   await test('INV batch status — raw regression of a Failed batch to Pending → rejected (50031)', async () => {
     const b = await rawBatchAt(ctx, 'Failed');
     await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Pending' WHERE ID='${b.batchId}'`), 'status change refused');
   });
 
-  await test('INV batch audit — raw clear of a Failed batch\'s SentAt, or an attestation stamped without cancelling → rejected (50032)', async () => {
+  // ─── INV: Posted and Failed are the outcomes of a send (#221) ──
+  for (const from of ['Pending', 'Approved'] as const) {
+    await test(`INV batch status — raw ${from} → Posted and ${from} → Failed, never sent → rejected (50031)`, async () => {
+      const b = await rawBatchAt(ctx, from);
+      await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Posted', PostedAt=SYSDATETIMEOFFSET() WHERE ID='${b.batchId}'`), 'status change refused');
+      await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Failed', ErrorMessage='x' WHERE ID='${b.batchId}'`), 'status change refused');
+    });
+  }
+
+  await test('INV batch status — raw Failed → Posted, without a retry → rejected (50031)', async () => {
     const b = await rawBatchAt(ctx, 'Failed');
-    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET SentAt=NULL WHERE ID='${b.batchId}'`), 'audit refused');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Posted', PostedAt=SYSDATETIMEOFFSET() WHERE ID='${b.batchId}'`), 'status change refused');
+  });
+
+  await test('INV batch status — raw Pending → Sent, skipping approval → rejected (50030)', async () => {
+    const b = await rawBatchAt(ctx, 'Pending');
+    await expectThrow(() => pool.request().query(
+      `UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Sent', SentAt=SYSDATETIMEOFFSET(), SendAttemptCount=SendAttemptCount + 1 WHERE ID='${b.batchId}'`),
+      'send refused');
+  });
+
+  await test('INV batch status — allowed: Approved → Sent → Posted', async () => {
+    const b = await rawBatchAt(ctx, 'Approved');
+    await pool.request().query(`
+      UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Sent', SentAt=SYSDATETIMEOFFSET(), SendAttemptCount=SendAttemptCount + 1 WHERE ID='${b.batchId}';
+      UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Posted', PostedAt=SYSDATETIMEOFFSET() WHERE ID='${b.batchId}';`);
+    const res = await pool.request().query(`SELECT Status FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${b.batchId}'`);
+    assert((res.recordset[0] as { Status: string } | undefined)?.Status === 'Posted', 'batch should be Posted');
+  });
+
+  // ─── INV: SealMismatchDetectedAt is set once, by a retry's Sent → Posted, and frozen after (#216) ──
+  await test('INV seal-mismatch flag — raw set on a Failed batch, or on a first send\'s Sent → Posted → rejected (50034)', async () => {
+    const failed = await rawBatchAt(ctx, 'Failed');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET SealMismatchDetectedAt=SYSDATETIMEOFFSET() WHERE ID='${failed.batchId}'`), 'SealMismatchDetectedAt refused');
+    const first = await rawBatchAt(ctx, 'Approved');
+    await pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Sent', SentAt=SYSDATETIMEOFFSET(), SendAttemptCount=SendAttemptCount + 1 WHERE ID='${first.batchId}'`);
+    await expectThrow(() => pool.request().query(
+      `UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Posted', PostedAt=SYSDATETIMEOFFSET(), SealMismatchDetectedAt=SYSDATETIMEOFFSET() WHERE ID='${first.batchId}'`),
+      'SealMismatchDetectedAt refused');
+  });
+
+  await test('INV seal-mismatch flag — allowed on a retry\'s Sent → Posted; a later change or clear → rejected (50034)', async () => {
+    const b = await rawBatchAt(ctx, 'Failed');
+    await pool.request().query(`
+      UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Sent', SentAt=SYSDATETIMEOFFSET(), SendAttemptCount=SendAttemptCount + 1 WHERE ID='${b.batchId}';
+      UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Posted', PostedAt=SYSDATETIMEOFFSET(), ErrorMessage=NULL, SealMismatchDetectedAt=SYSDATETIMEOFFSET() WHERE ID='${b.batchId}';`);
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET SealMismatchDetectedAt=DATEADD(SECOND, 1, SealMismatchDetectedAt) WHERE ID='${b.batchId}'`), 'SealMismatchDetectedAt refused');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET SealMismatchDetectedAt=NULL WHERE ID='${b.batchId}'`), 'SealMismatchDetectedAt refused');
+    const res = await pool.request().query(`SELECT Status, SealMismatchDetectedAt FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${b.batchId}'`);
+    const row = res.recordset[0] as { Status: string; SealMismatchDetectedAt: Date | null } | undefined;
+    assert(row?.Status === 'Posted' && row.SealMismatchDetectedAt !== null, `batch should be Posted and flagged, got ${row?.Status}/${String(row?.SealMismatchDetectedAt)}`);
+  });
+
+  await test('INV batch audit — raw clear of a Failed batch\'s SentAt (50030), or an attestation stamped without cancelling (50032) → rejected', async () => {
+    const b = await rawBatchAt(ctx, 'Failed');
+    // trg_JournalEntryBatch_SendOnce fires first, so its send-stamp freeze refuses this before 50032 runs.
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET SentAt=NULL WHERE ID='${b.batchId}'`), 'change only when the batch is sent');
     await expectThrow(() => pool.request().query(
       `UPDATE ${SCHEMA}.JournalEntryBatch SET ERPNotPostedConfirmedAt=SYSDATETIMEOFFSET(), ERPNotPostedConfirmedByUserID='${ctx.user.ID}', ERPNotPostedBasis='ERPLookup' WHERE ID='${b.batchId}'`),
       'audit refused');
@@ -398,7 +470,7 @@ async function main(): Promise<void> {
 
   await test('INV batch status — raw Sent → Cancelled → rejected (50031); the members stay locked (50004)', async () => {
     const b = await rawBatchAt(ctx, 'Failed');
-    await pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Sent' WHERE ID='${b.batchId}'`);
+    await pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Sent', SendAttemptCount=SendAttemptCount + 1 WHERE ID='${b.batchId}'`);
     await expectThrow(() => pool.request().query(
       `UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Cancelled', SummaryJournalEntryID=NULL, CancelReason='x', CancelledAt=SYSDATETIMEOFFSET(), CancelledByUserID='${ctx.user.ID}',
          ERPNotPostedConfirmedAt=SYSDATETIMEOFFSET(), ERPNotPostedConfirmedByUserID='${ctx.user.ID}', ERPNotPostedBasis='UserAttested' WHERE ID='${b.batchId}'`),
@@ -431,6 +503,9 @@ async function main(): Promise<void> {
   try {
     for (const t of toggledTables) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
     for (const co of [companyA, companyB]) {
+      // A batch's summary pointer references one of the company's JEs: clear it first, or the JE
+      // delete fails on FK_JournalEntryBatch_SummaryJE and the batch and company deletes fail after it.
+      await exec(`UPDATE ${SCHEMA}.JournalEntryBatch SET SummaryJournalEntryID=NULL WHERE CompanyID='${co.id}'`);
       await exec(`DELETE l FROM ${SCHEMA}.JournalEntryLine l JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID WHERE j.CompanyID='${co.id}'`);
       await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${co.id}'`);
       await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${co.id}'`);

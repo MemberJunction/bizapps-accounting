@@ -144,7 +144,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
       const md = new Metadata();
       const entry = await md.GetEntityObject<JournalEntryEntity>(JE_ENTITY, this.ProviderToUse.CurrentUser);
       if (!(await entry.Load(id))) {
-        this.ActionMessage = 'That journal entry could not be loaded into the workspace.';
+        this.ActionMessage = 'That journal entry could not be opened. It may have been deleted, or you may not have access to it.';
         this.ActionIsError = true;
         this.cdr.markForCheck();
         return;
@@ -229,7 +229,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   /** "Keep as draft tab" — the tab already holds the state; this makes that explicit + clean. */
   public KeepAsDraft(): void {
     if (this.tabs.ActiveId) this.tabs.MarkClean(this.tabs.ActiveId);
-    this.ActionMessage = 'Kept as a draft tab — it stays for this session (drafts are not saved to the database in v1).';
+    this.ActionMessage = 'Kept as a draft tab. Drafts last only for this browser session and are not saved, so closing the app discards it.';
     this.ActionIsError = false;
     this.cdr.markForCheck();
   }
@@ -341,7 +341,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   }
 
   /** The chosen account's full "Code · Name" — bound to the select's title so the full name shows on
-   *  hover even when the fixed-width column truncates it (Marcelo 2026-07-21). */
+   *  hover even when the fixed-width column truncates it. */
   public AccountLabel(id: string | null): string {
     if (!id) return '';
     return this.AccountOptions.find((a) => UUIDsEqual(a.ID, id))?.Label ?? '';
@@ -379,7 +379,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   }
 
   /**
-   * Staleness self-heal (Marcelo 2026-07-30): the picker reads the client engine cache, but a
+   * Staleness self-heal: the picker reads the client engine cache, but a
    * company's chart can be created SERVER-side (seed hooks, another user, the accounts editor in
    * another tab) — the cache never hears about those rows. An empty cached chart for a picked
    * company is therefore suspect: force ONE engine refresh for it per session before trusting
@@ -556,7 +556,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   }
 
   /**
-   * The active tab's caption, derived from the memo (Marcelo 2026-07-17: the memo is the human label
+   * The active tab's caption, derived from the memo (the memo is the human label
    * people scan by). The memo is the JE's free-text meaning — the `Description` field on the draft
    * (there is no `Memo` column on the Journal Entry entity). When it is empty we fall back to the
    * created entry NUMBER, then to "New JE" for a brand-new untyped draft.
@@ -644,7 +644,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
 
       if (!result.Success) {
         this.applyEngineErrors(result.Errors ?? []);
-        this.setError('The ledger rejected this entry — see the errors above.');
+        this.setError('The entry was not created. Fix the problems listed above, then submit again.');
         return;
       }
 
