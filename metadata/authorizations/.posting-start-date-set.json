@@ -1,0 +1,14 @@
+[
+  {
+    "fields": {
+      "Name": "MJ.BizApps.Accounting.PostingStartDate.Set",
+      "ParentID": null,
+      "IsActive": true,
+      "UseAuditLog": true,
+      "Description": "Set, move or clear a company's PostingStartDate on its Accounting Company Profile: moving it earlier puts the journal entries dated before it into batches, moving it later holds them back. Held by the Finance role. Every change is kept in the profile's record-change history."
+    },
+    "primaryKey": {
+      "ID": "039A20CB-D70D-4C4C-8212-68B8FE12DA33"
+    }
+  }
+]

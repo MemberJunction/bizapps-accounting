@@ -100,6 +100,17 @@ describe('JournalEntryBatchEntityServer — approved-content seal (#183)', () =>
     return hash;
   };
 
+  it('reads the dimensions of 1,200 summary lines in 3 reads, so none is left out of the seal (#488)', async () => {
+    lines = Array.from({ length: 1200 }, (_, i) => ({
+      ID: `30000000-0000-4000-8000-${(i + 1).toString(16).padStart(12, '0')}`, GLAccountID: 'GL-AR', DebitAmount: 1, CreditAmount: null,
+    }));
+    const runView = vi.fn(async (params: { EntityName: string }) => ({ Success: true, Results: params.EntityName === JEL_ENTITY ? lines : tags }));
+    Object.defineProperty(batch, 'ProviderToUse', { configurable: true, get: () => ({ RunView: runView }) });
+    asSaved('Approved');
+    await batch.ComputeApprovedContentHash();
+    expect(runView.mock.calls.filter(([params]) => params.EntityName !== JEL_ENTITY)).toHaveLength(3);
+  });
+
   it('an approved batch whose content is unchanged passes', async () => {
     await seal('Failed');
     expect(await batch.CheckControlTotalCoherence()).toEqual([]);

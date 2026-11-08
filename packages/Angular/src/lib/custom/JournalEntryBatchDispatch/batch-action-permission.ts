@@ -89,13 +89,20 @@ export function IsErpAcceptedFailedBatch(batch: ErpAcceptedBatch): boolean {
 }
 
 /**
- * Whether the server would let this user archive the batch (#448): on a Pending batch only the
- * company's approver (the builder may cancel it, not archive it); past approval the company's approver
- * or the user who approved it. The batch-operator Authorization is checked separately. The server check
- * stays the authority; this only decides whether the Archive button shows.
+ * Whether the server would let this user archive the batch (#448, golive #325): on a Pending batch
+ * the company's approver or a holder of the batch-operator Authorization (the Finance role; a
+ * builder without it may cancel the batch, not archive it); past approval the company's approver or
+ * the user who approved it. The server check stays the authority; this only decides whether the
+ * Archive button shows.
  */
-export function MayArchiveBatch(batch: ArchiveBatch, userId: string | undefined, approvers: CompanyApprovers): boolean {
+export function MayArchiveBatch(
+  batch: ArchiveBatch,
+  userId: string | undefined,
+  approvers: CompanyApprovers,
+  mayOperateBatches = false,
+): boolean {
+  if (!userId) return false;
   return batch.Status === 'Pending'
-    ? isOneOf(userId, [approverOf(batch.CompanyID, approvers)])
+    ? Boolean(mayOperateBatches) || isOneOf(userId, [approverOf(batch.CompanyID, approvers)])
     : MayCancelApprovedBatch(batch, userId, approvers);
 }

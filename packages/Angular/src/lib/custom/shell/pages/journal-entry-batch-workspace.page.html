@@ -233,6 +233,24 @@
         dated before {{ BeforePostingStartCount === 1 ? 'its' : 'their' }} company's posting start date and held back. They stay Pending and are not in this batch.
       </div>
     }
+    @if (AfterPostingDateCount > 0) {
+      <!-- golive #448: an entry dated after the posting date would reach the ERP before it happened, so it waits. -->
+      <div class="bw-warn bw-held-back" role="status">
+        <div>
+          <i class="fa-solid fa-calendar-plus" aria-hidden="true"></i>
+          <b>&nbsp;{{ AfterPostingDateCount }} entr{{ AfterPostingDateCount === 1 ? 'y is' : 'ies are' }}&nbsp;</b>
+          dated after the posting date and held back. They stay Pending for a batch posted on or after their own date.
+        </div>
+        <details>
+          <summary>Show {{ AfterPostingDateEntries.length < AfterPostingDateCount ? 'the oldest ' + AfterPostingDateEntries.length : (AfterPostingDateCount === 1 ? 'it' : 'them') }}</summary>
+          <ul class="bw-held-back-list">
+            @for (e of AfterPostingDateEntries; track e.ID) {
+              <li><b>{{ e.EntryNumber }}</b>@if (e.Description) { · {{ e.Description }} } — {{ e.Reason }}</li>
+            }
+          </ul>
+        </details>
+      </div>
+    }
 
     @if (PreviewLoaded) {
     <div class="bw-sumstrip">
@@ -282,6 +300,7 @@
               </th>
               <th>Entry №</th>
               <th>Date</th>
+              <th>Source</th>
               <th>Memo</th>
               <th>Company</th>
               <th class="bw-num">Amount</th>
@@ -303,6 +322,13 @@
                 <td class="bw-mono">{{ e.EntryNumber }}</td>
                 <!-- DATE column (no zone) — render UTC or it shifts a day for any user west of UTC. -->
                 <td>{{ e.EffectiveDate | date: 'yyyy-MM-dd' : 'UTC' }}</td>
+                <td class="bw-source">
+                  @if (SourceOf(e.ID); as src) {
+                    <button type="button" class="bw-source-link" (click)="OpenSource(src)" [title]="'Open the ' + src.EntityLabel + ' record that created this entry'">{{ SourceText(src) }}</button>
+                  } @else if (!e.LinkedEntity) {
+                    <span class="bw-source-none" title="Manual entry — no source record">Manual</span>
+                  }
+                </td>
                 <td>{{ e.Description || '—' }}</td>
                 <td>{{ CompanyName(e.CompanyID) }}</td>
                 <td class="bw-num">{{ e.Amount | currency }}</td>
@@ -310,7 +336,7 @@
               </tr>
             } @empty {
               <tr>
-                <td colspan="7" class="bw-empty">Nothing matches these criteria.</td>
+                <td colspan="8" class="bw-empty">Nothing matches these criteria.</td>
               </tr>
             }
           </tbody>
