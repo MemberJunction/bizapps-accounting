@@ -30,7 +30,21 @@
 
 import { createHash } from 'node:crypto';
 
-import { BaseEntity, DatabaseProviderBase, EntitySaveOptions, IMetadataProvider, IRunViewProvider, LogError, LogStatus, UserInfo, ValidationErrorInfo, ValidationResult } from '@memberjunction/core';
+import {
+  BaseEntity,
+  DatabaseProviderBase,
+  EntityLifecyclePolicyEngine,
+  EntitySaveOptions,
+  type IEntityLifecyclePolicy,
+  type IStateTransitionRule,
+  IMetadataProvider,
+  IRunViewProvider,
+  LogError,
+  LogStatus,
+  UserInfo,
+  ValidationErrorInfo,
+  ValidationResult,
+} from '@memberjunction/core';
 import { RegisterClass, UUIDsEqual } from '@memberjunction/global';
 import {
   mjBizAppsAccountingJournalEntryBatchEntity,
@@ -85,6 +99,33 @@ const LEGAL_TRANSITIONS: Record<string, ReadonlyArray<string>> = {
   Cancelled: ['Cancelled'],
   Archived: ['Archived'],
 };
+
+const BATCH_TRANSITION_RULES: IStateTransitionRule[] = Object.entries(LEGAL_TRANSITIONS).flatMap(
+  ([from, targets]) =>
+    targets
+      .filter((to) => to !== from)
+      .map((to): IStateTransitionRule => ({ from, to })),
+);
+
+const BATCH_TERMINAL_STATES: string[] = Object.entries(LEGAL_TRANSITIONS)
+  .filter(([from, targets]) => targets.every((to) => to === from))
+  .map(([from]) => from);
+
+export const JOURNAL_ENTRY_BATCH_LIFECYCLE_POLICY: IEntityLifecyclePolicy = {
+  stateMachine: {
+    statusField: 'Status',
+    initialStates: ['Pending'],
+    transitions: BATCH_TRANSITION_RULES,
+    terminalStates: BATCH_TERMINAL_STATES,
+    freezeAllFieldsInTerminalStates: false,
+  },
+};
+
+export function registerJournalEntryBatchLifecyclePolicy(): void {
+  EntityLifecyclePolicyEngine?.Instance?.RegisterPolicy(BATCH_ENTITY, JOURNAL_ENTRY_BATCH_LIFECYCLE_POLICY);
+}
+
+registerJournalEntryBatchLifecyclePolicy();
 
 /** The statuses that may move to `target` — its incoming edges in LEGAL_TRANSITIONS. */
 function legalFrom(target: string): string[] {
@@ -217,6 +258,13 @@ const money = (amount: number | null | undefined): string => (amount ?? 0).toFix
 
 @RegisterClass(BaseEntity, BATCH_ENTITY)
 export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEntryBatchEntity {
+  public override NewRecord(): boolean {
+    const ok = super.NewRecord();
+    if (!this.Status) {
+      this.Status = 'Pending';
+    }
+    return ok;
+  }
 
   // `Members` is a READ-ONLY RelatedRecordCollection on the generated class now. It replaces
   // `_members`, a hand-rolled lazy cache with its own forceRefresh flag and its own invalidation —
