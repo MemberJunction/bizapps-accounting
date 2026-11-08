@@ -32,7 +32,7 @@ import {
   ValidationErrorInfo,
   ValidationResult,
 } from '@memberjunction/core';
-import { RegisterClass, UUIDsEqual } from '@memberjunction/global';
+import { EscapeSQLString, RegisterClass, UUIDsEqual } from '@memberjunction/global';
 import {
   mjBizAppsAccountingJournalEntryEntity,
   JournalEntryEntity,
@@ -794,7 +794,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       if (key.Type.toLowerCase() === 'uniqueidentifier' && !isSqlGuid(recordId)) {
         return `LinkedRecordID '${recordId}' is not a valid ${entity.Name} ID.`;
       }
-      literal = `'${recordId.replace(/'/g, "''")}'`;
+      literal = `'${EscapeSQLString(recordId)}'`;
     } else {
       if (!/^-?\d+$/.test(recordId)) return `LinkedRecordID '${recordId}' is not a valid ${entity.Name} ID.`;
       literal = recordId;
