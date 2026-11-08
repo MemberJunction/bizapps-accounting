@@ -112,9 +112,12 @@ derivation, the reversal-type discriminator, GL account existence and company sc
 
 **Server-side work — call the operation**
 
+CodeGen emits a typed class for each Remote Operation that has a metadata row, in
+`packages/Entities/src/generated/remote_operations.ts`. An operation with no row has no class to call.
+
 ```typescript
-const op = new AccountingRecordJournalEntryBatchDecisionOperation();
-const result = await op.Execute({ JournalEntryBatchID: id, Decision: 'Approved' });
+const op = new AccountingClearFinanceExceptionOperation();
+const result = await op.Execute({ FinanceExceptionID: id, Outcome: 'Reviewed', Note: note });
 ```
 
 **Cached lookups — ask the engine**

@@ -73,7 +73,7 @@ export class CreateBusinessCentralJournalEntryWithDimensionsAction extends Creat
     try {
       const contextUser = params.ContextUser;
       if (!contextUser) {
-        return this.errorResult('Context user is required for Business Central API calls', params.Params);
+        return this.errorResult('Cannot call Business Central: no user was given to run the request as.', params.Params);
       }
 
       this.params = params.Params;
@@ -240,7 +240,7 @@ export class CreateBusinessCentralJournalEntryWithDimensionsAction extends Creat
     if (journalCode) {
       const match = journals.find(j => j.code === journalCode);
       if (!match) {
-        return { error: `JournalCode '${journalCode}' does not exist in Business Central.` };
+        return { error: `Journal '${journalCode}' does not exist in Business Central.` };
       }
       if (match.balancingAccountNumber) {
         return {

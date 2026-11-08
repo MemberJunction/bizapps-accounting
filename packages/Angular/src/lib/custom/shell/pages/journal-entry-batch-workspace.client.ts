@@ -45,6 +45,10 @@ export interface BatchPreviewEntry {
   CompanyID: string;
   Description: string | null;
   Amount: number;
+  /** D25 origin pair (bc-aidp-next-golive#452): the source record's entity name and key. Null on a
+   *  manual entry; absent from a server that predates it. */
+  LinkedEntity?: string | null;
+  LinkedRecordID?: string | null;
 }
 
 export interface AffectedAccount {
@@ -69,6 +73,21 @@ export interface BatchPreview {
   OutOfOrderSkipCount: number;
   /** Entries dated before their company's posting start date: held back, and left Pending, by every build. */
   BeforePostingStartCount: number;
+  /** Entries dated after the posting date (golive #448): held back until a batch posts on or after their date. */
+  AfterPostingDateCount: number;
+  /** The oldest of those (the server lists at most 50), each with the reason it is held back. */
+  AfterPostingDateEntries: HeldBackEntry[];
+}
+
+/** An entry the preview reports as held back, and why. */
+export interface HeldBackEntry {
+  ID: string;
+  EntryNumber: string;
+  EffectiveDate: string;
+  EntryTypeCode: string;
+  CompanyID: string;
+  Description: string | null;
+  Reason: string;
 }
 
 export interface BuildOutcome {
@@ -102,7 +121,7 @@ export class JournalEntryBatchWorkspaceClient {
       IncludedJournalEntryIDs: includedIds,
     });
     if (!res.Success || !res.Output) {
-      const msg = res.ErrorMessage ?? 'Preview failed.';
+      const msg = res.ErrorMessage ?? 'Could not load the entries that match these criteria. Try again.';
       LogError(`JournalEntryBatchWorkspaceClient.Preview: ${msg}`);
       throw new Error(msg);
     }
@@ -117,7 +136,7 @@ export class JournalEntryBatchWorkspaceClient {
         // Always Explicit from the workspace: the operator SAW a list and ticked it, so the build must
         // be exactly that list — not a re-sweep. Cutoff/CompanyIDs are DELIBERATELY omitted: the
         // Explicit path batches exactly these ids, so those two fields were dead payload the server
-        // discards (Marcelo #4, 2026-07-21). Empty / zero-net selections now throw server-side
+        // discards. Empty / zero-net selections now throw server-side
         // (EmptyBatchError) and surface as res.Success=false — never a silent NothingToBatch.
         Source: 'Explicit',
         JournalEntryIDs: includedIds,
@@ -127,7 +146,7 @@ export class JournalEntryBatchWorkspaceClient {
       },
     );
     if (!res.Success || !res.Output) {
-      const msg = res.ErrorMessage ?? 'Build failed.';
+      const msg = res.ErrorMessage ?? 'The journal entry batch was not built. Try again.';
       LogError(`JournalEntryBatchWorkspaceClient.Build: ${msg}`);
       throw new Error(msg);
     }

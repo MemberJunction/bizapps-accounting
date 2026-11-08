@@ -48,7 +48,7 @@ export class BuildJournalEntryBatchesAction extends BaseAction {
   protected async InternalRunAction(params: RunActionParams): Promise<ActionResultSimple> {
     const provider = Metadata.Provider;
     if (!provider) {
-      throw new Error('Accounting.BuildJournalEntryBatches: Metadata.Provider is not initialized');
+      throw new Error('The batch build could not run: the server has no metadata provider loaded.');
     }
     const user = params.ContextUser;
     const targetSystem = readParam<JournalEntryBatchTargetSystem>(params, 'TargetSystem') ?? 'BusinessCentral';
@@ -115,7 +115,7 @@ export function resolveCutoff(explicitCutoff: string | undefined, mode: string |
   const today = CalendarDayIn(now, zone);
   if (mode === 'PriorDay') return FromCalendarDay(AddDays(today, -1));
   if (mode === 'PriorMonth') return FromCalendarDay(LastDayOfPriorMonth(today));
-  throw new Error(`Accounting.BuildJournalEntryBatches: unknown CutoffMode '${mode}' — expected 'PriorDay' or 'PriorMonth'.`);
+  throw new Error(`The batch build could not run: unknown CutoffMode '${mode}'. Use 'PriorDay' or 'PriorMonth'.`);
 }
 
 /**
@@ -239,7 +239,7 @@ async function triage(
     if (status === 'Posted') {
       // The ERP took this journal. Only the member Batched→GLPosted flip is incomplete, and the
       // repair is to finish that flip — NOT to post again.
-      const warning = `ALREADY POSTED TO THE ERP — DO NOT RE-POST. The batch reached the ERP and only the member Batched→GLPosted flip is incomplete; finish it with Accounting.ResumeJournalEntryBatchPosting: ${message}`;
+      const warning = `ALREADY POSTED TO THE ERP — DO NOT RE-POST. The batch reached the ERP, but some of its journal entries are not yet marked posted; finish them with Resume posting on the batch: ${message}`;
       LogError(`Accounting.BuildJournalEntryBatches: batch ${batchId} ${warning}`);
       return { status, error: warning };
     }

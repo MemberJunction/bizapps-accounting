@@ -1,0 +1,24 @@
+[
+  {
+    "fields": {
+      "Name": "Finance Exceptions Cleared",
+      "CategoryID": "@lookup:MJ: Query Categories.Name=Accounting",
+      "UserQuestion": "Which finance exceptions were cleared this month, by whom, with what outcome and note?",
+      "Description": "Every cleared (Reviewed or Corrected) finance exception, newest first, with the month it was cleared in, its type, the reviewer, the review note and the source record's creator. The monthly list of clearing decisions for the finance lead's review.",
+      "SQL": "@file:SQL/finance-exceptions-cleared.sql",
+      "TechnicalDescription": "Reads __mj_BizAppsAccounting.vwFinanceExceptions joined to FinanceExceptionType for the type Code, WHERE Status <> 'Open'. ReviewedMonth = DATEFROMPARTS(YEAR(ReviewedAt), MONTH(ReviewedAt), 1) on the stored UTC instant. Outcome is Status (Reviewed or Corrected). Ordered by ReviewedAt DESC.",
+      "Status": "Approved",
+      "QualityRank": 8,
+      "ExecutionCostRank": 2,
+      "UsesTemplate": false
+    },
+    "relatedEntities": {},
+    "primaryKey": {
+      "ID": "A4884796-443D-49BB-915B-B94DF79EEA0C"
+    },
+    "sync": {
+      "lastModified": "2026-10-20T13:24:04.198Z",
+      "checksum": "14bcbc473bc1d04f5289f7eed4b125b704af85af1a895f38a9fdf804afd6d6a2"
+    }
+  }
+]

@@ -12,7 +12,7 @@ export class ERPSyncClient {
         input,
       );
       if (!res.Success || !res.Output) {
-        return { Success: false, Results: [{ CompanyID: '', CompanyIntegrationID: null, ProviderName: null, Success: false, Message: res.ErrorMessage ?? 'No response from server.', Objects: [] }] };
+        return { Success: false, Results: [{ CompanyID: '', CompanyIntegrationID: null, ProviderName: null, Success: false, Message: res.ErrorMessage ?? 'The server returned no result. Try again; if it keeps happening, ask an administrator to check the server logs.', Objects: [] }] };
       }
       return {
         Success: !!res.Output.Success,

@@ -16,7 +16,7 @@
             Label="No approval task"
             Icon="fa-solid fa-link-slash"
             Variant="warning"
-            title="This built journal entry batch has no approval task (MOD-14). It is valid — the task raise needs retrying, or nobody will be asked to approve it.">
+            title="No approval request was created for this batch, so no one will be asked to approve it. The batch is valid; retry the approval request from Batch approvals.">
           </mj-stat-badge>
         }
       </div>
@@ -81,7 +81,7 @@
       } @else {
         <table class="bdp__members">
           <thead>
-            <tr><th>Entry №</th><th>Type</th><th>Status</th><th>Effective</th><th>Memo</th></tr>
+            <tr><th>Entry №</th><th>Type</th><th>Status</th><th>Effective</th><th>Source</th><th>Memo</th></tr>
           </thead>
           <tbody>
             @for (m of Members; track m.ID) {
@@ -90,6 +90,13 @@
                 <td>{{ m.EntryType }}</td>
                 <td>{{ m.Status }}</td>
                 <td>{{ m.EffectiveDate ? (m.EffectiveDate | date: 'mediumDate' : 'UTC') : '—' }}</td>
+                <td class="bdp__source">
+                  @if (SourceOf(m.ID); as src) {
+                    <button type="button" class="bdp__source-link" (click)="OpenSource(src)" [title]="'Open the ' + src.EntityLabel + ' record that created this entry (closes this panel)'">{{ SourceText(src) }}</button>
+                  } @else {
+                    <span class="bdp__source-none" title="Manual entry — no source record">Manual</span>
+                  }
+                </td>
                 <td class="bdp__memo">{{ m.Description || '—' }}</td>
               </tr>
             }

@@ -1,5 +1,100 @@
 # @mj-biz-apps/accounting-server
 
+## 0.25.1
+
+### Patch Changes
+
+- Updated dependencies [a2783f1]
+  - @mj-biz-apps/accounting-core-entities-server@0.25.1
+  - @mj-biz-apps/accounting-actions@0.25.1
+  - @mj-biz-apps/accounting-entities@0.25.1
+
+## 0.25.0
+
+### Patch Changes
+
+- Updated dependencies [1d11c39]
+- Updated dependencies [b3592ca]
+- Updated dependencies [69680e9]
+- Updated dependencies [a54fd4e]
+  - @mj-biz-apps/accounting-entities@0.25.0
+  - @mj-biz-apps/accounting-actions@0.25.0
+  - @mj-biz-apps/accounting-core-entities-server@0.25.0
+
+## 0.24.0
+
+### Minor Changes
+
+- 266cf9c: New nullable column `AccountingCompanyProfile.BooksClosedThroughDate` (DATE): the last day of the latest month finance has closed for the company. A date on or before it is in a closed month. NULL means nothing is closed; existing profiles read NULL. Includes the CodeGen output for the column (entity subclass, GraphQL types, profile form field).
+- a577db6: A journal entry batch's cancel reason holds 1,000 characters, up from 500 (`JournalEntryBatch.CancelReason` is `NVARCHAR(1000)`). Migration `V202610201000` widens the column and regenerates the batch's base view and create/update/delete procedures, whose `@CancelReason` parameter was `nvarchar(500)` (#307).
+- d51bb87: Three column descriptions now say what the code does (#352): `JournalEntryBatchNumber` gives the global `BATCH-{seq:000000}` format with no company segment; `FinanceException.DedupeKey` says a repeat raise refreshes an Open row's creator fields and summary; `GLAccount.IsSystemSeeded` names `AccountingCompanyProfileEntityServer.SeedDefaultChartOfAccounts()` instead of the removed procedure. A new migration updates the extended properties and, through its CodeGen block, the entity field metadata.
+
+### Patch Changes
+
+- Updated dependencies [96b1a48]
+- Updated dependencies [ff56bcc]
+- Updated dependencies [201d11f]
+- Updated dependencies [5ee4741]
+- Updated dependencies [0ffa7e7]
+- Updated dependencies [7b88d06]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [803a7ab]
+- Updated dependencies [6d866b6]
+- Updated dependencies [266cf9c]
+- Updated dependencies [74e2ad9]
+- Updated dependencies [a577db6]
+- Updated dependencies [47d5474]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [d51bb87]
+- Updated dependencies [140106d]
+- Updated dependencies [fa4f5fa]
+- Updated dependencies [ecdc1e0]
+- Updated dependencies [003d4e6]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [4c0476c]
+- Updated dependencies [aff9c70]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [a7c8e83]
+- Updated dependencies [074060f]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [da5d2c6]
+- Updated dependencies [a74ce5f]
+- Updated dependencies [5677f94]
+- Updated dependencies [f7b9b1c]
+  - @mj-biz-apps/accounting-core-entities-server@0.24.0
+  - @mj-biz-apps/accounting-entities@0.24.0
+  - @mj-biz-apps/accounting-actions@0.24.0
+
+## 0.23.0
+
+### Patch Changes
+
+- b5646b8: Requires MemberJunction 6.1.6, the 6.1 LTS release QA runs. Every `@memberjunction/*` range and both root overrides are `^6.1.6`, and `mj-app.json` declares `>=6.1.6 <7.0.0`.
+- Updated dependencies [12a7026]
+- Updated dependencies [b5646b8]
+  - @mj-biz-apps/accounting-core-entities-server@0.23.0
+  - @mj-biz-apps/accounting-entities@0.23.0
+  - @mj-biz-apps/accounting-actions@0.23.0
+
+## 0.22.2
+
+### Patch Changes
+
+- Updated dependencies [de62630]
+  - @mj-biz-apps/accounting-core-entities-server@0.22.2
+  - @mj-biz-apps/accounting-actions@0.22.2
+  - @mj-biz-apps/accounting-entities@0.22.2
+
+## 0.22.1
+
+### Patch Changes
+
+- 95623ed: The packages' dependencies on each other are caret ranges (`^0.22.0`) instead of exact versions. A host that pins or overrides one package of this app at a later compatible version no longer forces an exact-match copy of its siblings. Changesets keeps the caret and moves its floor on each release.
+- Updated dependencies [95623ed]
+  - @mj-biz-apps/accounting-actions@0.22.1
+  - @mj-biz-apps/accounting-core-entities-server@0.22.1
+  - @mj-biz-apps/accounting-entities@0.22.1
+
 ## 0.22.0
 
 ### Patch Changes

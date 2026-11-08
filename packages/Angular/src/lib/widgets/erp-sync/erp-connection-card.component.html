@@ -24,8 +24,8 @@
       <button mjButton variant="outline" size="sm" type="button" (click)="OpenIntegration.emit(Connection)">
         Open
       </button>
-      <button mjButton variant="primary" size="sm" type="button" (click)="RunNow.emit(Connection)" [disabled]="!Connection.IsActive">
-        Sync
+      <button mjButton variant="primary" size="sm" type="button" (click)="RunNow.emit(Connection)" [disabled]="!Connection.IsActive" title="Pull accounts and dimensions from this company's ERP">
+        Pull
       </button>
     </div>
   </article>

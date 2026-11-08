@@ -32,7 +32,7 @@ export async function defaultAccountingVerbRunner(call: AccountingVerbCall): Pro
       return {
         Success: false,
         ResultCode: 'ENGINE_UNAVAILABLE',
-        Message: 'ActionEngine is not loaded in this host — cannot dispatch ERP verbs.',
+        Message: 'Cannot reach the ERP: the action engine is not loaded on this server.',
       };
     }
     if (!engine.Loaded) {
@@ -43,7 +43,7 @@ export async function defaultAccountingVerbRunner(call: AccountingVerbCall): Pro
       return {
         Success: false,
         ResultCode: 'ACTION_NOT_FOUND',
-        Message: `No Action named ${call.Verb}.`,
+        Message: `Cannot reach the ERP: no action named ${call.Verb} is installed.`,
       };
     }
     const params = Object.entries({ CompanyID: call.CompanyID, ...call.Params }).map(([Name, Value]) => ({

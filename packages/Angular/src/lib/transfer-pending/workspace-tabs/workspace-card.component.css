@@ -19,7 +19,7 @@
   border: 1px solid var(--mj-border-default);
   border-radius: 12px;
   overflow: hidden;
-  /* SIZING CONTAINER (design rule, Marcelo 2026-07-21): the card is a query container, so content
+  /* SIZING CONTAINER (design rule): the card is a query container, so content
      inside sizes with CONTAINER units (cqh/cqw/cqi) — relative to THIS card (a window/pane), never the
      viewport (vh/vw). vh would size to the whole screen regardless of the pane the card sits in. The
      card's own size comes from the flex chain (parent-driven), so size containment is safe here. */
@@ -57,7 +57,7 @@
 }
 
 /* The standardized action bar — pinned below the scrolling body, so the verbs stay reachable without
-   scrolling to the end of a long form. NO top border (Marcelo 2026-07-21): the buttons should read as
+   scrolling to the end of a long form. NO top border: the buttons should read as
    part of the sheet, not a boxed-off strip — the card's own frame is the only border we want. */
 .ws-card__foot {
   flex: none;

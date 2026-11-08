@@ -8,7 +8,7 @@
  *      with "Entity Users not found in metadata" (fixed to 'MJ: Users'); the Users-populated
  *      assertion below is the standing guard.
  *   2. the page had no create affordance — the "New company" header button is now load-bearing
- *      (Marcelo: "I don't have the ability to create companies").
+ *      (without it, users had no way to create a company).
  *
  * Values are EXACT and drift-proof: every DOM assertion is cross-checked against an INDEPENDENT
  * RunView of the same data (not against constants that rot as the demo set grows).
@@ -87,7 +87,7 @@ describe('Company Setup dashboard (tier 4)', () => {
     expect(expectedUserCount).toBeGreaterThan(0);
   }, 60_000);
 
-  it('ships NO local New-company button — the create verb lives in the CATEGORY header (Marcelo 2026-08-05)', async () => {
+  it('ships NO local New-company button — the create verb lives in the CATEGORY header', async () => {
     await TestBed.configureTestingModule({ imports: [CompanySetupModule] }).compileComponents();
     const fixture = TestBed.createComponent(CompanySetupDashboardComponent);
     fixture.detectChanges();

@@ -82,7 +82,7 @@ export abstract class AccountingDashboardBase extends BaseAngularComponent {
   public IsLoading = false;
   public LoadError: string | null = null;
 
-  // The old CreateLabel/CreateRequested header-card machinery was removed (Marcelo 2026-08-05):
+  // The old CreateLabel/CreateRequested header-card machinery was removed:
   // the section's create verb lives in the CATEGORY header now, so the dashboards ship no
   // duplicate create button and no header-interior card at all.
 
@@ -93,7 +93,7 @@ export abstract class AccountingDashboardBase extends BaseAngularComponent {
       { ...params, Fields: ['ID'], MaxRows: 1, ResultType: 'simple' },
       this.ProviderToUse.CurrentUser,
     );
-    if (!res.Success) throw new Error(res.ErrorMessage ?? 'count failed');
+    if (!res.Success) throw new Error(res.ErrorMessage ?? 'Could not load the dashboard totals. Refresh the page to try again.');
     return res.TotalRowCount ?? 0;
   }
 

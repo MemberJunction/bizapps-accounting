@@ -16,6 +16,7 @@ import {
   MJRefreshButtonComponent,
   MJEmptyStateComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
 
+import { BatchActionDialogComponent } from './batch-action-dialog/batch-action-dialog.component';
 import { JournalEntryBatchDispatchDashboardComponent } from './journal-entry-batch-dispatch-dashboard.component';
 import { JournalEntryBatchDispatchResourceComponent } from './journal-entry-batch-dispatch-resource.component';
 
@@ -36,6 +37,7 @@ import { JournalEntryBatchDispatchResourceComponent } from './journal-entry-batc
     MJStatBadgeComponent,
     MJRefreshButtonComponent,
     MJEmptyStateComponent,
+    BatchActionDialogComponent,
   ],
   exports: [JournalEntryBatchDispatchDashboardComponent, JournalEntryBatchDispatchResourceComponent],
 })

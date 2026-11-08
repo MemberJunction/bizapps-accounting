@@ -393,7 +393,7 @@ describe('BuildJournalEntryBatchesAction', () => {
         expect(failSpy).not.toHaveBeenCalled();
         expect(result.Success).toBe(false);
         expect(result.Message).toContain('(Sent:');
-        expect(result.Message).toContain('sent by another dispatch');
+        expect(result.Message).toContain('another send of batch');
     });
 
     // ─── A build failure must not strand the companies already dispatched ────────────────
@@ -580,8 +580,10 @@ describe('BuildJournalEntryBatchesAction — company posting start dates', () =>
         { ID: 'je-3', CompanyID: CO_LIVE, EffectiveDate: '2025-06-15', Status: 'Pending', EntryTypeID: ORDER_TYPE },
     ];
 
-    /** Evaluates the engine's ExtraFilter subset (=, <>, >=, <, IN, AND, OR, NOT) over the rows. */
+    /** Evaluates the engine's ExtraFilter subset (=, <>, >=, <, IN, IS [NOT] NULL, AND, OR, NOT) over the rows. */
     const matches = (filter: string) => new Function('r', `return (${filter
+        .replace(/\b(\w+) IS NOT NULL\b/g, '(r.$1 != null)')
+        .replace(/\b(\w+) IS NULL\b/g, '(r.$1 == null)')
         .replace(/\b(\w+) IN \(([^)]*)\)/g, '[$2].includes(r.$1)')
         .replace(/\b(\w+)\s*(<>|>=|<=|<|>|=)\s*'/g, (_m, col: string, op: string) => `r.${col} ${op === '=' ? '===' : op === '<>' ? '!==' : op} '`)
         .replace(/\bAND\b/g, '&&').replace(/\bOR\b/g, '||').replace(/\bNOT\b/g, '!')});`) as (row: object) => boolean;

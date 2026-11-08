@@ -67,15 +67,15 @@ export class CompanyScopeService {
     this.loaded = true;
 
     await AccountingEngineBase.Instance.Config(false, contextUser, provider);
-    // REACTIVE roster, not a one-shot snapshot (Marcelo 2026-07-30 — the stale-company-picker/FK
-    // ghost fix): ObserveProperty emits the current array on subscribe AND re-emits on every
+    // REACTIVE roster, not a one-shot snapshot (fixes the stale company picker and
+    // FK ghosts): ObserveProperty emits the current array on subscribe AND re-emits on every
     // client-side ACP save/delete, so a company created in the New-company dialog appears in the
     // scope chip and every picker fed from this service immediately. (The service is a root
     // singleton living for the app session, so the subscription is deliberately never torn down.)
     AccountingEngineBase.Instance
       .ObserveProperty<InstanceType<typeof AccountingEngineBase>['CompanyProfiles'][number]>('_companyProfiles')
       .subscribe((profiles) => {
-        // DEDUPE by normalized ID (Marcelo 2026-07-30): MJ-core's BaseEngine event-upsert compares
+        // DEDUPE by normalized ID: MJ-core's BaseEngine event-upsert compares
         // PKs with raw `===`, so a client-created row (lowercase UUID) and its server-refreshed
         // copy (uppercase) can BOTH sit in the engine array — filed upstream (MJ-UPSTREAM.md,
         // GH-likely); until that lands we keep the LAST copy (the freshest upsert) per company.

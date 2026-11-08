@@ -28,6 +28,8 @@ import { WorkspaceCardComponent } from '../../transfer-pending/workspace-tabs/wo
 import { WorkspaceTipDirective } from '../../transfer-pending/workspace-tabs/workspace-tip.directive';
 
 import { JournalEntryBatchDispatchModule } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.module';
+import { BatchActionDialogComponent } from '../JournalEntryBatchDispatch/batch-action-dialog/batch-action-dialog.component';
+import { RetryConfirmDialogComponent } from '../JournalEntryBatchDispatch/retry-confirm-dialog/retry-confirm-dialog.component';
 import { ChartOfAccountsModule } from '../ChartOfAccounts/chart-of-accounts.module';
 import { CompanySetupModule } from '../CompanySetup/company-setup.module';
 import { ReadModelsModule } from '../shared/read-models.module';
@@ -63,6 +65,7 @@ import { MJAListToolbarComponent } from '../shared/list-toolbar.component';
 import { AccountingOverviewResourceComponent } from '../resources/accounting-overview-resource.component';
 import { JournalEntriesResourceComponent } from '../resources/journal-entries-resource.component';
 import { BatchesResourceComponent } from '../resources/batches-resource.component';
+import { PeriodsResourceComponent } from '../resources/periods-resource.component';
 import { ApprovalsResourceComponent } from '../resources/approvals-resource.component';
 import { DimensionsResourceComponent } from '../resources/dimensions-resource.component';
 
@@ -105,6 +108,7 @@ import { DimensionsResourceComponent } from '../resources/dimensions-resource.co
   imports: [
     AccountingOverviewResourceComponent,
     BatchesResourceComponent,
+    PeriodsResourceComponent,
     MJDropdownComponent, MJACheckDropdownComponent, 
     ShellPagePendingComponent, // standalone — shared with orders' shell
     MJASummaryStripComponent, // standalone — the orders-idiom stats bubble (list-page standard)
@@ -135,6 +139,8 @@ import { DimensionsResourceComponent } from '../resources/dimensions-resource.co
     MJAlertComponent,
     MJDialogComponent,
     MJDialogActionsComponent,
+    BatchActionDialogComponent, // the shared Reject / Archive / Cancel dialog (#405)
+    RetryConfirmDialogComponent, // the shared retry confirmation for a Failed batch (#466)
     CompanyScopeChipComponent,
     GlResolutionPreviewComponent,
     WorkspaceTabStripComponent,
@@ -164,6 +170,7 @@ import { DimensionsResourceComponent } from '../resources/dimensions-resource.co
     JournalEntryDetailPanelComponent,
     JournalEntriesResourceComponent,
     BatchesResourceComponent,
+    PeriodsResourceComponent,
     ApprovalsResourceComponent,
     DimensionsResourceComponent,
   ],

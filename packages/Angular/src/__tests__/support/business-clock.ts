@@ -9,6 +9,7 @@
  */
 import { beforeEach, afterEach, expect, vi } from 'vitest';
 import { UserInfo, type IMetadataProvider, type RunViewResult } from '@memberjunction/core';
+import { BatchOperatorCatalog } from './batch-operator';
 import { BusinessTimeZoneEngine, type InstanceConfigurationRow } from '@mj-biz-apps/common-entities';
 
 export interface BusinessClock {
@@ -94,10 +95,12 @@ export const AUGUST_CLOSE_IN_CHICAGO: BusinessClock = {
 
 /**
  * A provider for a component's `[Provider]` input when every read it makes is stubbed at
- * `RunView.prototype`. The component only dereferences `CurrentUser` to pass along to those stubs,
- * so that is all this carries; the cast is confined here rather than repeated in each spec.
+ * `RunView.prototype`. The component dereferences `CurrentUser` to pass along to those stubs, and
+ * reads `Authorizations` to decide which batch actions show (#448): the batch-operator grant is held
+ * by every user here, so a spec about who holds it replaces the catalog. The cast is confined here
+ * rather than repeated in each spec.
  */
 export function stubbedReadsProvider(): IMetadataProvider {
-  const provider: Pick<IMetadataProvider, 'CurrentUser'> = { CurrentUser: new UserInfo() };
+  const provider: Pick<IMetadataProvider, 'CurrentUser' | 'Authorizations'> = { CurrentUser: new UserInfo(), Authorizations: BatchOperatorCatalog() };
   return provider as IMetadataProvider;
 }

@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { PostingDateMonthWarning, PostingMonthLabel } from '../lib/custom/shared/posting-date-warning';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import { ClosedBooksProblem, PostingDateMonthWarning, PostingMonthLabel } from '../lib/custom/shared/posting-date-warning';
 
 /** The manual-batch posting date warning (golive #315): a prior or future month is confirmed, never refused. */
 describe('PostingDateMonthWarning', () => {
@@ -36,5 +37,39 @@ describe('PostingMonthLabel', () => {
   it('names the month in UTC, whatever the machine zone', () => {
     expect(PostingMonthLabel('2026-09-01')).toBe('September 2026');
     expect(PostingMonthLabel('2026-12-31')).toBe('December 2026');
+  });
+});
+
+/** A posting date in a month finance has closed (golive #316): refused, naming the first open day. */
+describe('ClosedBooksProblem', () => {
+  const CO_CLOSED = 'aaaaaaaa-0000-0000-0000-000000000316';
+  const CO_OPEN = 'bbbbbbbb-0000-0000-0000-000000000316';
+
+  afterEach(() => vi.restoreAllMocks());
+
+  const closedThrough = (byCompany: Record<string, string | null>): void => {
+    vi.spyOn(AccountingEngineBase.Instance, 'BooksClosedThroughFor').mockImplementation((id) => {
+      const day = id ? byCompany[id] : null;
+      return day ? new Date(`${day}T00:00:00Z`) : null;
+    });
+  };
+
+  it('refuses a date on or before a company\'s closed-through date', () => {
+    closedThrough({ [CO_CLOSED]: '2026-08-31' });
+    expect(ClosedBooksProblem('2026-08-31', [CO_CLOSED])).toContain('closed through 2026-08-31');
+    expect(ClosedBooksProblem('2026-08-01', [CO_OPEN, CO_CLOSED])).toContain('2026-09-01 or later');
+  });
+
+  it('allows a date after it, a company with no date, and no companies', () => {
+    closedThrough({ [CO_CLOSED]: '2026-08-31', [CO_OPEN]: null });
+    expect(ClosedBooksProblem('2026-09-01', [CO_CLOSED])).toBeNull();
+    expect(ClosedBooksProblem('2026-08-31', [CO_OPEN])).toBeNull();
+    expect(ClosedBooksProblem('2026-08-31', [])).toBeNull();
+  });
+
+  it('says nothing about an unreadable date, which the screen already blocks', () => {
+    closedThrough({ [CO_CLOSED]: '2026-08-31' });
+    expect(ClosedBooksProblem('', [CO_CLOSED])).toBeNull();
+    expect(ClosedBooksProblem(null, [CO_CLOSED])).toBeNull();
   });
 });

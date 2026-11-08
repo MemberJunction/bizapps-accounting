@@ -90,25 +90,25 @@ export class IntercompanyAccountMatchEntityServer extends mjBizAppsAccountingInt
     if (dueTo) {
       if (!sameID(dueTo.CompanyID, this.SourceCompanyID)) {
         fail(
-          `DueTo account ${dueTo.Code} belongs to a different company than SourceCompanyID. ` +
-            `The Due To liability sits on the books of the company that COLLECTED the cash and therefore owes. ` +
-            `If the pair looks backwards, swap SourceCompanyID and TargetCompanyID rather than the accounts.`,
+          `Due To account ${dueTo.Code} belongs to a different company than the source company. ` +
+            `The Due To liability sits on the books of the company that collected the cash and therefore owes. ` +
+            `If the pair looks backwards, swap the source and target companies rather than the accounts.`,
         );
       }
       if (dueTo.AccountType !== 'Liability') {
-        fail(`DueTo account ${dueTo.Code} is ${dueTo.AccountType}; an intercompany payable must be a Liability account.`);
+        fail(`Due To account ${dueTo.Code} is ${dueTo.AccountType}; an intercompany payable must be a Liability account.`);
       }
     }
 
     if (dueFrom) {
       if (!sameID(dueFrom.CompanyID, this.TargetCompanyID)) {
         fail(
-          `DueFrom account ${dueFrom.Code} belongs to a different company than TargetCompanyID. ` +
-            `The Due From receivable sits on the books of the company that OWNS the line the cash settled.`,
+          `Due From account ${dueFrom.Code} belongs to a different company than the target company. ` +
+            `The Due From receivable sits on the books of the company that owns the line the cash settled.`,
         );
       }
       if (dueFrom.AccountType !== 'Asset') {
-        fail(`DueFrom account ${dueFrom.Code} is ${dueFrom.AccountType}; an intercompany receivable must be an Asset account.`);
+        fail(`Due From account ${dueFrom.Code} is ${dueFrom.AccountType}; an intercompany receivable must be an Asset account.`);
       }
     }
   }
@@ -147,15 +147,15 @@ export class IntercompanyAccountMatchEntityServer extends mjBizAppsAccountingInt
     // whole point of this check is that the ambiguity is otherwise invisible.
     if (!res.Success) {
       throw new Error(
-        `IntercompanyAccountMatchEntityServer: failed to check for a conflicting active pair: ${res.ErrorMessage ?? 'unknown error'}`,
+        `Could not check for a conflicting active intercompany pair: ${res.ErrorMessage ?? 'unknown error'}`,
       );
     }
 
     if ((res.Results?.length ?? 0) > 0) {
       fail(
-        `Another Active intercompany pair already exists for these companies with the same StartedAt ` +
-          `(${startedAt ?? 'unset'}). Resolution picks the latest StartedAt, so two rows sharing one would resolve ` +
-          `arbitrarily. To supersede the existing mapping, set its EndedAt and give this row a later StartedAt.`,
+        `Another active intercompany pair already exists for these companies with the same start date ` +
+          `(${startedAt ?? 'none'}). The pair is picked by the latest start date, so two pairs sharing one would be picked ` +
+          `at random. To replace the existing pair, give it an end date and give this one a later start date.`,
       );
     }
   }
@@ -175,7 +175,7 @@ export class IntercompanyAccountMatchEntityServer extends mjBizAppsAccountingInt
     );
     if (!res.Success) {
       throw new Error(
-        `IntercompanyAccountMatchEntityServer: failed to load GL accounts for validation: ${res.ErrorMessage ?? 'unknown error'}`,
+        `Could not load the GL accounts to check this intercompany pair: ${res.ErrorMessage ?? 'unknown error'}`,
       );
     }
     return new Map((res.Results ?? []).map((a) => [String(a.ID).toLowerCase(), a]));

@@ -82,7 +82,7 @@ export class JournalEntryEntity extends mjBizAppsAccountingJournalEntryEntity {
             result.Errors.push(
                 new ValidationErrorInfo(
                     'Lines',
-                    `A Journal Entry must have at least 2 line items (double-entry invariant). Found ${live.length} line(s).`,
+                    `A journal entry needs at least two lines (one debit and one credit); this one has ${live.length}.`,
                     null,
                 ),
             );
@@ -112,8 +112,8 @@ export class JournalEntryEntity extends mjBizAppsAccountingJournalEntryEntity {
             result.Errors.push(
                 new ValidationErrorInfo(
                     'Lines',
-                    `Unbalanced Journal Entry: total debits (${totalDebits.toFixed(2)}) must equal ` +
-                        `total credits (${totalCredits.toFixed(2)}).`,
+                    `The entry does not balance: debits total ${totalDebits.toFixed(2)} and credits total ` +
+                        `${totalCredits.toFixed(2)}. The two totals must be equal.`,
                     null,
                 ),
             );

@@ -31,6 +31,7 @@
  * Requires: the live instance DB (mj/.env creds); packages built (imports their dist).
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { Metadata, IMetadataProvider } from '@memberjunction/core';
 import { MJGlobal } from '@memberjunction/global';
 import {
@@ -276,7 +277,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     born.Status = 'Sent'; // illegal: a batch is born Pending
     const bornSaved = await born.Save();
     expect(bornSaved).toBe(false);
-    expect(born.LatestResult?.CompleteMessage ?? '').toContain("must start at Status='Pending'");
+    expect(born.LatestResult?.CompleteMessage ?? '').toContain('must start as Pending');
 
     // ...and the guard itself: an unclaimed create is refused even when everything else is legal.
     const handTyped = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, ctx.user);
@@ -373,7 +374,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     expect(await fresh.Save(), `fresh account save: ${fresh.LatestResult?.CompleteMessage}`).toBe(true);
     fresh.Code = '19998'; // never referenced by anything — still refused
     expect(await fresh.Save()).toBe(false);
-    expect(fresh.LatestResult?.CompleteMessage ?? '').toMatch(/immutable from creation/);
+    expect(fresh.LatestResult?.CompleteMessage ?? '').toMatch(/cannot change after the account is created/);
 
     // Cosmetic fields stay editable on both.
     const gl2 = await provider.GetEntityObject<GLAccountEntityServer>(GL_ENTITY, ctx.user);
@@ -419,38 +420,51 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
   });
 
   it('L13 — real gate: approval Task raised + ApprovalTaskID/RaisedAt stamped in the SAME build transaction', async () => {
-    // Configure the CFO on the fixture company (the harness user doubles as the approver).
-    const acp = await provider.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(
-      'MJ_BizApps_Accounting: Accounting Company Profiles', ctx.user);
-    expect(await acp.Load(ctx.company.id)).toBe(true);
-    acp.ApprovalCFOUserID = ctx.user.ID;
-    expect(await acp.Save(), `CFO config save: ${acp.LatestResult?.CompleteMessage}`).toBe(true);
-
-    const result = await buildJournalEntryBatch(
-      ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, new TasksAppApprovalGate(provider));
-    ctx.createdBatchIds.push(result.batchId);
+    // Configure the CFO on the fixture company (the harness user doubles as the approver) and ensure a linked Person exists.
+    const existingPerson = Number(await scalar(ctx.pool,
+      `SELECT COUNT(*) FROM __mj_BizAppsCommon.Person WHERE LinkedUserID='${ctx.user.ID}' AND Status='Active'`));
+    const tempPersonId = existingPerson === 0 ? randomUUID() : null;
+    if (tempPersonId) {
+      await ctx.pool.request().query(
+        `INSERT INTO __mj_BizAppsCommon.Person (ID, FirstName, LastName, LinkedUserID, Status) VALUES ('${tempPersonId}', 'Harness', '${ctx.runTag}', '${ctx.user.ID}', 'Active')`);
+    }
     try {
-      expect(result.approvalTaskId).toBeTruthy();
+      const acp = await provider.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(
+        'MJ_BizApps_Accounting: Accounting Company Profiles', ctx.user);
+      expect(await acp.Load(ctx.company.id)).toBe(true);
+      acp.ApprovalCFOUserID = ctx.user.ID;
+      expect(await acp.Save(), `CFO config save: ${acp.LatestResult?.CompleteMessage}`).toBe(true);
 
-      // The stamp is on the batch row (raw SQL), matching the raised Task, with RaisedAt set.
-      const row = (await ctx.pool.request().query(
-        `SELECT ApprovalTaskID, ApprovalTaskRaisedAt FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${result.batchId}'`)).recordset[0];
-      expect(String(row.ApprovalTaskID).toLowerCase()).toBe(String(result.approvalTaskId).toLowerCase());
-      expect(row.ApprovalTaskRaisedAt).toBeTruthy();
+      const result = await buildJournalEntryBatch(
+        ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, new TasksAppApprovalGate(provider));
+      ctx.createdBatchIds.push(result.batchId);
+      try {
+        expect(result.approvalTaskId).toBeTruthy();
 
-      // The Task genuinely exists in the tasks schema (committed with the batch — one transaction).
-      const taskCount = Number(await scalar(ctx.pool,
-        `SELECT COUNT(*) FROM __mj_BizAppsTasks.Task WHERE ID='${result.approvalTaskId}'`));
-      expect(taskCount).toBe(1);
+        // The stamp is on the batch row (raw SQL), matching the raised Task, with RaisedAt set.
+        const row = (await ctx.pool.request().query(
+          `SELECT ApprovalTaskID, ApprovalTaskRaisedAt FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${result.batchId}'`)).recordset[0];
+        expect(String(row.ApprovalTaskID).toLowerCase()).toBe(String(result.approvalTaskId).toLowerCase());
+        expect(row.ApprovalTaskRaisedAt).toBeTruthy();
+
+        // The Task genuinely exists in the tasks schema (committed with the batch — one transaction).
+        const taskCount = Number(await scalar(ctx.pool,
+          `SELECT COUNT(*) FROM __mj_BizAppsTasks.Task WHERE ID='${result.approvalTaskId}'`));
+        expect(taskCount).toBe(1);
+      } finally {
+        // Tasks-side rows are not company-rooted — clean them here (FK-aware order), best-effort.
+        const tid = result.approvalTaskId;
+        if (tid) {
+          await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskActivity WHERE TaskID='${tid}'`).catch(() => undefined);
+          await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskAssignment WHERE TaskID='${tid}'`).catch(() => undefined);
+          await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskLink WHERE TaskID='${tid}'`).catch(() => undefined);
+          await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskDecision WHERE TaskID='${tid}'`).catch(() => undefined);
+          await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.Task WHERE ID='${tid}'`).catch(() => undefined);
+        }
+      }
     } finally {
-      // Tasks-side rows are not company-rooted — clean them here (FK-aware order), best-effort.
-      const tid = result.approvalTaskId;
-      if (tid) {
-        await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskActivity WHERE TaskID='${tid}'`).catch(() => undefined);
-        await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskAssignment WHERE TaskID='${tid}'`).catch(() => undefined);
-        await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskLink WHERE TaskID='${tid}'`).catch(() => undefined);
-        await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskDecision WHERE TaskID='${tid}'`).catch(() => undefined);
-        await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.Task WHERE ID='${tid}'`).catch(() => undefined);
+      if (tempPersonId) {
+        await ctx.pool.request().query(`DELETE FROM __mj_BizAppsCommon.Person WHERE ID='${tempPersonId}'`).catch(() => undefined);
       }
     }
   });
@@ -507,7 +521,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     // A SECOND company-A link on the same StartedAt is the ambiguous tie — refused, with guidance.
     const dupe = await makeLink(ctx.company.cashGL); // cash is also company A's book
     expect(await dupe.Save()).toBe(false);
-    expect(dupe.LatestResult?.CompleteMessage ?? '').toMatch(/same StartedAt/);
+    expect(dupe.LatestResult?.CompleteMessage ?? '').toMatch(/same start date/);
 
     // forCompanyID disambiguates resolution per company over the SAME record + role.
     await AccountingEngineBase.Instance.ConfigEx({ forceRefresh: true, contextUser: ctx.user, provider });
@@ -533,16 +547,14 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
 
     const batch = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, ctx.user);
     expect(await batch.Load(result.batchId)).toBe(true);
-    batch.Status = 'Approved';
-    expect(await batch.Save()).toBe(false);
+    expect(await batch.Approve(ctx.user)).toBe(false);
     expect(batch.LatestResult?.CompleteMessage ?? '').toMatch(/do not foot/);
 
-    // Un-tamper → approval proceeds, and the auto-stamp fills the audit pair from context (L18 rolled in).
+    // Un-tamper → approval proceeds, and Approve() fills the audit pair from context (L18 rolled in).
     await ctx.pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET TotalDebits = TotalDebits - 999 WHERE ID='${result.batchId}'`);
     const batch2 = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, ctx.user);
     expect(await batch2.Load(result.batchId)).toBe(true);
-    batch2.Status = 'Approved'; // note: NOT setting ApprovedAt/ApprovedByUserID — the Save hook must
-    expect(await batch2.Save(), `approve after un-tamper: ${batch2.LatestResult?.CompleteMessage}`).toBe(true);
+    expect(await batch2.Approve(ctx.user), `approve after un-tamper: ${batch2.LatestResult?.CompleteMessage}`).toBe(true);
     const row = (await ctx.pool.request().query(
       `SELECT ApprovedAt, ApprovedByUserID FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${result.batchId}'`)).recordset[0];
     expect(row.ApprovedAt).toBeTruthy();

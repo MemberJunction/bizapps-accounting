@@ -1,12 +1,10 @@
 /**
  * _maint-list-batches.ts — READ-ONLY diagnostic. Lists every JE batch with its status, the # of JEs
  * currently pointing at it, and whether it has an approval Task Link (no link → the UI can't approve/
- * reject it). Run from the instance worktree root:
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/_maint-list-batches.ts
+ * reject it). Run from the repo root:
+ *   npx tsx test-harnesses/server/_maint-list-batches.ts
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'path';
 import { RunView } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 import { finishAndExit } from './harness-exit.js';
@@ -14,20 +12,21 @@ import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
+import { LoadHarnessEnv } from '../harness-paths.mjs';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const TASK_LINK_ENTITY = 'MJ_BizApps_Tasks: Task Links';
 
 async function main(): Promise<void> {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   const pool = await new sql.ConnectionPool({
     server: process.env.DB_HOST, port: Number(process.env.DB_PORT ?? 1433),
     user: process.env.DB_USERNAME, password: process.env.DB_PASSWORD, database: process.env.DB_DATABASE,
     options: { encrypt: false, trustServerCertificate: true },
   }).connect();
-  await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
-  await UserCache.Instance.Refresh(pool);
+  const sqlProvider = await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
+  await UserCache.Instance.Refresh(sqlProvider);
   const user = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!user) throw new Error('no context user');
 

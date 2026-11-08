@@ -35,12 +35,15 @@ for the system key.
 | `MJ_API_URL` | `http://localhost:4180` | MJAPI's base URL; GraphQL is posted to `/` |
 | `MJ_API_KEY` | minted with `mjdev key <slug>` | the user API key |
 | `MJDEV_SLUG` | `accounting-revamp` | the slug passed to `mjdev key`, and named in the fix hint a bootstrap error prints |
+| `MJDEV_BIN` | the nearest `bin/mjdev` above the repo, else `mjdev` on `PATH` | the launcher used to mint a key |
 
 ## Prerequisites
 
-- **An mjdev instance.** Each harness runs `node_modules/.bin/tsx` and the batching fixture at
-  `packages/dev-apps/bizapps-accounting/test-harnesses/playwright/lib/batching-fixture.ts`, both
-  relative to the working directory, so run it from the instance's MJ worktree root.
+- **The harness imports resolvable.** Each harness runs the batching fixture
+  (`../playwright/lib/batching-fixture.ts`) with the nearest `node_modules/.bin/tsx`, both found from
+  the harness's own location (`../harness-paths.mts`), so the working directory doesn't matter. The
+  fixture's imports resolve inside an mjdev instance; in a plain clone they are not root dependencies
+  (see [`../README.md`](../README.md#mjdev-instance-layout)).
 - **MJAPI up.** Each harness does a GET readiness preflight and exits `2` if MJAPI is unreachable —
   it never starts servers.
 - `engine-op-api.ts` and `batch-ops-api.ts` run the batching fixture to create an ISOLATED throwaway
@@ -52,13 +55,13 @@ for the system key.
 
 ## Run
 
-From the instance's MJ worktree root:
+From the repo root:
 
 ```bash
-export MJ_API_KEY=<user key>    # `mjdev key <slug>` prints one (the mj_sk_ line)
-npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/engine-op-api.ts
-npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/batch-ops-api.ts
-npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/full-flow-api.ts
+export MJ_API_KEY=<user key>    # optional: without it the harness runs `mjdev key <slug>`
+npx tsx test-harnesses/api/engine-op-api.ts
+npx tsx test-harnesses/api/batch-ops-api.ts
+npx tsx test-harnesses/api/full-flow-api.ts
 ```
 
 Prerequisites for every tier: [`../README.md`](../README.md#prerequisites-and-credentials).

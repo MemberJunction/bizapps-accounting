@@ -36,7 +36,7 @@ Batching (CoreEntitiesServer)        per-company buildJournalEntryBatch (D7) →
 DB invariants (migrations)           14 triggers (incl. single-company floors 50019/50022, summary coherence 50023)
                                      + 2 numbering sprocs (JE per company per FY, batch global)  ◄── the un-bypassable floor
 ```
-ERP master data travels: Explorer / nightly job → **`Accounting.RunERPSync`** → `AccountingERPEngine.SyncMasterData` → `IntegrationEngine.RunSync` (entity maps, per-company isolation) → registered `BaseAccountingEngineExtension` subclasses (FP&A cash import first). Only ERP connections (Business Central, QuickBooks Online) are synced; one with no entity maps, such as a posting-only connection, is reported skipped, not failed (#256). Journal dispatch: approved batch → `PostJournalBatch` → MJ verb `CreateJournalEntry` (account **numbers**, AM-4). The pre-flight lookup and the post choose the same connection: the batch company's one active connection for the target, or among several the one whose Configuration has `"postJournalEntries": true`, else refuse. Its `CompanyIntegrationID` is sent to the verb (#256, MJ#4867). Accounting never writes `CashBalance`.
+ERP master data travels: Explorer / nightly job → **`Accounting.RunERPSync`** → `AccountingERPEngine.SyncMasterData` → `IntegrationEngine.RunSync` (entity maps, per-company isolation) → registered `BaseAccountingEngineExtension` subclasses (FP&A cash import first). Only ERP connections (Business Central, QuickBooks Online) are synced; one with no entity maps, such as a posting-only connection, is reported skipped, not failed (#256). Journal dispatch: approved batch → (the Dispatch button, `Accounting.DispatchJournalEntryBatch`, or the Batches page's Send approved batches button, the `Accounting.DispatchApprovedJournalEntryBatches` operation for Finance-role users, or the hourly action of the same name, which runs as the system user; both send every `Approved` batch through `dispatchApprovedJournalEntryBatches` and never retry a `Failed` one, golive #451) → `sendJournalEntryBatch` → `PostJournalBatch` → MJ verb `CreateJournalEntry` (account **numbers**, AM-4). The pre-flight lookup and the post choose the same connection: the batch company's one active connection for the target, or among several the one whose Configuration has `"postJournalEntries": true`, else refuse. Its `CompanyIntegrationID` is sent to the verb (#256, MJ#4867). Accounting never writes `CashBalance`.
 
 How a write travels: caller (Orders, browser, script) → **`Accounting.CreateJournalEntry`** →
 engine pipeline → `BaseEntity.Save()` in one TransactionGroup (hooks number; triggers enforce;
@@ -122,7 +122,8 @@ Where they disagree with §3, §3 is authoritative.
 |---|---|
 | Company profile init / starter COA | `CoreEntitiesServer/AccountingCompanyProfileEntityServer.ts` (W1) + `SeedData.ts` |
 | JE numbering (per company, per FY — D19, BA-D31) | `JournalEntryEntityServer.ts` (W2) + `SequenceService.ts` + `spAssignNextJournalEntryNumber` |
-| Batch numbering (GLOBAL) | `JournalEntryBatchEntityServer.ts` (W3) + `spAssignNextJournalEntryBatchNumber` |
+| Batch numbering (GLOBAL) | `JournalEntryBatchEntityServer.ts` (W3) + `SequenceService.ts` + `spAssignNextJournalEntryBatchNumber` |
+| Numbering on PostgreSQL | `SequenceService.ts` picks the SQL by `PlatformKey`; the PL/pgSQL functions are `migrations-pg/V202610201030__v0.24.x__JournalEntry_Numbering_Functions.pg-only.sql` |
 | The minimal seeded chart | `CoreEntitiesServer/SeedData.ts` (`DEFAULT_CHART_OF_ACCOUNTS`, `DEFAULT_GL_ACCOUNT_REFS`) |
 | **The engine contract / pure pipeline / caches / ResolveLinkedAccount** | `packages/EngineBase/src/{contract,pipeline,AccountingEngineBase}.ts` |
 | **CreateJournalEntry write path + the remotable op** | `CoreEntitiesServer/AccountingEngine.ts` + `CreateJournalEntryOperation.ts` |
@@ -167,6 +168,18 @@ refuses a draft that spans companies, checks balance, and writes atomically. Hoo
   a send must start from `Approved` or `Failed` and advance `SendAttemptCount` by one, no update keeps a
   batch `Sent`, and the send stamp changes at no other time. Of two dispatches that loaded the same batch,
   only one reaches the ERP, whether the loser's save lands while the winner is `Sent` or after it has left.
+  Validated by the raw-SQL cases in `block1-runtime.ts`:
+  - **50031** status moves: `Posted`, `Cancelled` and `Archived` are terminal, no batch returns to
+    `Pending`, only a `Sent` batch becomes `Posted` or `Failed`, a `Sent` batch is neither cancelled
+    nor archived, and a batch is cancelled only with its summary pointer cleared.
+  - **50032** the cancel audit and the ERP check are written only by the update that cancels the
+    batch, and `SentAt` is never cleared once set.
+  - **50034** `SealMismatchDetectedAt` is set only on a retry's `Sent` → `Posted` (`SendAttemptCount`
+    above 1), and never changed or cleared after.
+
+  Validated by L23 in `phase2-encapsulation.live.test.ts`:
+  - **50033** `trg_JELD_Immutability`: a dimension tag on a line of a `Batched` or `GLPosted` entry
+    cannot be inserted, changed or deleted (#216).
   *(The period-close trigger + W4 routing were retired with the period tables.)*
 - **Batch lifecycle (CH-3):** `Pending → Approved → Sent → Posted | Failed`, plus `Cancelled` and
   `Archived` (the full graph is `LEGAL_TRANSITIONS` in `JournalEntryBatchEntityServer.ts`) — see
@@ -175,6 +188,23 @@ refuses a draft that spans companies, checks balance, and writes atomically. Hoo
   batch candidate pool. Entries dated before it (e.g. history brought in at cutover) never enter a
   batch: `pendingCandidateFilter` applies it to every build, preview and scheduled sweep, and the
   explicit-ID and view builds check it too. NULL, or no profile row, means no floor.
+- **Books closed through (golive #316):** `AccountingCompanyProfile.BooksClosedThroughDate` is the last
+  day of the latest month finance has closed for a company; a day on or before it is in a closed month.
+  It records how far the ERP's periods are closed, not a period table (D2 stands). Every build refuses a
+  posting date on or before it (`assertPostingDayOpen`, failing closed when the read fails), and both
+  build screens say so before the click. Only holders of
+  `MJ.BizApps.Accounting.BooksClosedThroughDate.Set` (the Finance role) change it, and the profile's
+  record-change history keeps each change. The ERP's own lock stays the backstop: a batch the ERP
+  rejects goes `Failed` with its message and raises an `ERP_POSTING_REJECTED` finance exception.
+  Apps that date entries into the ledger read the same date (orders' progress attestation and
+  supersede); the shared rule is `books-closed.ts` in the engine base.
+- **Periods page (golive #447):** the Accounting app's Periods nav item lists each active company's
+  books-closed and posting start dates. Close month / Reopen month move `BooksClosedThroughDate` by
+  whole months to a month end (`CloseMonthThrough` / `ReopenMonthThrough` in `books-closed.ts`); a
+  month still under way cannot be closed. The posting start date has an Edit behind a confirmation,
+  and its held-back count is the batch preview's `BeforePostingStartCount`. Changing
+  `PostingStartDate` needs `MJ.BizApps.Accounting.PostingStartDate.Set` (the Finance role), checked
+  by the profile's server entity like the books-closed date.
 - **Recovery past Approved (#145):** a `Failed` batch is retried by dispatching it again
   (`Failed → Sent`; the gate and the coherence check re-run, the original approval is reused). A
   `Failed` batch may already be in the ERP, so every send first looks the batch number up there
@@ -209,6 +239,9 @@ refuses a draft that spans companies, checks balance, and writes atomically. Hoo
   (`FinanceExceptionOperations.ts`, over the CodeGen-emitted bases in `accounting-entities`);
   `FinanceExceptionEntityServer.ts` makes the clear operation the only way a status changes. Orders
   and sales resolve the operations by key through the ClassFactory, with no build-time dependency.
+  `FinanceExceptionClearPolicy.ts` decides who may clear each exception (golive #320 §4): per-type,
+  unattributed-creator and escalated-creator authorizations the package ships ungranted and a host
+  turns on by granting them to its roles.
 
 ## 6. Connection map
 Hand-written, cross-layer files carry a top-of-file `CONNECTS TO:` block (CALLED BY / CALLS /

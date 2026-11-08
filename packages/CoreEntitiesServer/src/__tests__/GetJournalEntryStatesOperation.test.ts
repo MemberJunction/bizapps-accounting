@@ -141,6 +141,6 @@ describe('Accounting.GetJournalEntryStates', () => {
     const provider = { RunView: async () => ({ Success: false, ErrorMessage: 'timeout', Results: [] }) } as unknown as IMetadataProvider;
     const result = await run([UNBATCHED], provider);
     expect(result.Success).toBe(false);
-    expect(result.ErrorMessage).toMatch(/reading MJ_BizApps_Accounting: Journal Entries failed: timeout/);
+    expect(result.ErrorMessage).toMatch(/could not read journal entries: timeout/);
   });
 });

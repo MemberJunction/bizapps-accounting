@@ -58,6 +58,7 @@ interface JournalEntryBatchRow { ID: string; Status: JournalEntryBatchStatus }
 @RegisterClass(BaseRemotableOperation, 'Accounting.GetJournalEntryStates')
 export class GetJournalEntryStatesOperation extends BaseRemotableOperation<GetJournalEntryStatesInput, GetJournalEntryStatesOutput> {
   public readonly OperationKey = 'Accounting.GetJournalEntryStates';
+  public readonly RequiredScope = 'accounting:read';
 
   protected async InternalExecute(input: GetJournalEntryStatesInput, provider: IMetadataProvider, user: UserInfo): Promise<GetJournalEntryStatesOutput> {
     const ids = validateIds(input?.JournalEntryIDs);
@@ -89,7 +90,7 @@ async function readRows<T>(rv: RunView, entityName: string, ids: string[], field
   if (ids.length === 0) return [];
   const inList = [...new Set(ids.map(id => id.toLowerCase()))].map(id => sqlGuidLiteral(id, CONTEXT)).join(',');
   const res = await rv.RunView<T>({ EntityName: entityName, ExtraFilter: `ID IN (${inList})`, Fields: fields, ResultType: 'simple', BypassCache: true }, user);
-  if (!res.Success) throw new Error(`${CONTEXT}: reading ${entityName} failed: ${res.ErrorMessage ?? 'unknown error'}`);
+  if (!res.Success) throw new Error(`${CONTEXT}: could not read ${entityName === JE_ENTITY ? 'journal entries' : 'journal entry batches'}: ${res.ErrorMessage ?? 'unknown error'}`);
   return res.Results ?? [];
 }
 

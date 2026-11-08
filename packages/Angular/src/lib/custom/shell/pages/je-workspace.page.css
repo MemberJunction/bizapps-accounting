@@ -74,10 +74,10 @@ mj-page-body-interior {
 
 /* Line editor. It's a FEW-ROW editor, not a data grid — so override the shared shell-table's fixed
    min(68vh,900px) height (which left a huge empty box for a 2-line entry): grow with the rows, cap
-   with a max-height + scroll only when there are many lines (Marcelo 2026-07-21). Border/radius come
+   with a max-height + scroll only when there are many lines. Border/radius come
    from the shared .mjsh-tablewrap. */
 .jew__gridwrap.mjsh-tablewrap {
-  /* CONSTANT default size (Marcelo 2026-07-21): starts at a comfortable ~5-6 rows and STAYS there —
+  /* CONSTANT default size: starts at a comfortable ~5-6 rows and STAYS there —
      it does NOT grow as rows are added (rows scroll WITHIN it), so the card never gets forced into a
      scroll. Sized by the CONTAINER (cqh — relative to the workspace card, a window/pane, NOT the
      viewport; the design rule). Want more visible rows? Drag the bottom bar out (below). */
@@ -123,7 +123,7 @@ mj-page-body-interior {
   /* Fixed layout: column widths come from the header row, NOT the cells' content. Without this, auto
      layout re-measured the account/counterparty <select>s when their options populated on company
      select — widening the columns and shifting the whole grid. Fixed pins the layout so picking a
-     company no longer moves anything (Marcelo 2026-07-21). */
+     company no longer moves anything. */
   table-layout: fixed;
 }
 .jew__grid th {

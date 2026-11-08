@@ -43,9 +43,9 @@ the five category nav items with the same keystone, and takes a magic-link URL a
 The harness does **not** start servers; `lib/global-setup.ts` asserts they're up and fails with the
 exact fix command if not. It needs:
 
-- **An mjdev instance.** The specs run the fixture with the instance worktree root's
-  `node_modules/.bin/tsx` (five directories above this folder), and `lib/env.ts` walks up from here
-  to find `bin/mjdev`.
+- **An mjdev instance.** The specs run the fixture with the nearest `node_modules/.bin/tsx` above the
+  repo, and `lib/env.ts` gets the launcher from `MJDEV_BIN`, else the nearest `bin/mjdev` above the
+  repo, else `mjdev` on `PATH` (`../harness-paths.mts`).
 - **MJAPI and MJExplorer running** for the instance:
 
   ```bash
@@ -65,7 +65,7 @@ it drives **this instance's** services. Environment overrides:
 | `MJDEV_SLUG` | `bizapps-accounting-dev` |
 | `MJAPI_PORT` | the port `mjdev ps` reports for MJAPI, else `4000` |
 | `MJEXPLORER_PORT` | the port `mjdev ps` reports for MJExplorer, else `4200` |
-| `MJDEV_BIN` | the first `bin/mjdev` found walking up from this folder |
+| `MJDEV_BIN` | the nearest `bin/mjdev` above the repo, else `mjdev` on `PATH` |
 
 > ⚠ **Known mjdev bug (the fix belongs on the mjdev side, not here):**
 > on Angular-21 instances, `mjdev run <slug> explorer` fails because it passes `ng serve
@@ -96,9 +96,6 @@ Playwright and tsx resolve from the instance's hoisted `node_modules`. This fold
 workspace package (`pnpm-workspace.yaml` lists only `packages/*`), so `pnpm install` does not install
 them. If `npx playwright` can't find the binary from here, run the instance worktree root's
 `node_modules/.bin/playwright test` from this folder.
-
-Of the `package.json` scripts, `test`, `test:headed` and `report` work; `test:dashboards` and
-`test:batching` point at spec files that no longer exist.
 
 **Do not run this concurrently** with another harness or a build against the same instance — these
 are heavy live-instance e2e tests sharing ONE Explorer + ONE instance DB, and the batch specs

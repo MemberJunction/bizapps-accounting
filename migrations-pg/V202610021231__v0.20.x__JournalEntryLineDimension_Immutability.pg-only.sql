@@ -20,7 +20,7 @@
 -- Runs after the converted V202610021230 file, once, in order.
 -- =============================================================================
 
-CREATE OR REPLACE FUNCTION __mj_BizAppsAccounting."fn_trg_JELD_Immutability"()
+CREATE OR REPLACE FUNCTION "__mj_BizAppsAccounting"."fn_trg_JELD_Immutability"()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
@@ -36,8 +36,8 @@ BEGIN
 
     IF EXISTS (
         SELECT 1
-          FROM __mj_BizAppsAccounting."JournalEntryLine" jel
-          JOIN __mj_BizAppsAccounting."JournalEntry" je ON je."ID" = jel."JournalEntryID"
+          FROM "__mj_BizAppsAccounting"."JournalEntryLine" jel
+          JOIN "__mj_BizAppsAccounting"."JournalEntry" je ON je."ID" = jel."JournalEntryID"
          WHERE jel."ID" = ANY (v_line_ids)
            AND je."Status" IN ('Batched', 'GLPosted')
     ) THEN
@@ -50,9 +50,9 @@ END;
 $$;
 
 CREATE TRIGGER "trg_JELD_Immutability"
-AFTER INSERT OR UPDATE OR DELETE ON __mj_BizAppsAccounting."JournalEntryLineDimension"
+AFTER INSERT OR UPDATE OR DELETE ON "__mj_BizAppsAccounting"."JournalEntryLineDimension"
 FOR EACH ROW
-EXECUTE FUNCTION __mj_BizAppsAccounting."fn_trg_JELD_Immutability"();
+EXECUTE FUNCTION "__mj_BizAppsAccounting"."fn_trg_JELD_Immutability"();
 
 -- -----------------------------------------------------------------------------
 -- SealMismatchDetectedAt is set once, by the retry that records the batch Posted
@@ -68,7 +68,7 @@ EXECUTE FUNCTION __mj_BizAppsAccounting."fn_trg_JELD_Immutability"();
 -- Compared at millisecond precision, as on SQL Server: the entity writes
 -- JavaScript dates.
 
-CREATE OR REPLACE FUNCTION __mj_BizAppsAccounting."fn_trg_JournalEntryBatch_SealMismatchFreeze"()
+CREATE OR REPLACE FUNCTION "__mj_BizAppsAccounting"."fn_trg_JournalEntryBatch_SealMismatchFreeze"()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
@@ -98,6 +98,6 @@ END;
 $$;
 
 CREATE TRIGGER "trg_JournalEntryBatch_SealMismatchFreeze"
-AFTER INSERT OR UPDATE ON __mj_BizAppsAccounting."JournalEntryBatch"
+AFTER INSERT OR UPDATE ON "__mj_BizAppsAccounting"."JournalEntryBatch"
 FOR EACH ROW
-EXECUTE FUNCTION __mj_BizAppsAccounting."fn_trg_JournalEntryBatch_SealMismatchFreeze"();
+EXECUTE FUNCTION "__mj_BizAppsAccounting"."fn_trg_JournalEntryBatch_SealMismatchFreeze"();
