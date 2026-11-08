@@ -185,7 +185,7 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
         EntityName: 'MJ_BizApps_Accounting: GL Accounts',
         // Validated, not escaped (package-wide SqlGuards posture): this id is interpolated into a
         // SQL predicate, so anything that is not a plain UUID is refused outright.
-        ExtraFilter: `CompanyID = ${sqlGuidLiteral(companyId, 'AccountingCompanyProfileEntityServer.loadExistingGLAccountCodes')}`,
+        ExtraFilter: `CompanyID=${sqlGuidLiteral(companyId, 'AccountingCompanyProfileEntityServer.loadExistingGLAccountCodes')}`,
         ResultType: 'simple',
         Fields: ['Code'],
       },
