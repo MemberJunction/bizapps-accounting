@@ -8,7 +8,7 @@ import {
     MJCardFooterDirective,
 } from '@memberjunction/ng-ui-components';
 import { NavigationService } from '@memberjunction/ng-shared';
-import { BaseFormComponent, BaseFormPanel } from '@memberjunction/ng-base-forms';
+import { BaseFormComponent, BaseFormPanel, BaseFormsModule } from '@memberjunction/ng-base-forms';
 import { RegisterClassEx } from '@memberjunction/global';
 import type { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import { formatJournalDate } from './journal-entry-panel.helpers';
@@ -192,6 +192,7 @@ const BATCH_OVERVIEW_CSS = `
     selector: 'mja-journal-entry-batch-overview',
     imports: [
         CommonModule,
+        BaseFormsModule,
         MJCardGridComponent,
         MJCardComponent,
         MJCardToolsDirective,
@@ -313,7 +314,13 @@ const BATCH_OVERVIEW_CSS = `
                                 </thead>
                                 <tbody>
                                     @for (entry of MemberEntries; track entry.ID) {
-                                        <tr (click)="OnEntryClick(entry)">
+                                        <tr
+                                            mjRecordLink
+                                            [EntityName]="'MJ_BizApps_Accounting: Journal Entries'"
+                                            [RecordID]="entry.ID"
+                                            [DisplayName]="entry.EntryNumber"
+                                            [HandleClick]="false"
+                                            (click)="OnEntryClick(entry)">
                                             <td class="mja-code">{{ entry.EntryNumber }}</td>
                                             <td>{{ FormatDate(entry.EffectiveDate) }}</td>
                                             <td style="max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
