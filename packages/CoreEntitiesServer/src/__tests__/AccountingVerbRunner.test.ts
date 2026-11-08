@@ -88,9 +88,26 @@ describe('defaultAccountingVerbRunner', () => {
     });
 
     expect(runAction.mock.calls[0][0].Params).toEqual([
-      { Name: 'CompanyID', Value: 'co-1', Type: 'Input' },
       { Name: 'DocNumber', Value: 'BATCH-1', Type: 'Input' },
       { Name: 'CompanyIntegrationID', Value: 'ci-uat', Type: 'Input' },
+      { Name: 'CompanyID', Value: 'co-1', Type: 'Input' },
+    ]);
+  });
+
+  // The engine's choice of company is authoritative: a CompanyID smuggled into Params cannot override it.
+  it('the call\'s CompanyID wins over a CompanyID in Params', async () => {
+    getActionByName.mockReturnValue({ Name: 'CreateJournalEntry' });
+    runAction.mockResolvedValue({ Success: true, Result: { ResultCode: 'SUCCESS' }, Params: [] });
+
+    await defaultAccountingVerbRunner({
+      Verb: 'CreateJournalEntry',
+      CompanyID: 'co-1',
+      Params: { CompanyID: 'co-other' },
+      User: user,
+    });
+
+    expect(runAction.mock.calls[0][0].Params).toEqual([
+      { Name: 'CompanyID', Value: 'co-1', Type: 'Input' },
     ]);
   });
 

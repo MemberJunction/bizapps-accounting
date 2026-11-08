@@ -81,7 +81,7 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 
 /**
  * Refuse a caller who does not hold the batch-operator Authorization (#448), before anything is read.
- * Build, Regenerate and Dispatch change what reaches the ERP, so beyond entity permissions they need
+ * Build, Regenerate, Dispatch and Resume change what reaches the ERP, so beyond entity permissions they need
  * the Finance role's grant. Archive does not call this: `Archive()` applies its own rule, which lets the
  * company's CFO archive without the grant (golive #325). Checked inside the operation,
  * where the request's provider (and its Authorization catalog) is in hand, as ClearFinanceException does.
@@ -391,6 +391,7 @@ export class ResumeJournalEntryBatchPostingOperation extends BaseRemotableOperat
   public readonly RequiredScope = 'accounting:post';
 
   protected async InternalExecute(input: ResumeJournalEntryBatchPostingInput, provider: IMetadataProvider, user: UserInfo): Promise<ResumeJournalEntryBatchPostingOutput> {
+    requireBatchOperator(user, provider, 'ResumeJournalEntryBatchPosting');
     if (!input?.JournalEntryBatchID) throw new Error('Posting was not resumed: no batch was given.');
     requireSqlGuid(input.JournalEntryBatchID, 'ResumeJournalEntryBatchPosting');
     const { batch, journalEntriesPosted } = await resumeJournalEntryBatchPosting(input.JournalEntryBatchID, user, provider);
