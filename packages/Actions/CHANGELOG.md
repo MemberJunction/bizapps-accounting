@@ -1,5 +1,19 @@
 # @mj-biz-apps/accounting-actions
 
+## 0.26.0
+
+### Minor Changes
+
+- ccee5c0: Add a "Send approved batches" button to the Batches page (bc-aidp-next-golive#451). It calls the new `Accounting.DispatchApprovedJournalEntryBatches` Remote Operation, which requires the batch-operator Authorization (the Finance role), takes an optional company filter, sends every Approved batch through the same send as the per-batch Dispatch button, and returns each batch's outcome; one batch failing does not stop the rest. The hourly dispatch action now shares that selection and send and still runs only as the system user. The ERP sync panel is relabelled "Pull accounts and dimensions from ERP" and points to the Batches page for posting.
+
+### Patch Changes
+
+- Updated dependencies [a56dd15]
+- Updated dependencies [167a3dc]
+- Updated dependencies [ccee5c0]
+- Updated dependencies [81b934e]
+  - @mj-biz-apps/accounting-core-entities-server@0.26.0
+
 ## 0.25.1
 
 ### Patch Changes

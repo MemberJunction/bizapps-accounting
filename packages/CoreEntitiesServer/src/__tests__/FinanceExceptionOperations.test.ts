@@ -159,15 +159,42 @@ describe('Accounting.RaiseFinanceExceptions', () => {
     const result = await new RaiseFinanceExceptionsOperation().ExecuteServer({ Exceptions: [raise()] }, context(s.provider));
     expect(result.Success).toBe(true);
     expect(result.Output).toEqual({ Success: true, Results: [{ Index: 0, FinanceExceptionID: 'NEW-1', Created: true }] });
-    expect(s.saved[0]).toMatchObject({ Status: 'Open', FinanceExceptionTypeID: TYPES[0].ID, SourceEntityID: ORDER_LINES.ID, CreatorUnresolved: false, SourceCreatedByUserID: CREATOR });
+    // Attribution is stamped from the VERIFIED caller — the input's SourceCreatedByUserID (CREATOR) is never trusted.
+    expect(s.saved[0]).toMatchObject({ Status: 'Open', FinanceExceptionTypeID: TYPES[0].ID, SourceEntityID: ORDER_LINES.ID, CreatorUnresolved: false, SourceCreatedByUserID: REVIEWER.ID });
     expect(s.tx.begin).toHaveBeenCalledTimes(1);
     expect(s.tx.commit).toHaveBeenCalledTimes(1);
     expect(s.getEntityObject).toHaveBeenCalledWith('MJ_BizApps_Accounting: Finance Exceptions', SYSTEM_USER);
   });
 
+  it('stamps the attribution from the verified caller — a forged SourceCreatedByUserID is ignored', async () => {
+    const s = stubProvider();
+    const result = await new RaiseFinanceExceptionsOperation().ExecuteServer(
+      { Exceptions: [raise({ SourceCreatedByUserID: CREATOR, CreatorUnresolved: true })] },
+      context(s.provider),
+    );
+    expect(result.Output?.Success).toBe(true);
+    expect(s.saved[0]).toMatchObject({ SourceCreatedByUserID: REVIEWER.ID, CreatorUnresolved: false });
+  });
+
+  it('refuses a call with no verified caller, before reading or writing anything', async () => {
+    const s = stubProvider();
+    const result = await new RaiseFinanceExceptionsOperation().ExecuteServer(
+      { Exceptions: [raise()] },
+      { provider: s.provider, user: undefined } as unknown as RemoteOpServerContext,
+    );
+    expect(result.Output).toEqual({
+      Success: false,
+      Results: [],
+      Errors: [{ Code: 'CALLER_REQUIRED', Message: expect.stringContaining('authenticated caller') }],
+    });
+    expect(s.executeSQL).not.toHaveBeenCalled();
+    expect(s.getEntityObject).not.toHaveBeenCalled();
+    expect(s.tx.begin).not.toHaveBeenCalled();
+  });
+
   it('is idempotent on (TypeCode, DedupeKey): an existing row is returned unchanged, and a repeat in one call reuses the first', async () => {
     const s = stubProvider({
-      existing: [{ ID: 'EXISTING-1', FinanceExceptionTypeID: TYPES[0].ID, DedupeKey: 'KEY-A', Status: 'Open', SourceCreatedByUserID: CREATOR, CreatorUnresolved: false }],
+      existing: [{ ID: 'EXISTING-1', FinanceExceptionTypeID: TYPES[0].ID, DedupeKey: 'KEY-A', Status: 'Open', SourceCreatedByUserID: REVIEWER.ID, CreatorUnresolved: false }],
     });
     const result = await new RaiseFinanceExceptionsOperation().ExecuteServer(
       { Exceptions: [raise({ DedupeKey: 'KEY-A' }), raise({ DedupeKey: 'KEY-B' }), raise({ DedupeKey: 'KEY-B' })] },
@@ -191,7 +218,8 @@ describe('Accounting.RaiseFinanceExceptions', () => {
     );
     expect(result.Output?.Results).toEqual([{ Index: 0, FinanceExceptionID: 'EXISTING-1', Created: false }]);
     expect(s.saved).toHaveLength(1);
-    expect(s.saved[0]).toMatchObject({ ID: 'EXISTING-1', Status: 'Open', SourceCreatedByUserID: CREATOR, CreatorUnresolved: false, Summary: 'Owner resolved.' });
+    // The refreshed creator is the verified caller, not the input's claim.
+    expect(s.saved[0]).toMatchObject({ ID: 'EXISTING-1', Status: 'Open', SourceCreatedByUserID: REVIEWER.ID, CreatorUnresolved: false, Summary: 'Owner resolved.' });
   });
 
   it('never touches a Reviewed or Corrected row, even when the creator differs', async () => {
@@ -250,7 +278,7 @@ describe('Accounting.RaiseFinanceExceptions', () => {
   it('on PostgreSQL, a key raised in another letter case returns the existing row, as on SQL Server', async () => {
     const s = stubProvider({
       platform: 'postgresql',
-      existing: [{ ID: 'EXISTING-1', FinanceExceptionTypeID: TYPES[0].ID, DedupeKey: 'KEY-A', Status: 'Open', SourceCreatedByUserID: CREATOR, CreatorUnresolved: false }],
+      existing: [{ ID: 'EXISTING-1', FinanceExceptionTypeID: TYPES[0].ID, DedupeKey: 'KEY-A', Status: 'Open', SourceCreatedByUserID: REVIEWER.ID, CreatorUnresolved: false }],
     });
     const result = await new RaiseFinanceExceptionsOperation().ExecuteServer({ Exceptions: [raise({ DedupeKey: 'key-a' })] }, context(s.provider));
     expect(result.Output).toEqual({ Success: true, Results: [{ Index: 0, FinanceExceptionID: 'EXISTING-1', Created: false }] });

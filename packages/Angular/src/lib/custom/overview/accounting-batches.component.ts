@@ -23,12 +23,14 @@ import {
 import {
     JournalEntryBatchDispatchClient,
     PreviewEntryWire,
+    HeldBackEntryWire,
     BuildJournalEntryBatchOptionsInput,
 } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 import { BatchAction, BatchActionDialogState } from '../JournalEntryBatchDispatch/batch-action-dialog/batch-action-dialog.state';
 import { BatchActionDialogComponent } from '../JournalEntryBatchDispatch/batch-action-dialog/batch-action-dialog.component';
 import { RetryConfirmState } from '../JournalEntryBatchDispatch/retry-confirm-dialog/retry-confirm-dialog.state';
 import { RetryConfirmDialogComponent } from '../JournalEntryBatchDispatch/retry-confirm-dialog/retry-confirm-dialog.component';
+import { SendApprovedBatchesComponent } from '../JournalEntryBatchDispatch/send-approved-batches/send-approved-batches.component';
 import { CompanyApprovers, IsErpAcceptedFailedBatch, MayArchiveBatch, MayCancelApprovedBatch, MayCancelPendingBatch, MayDecideBatch } from '../JournalEntryBatchDispatch/batch-action-permission';
 
 /**
@@ -85,7 +87,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 @Component({
     selector: 'mj-accounting-batches-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent, BatchActionDialogComponent, RetryConfirmDialogComponent],
+    imports: [CommonModule, FormsModule, MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent, BatchActionDialogComponent, RetryConfirmDialogComponent, SendApprovedBatchesComponent],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div class="mja-batches-layout">
@@ -114,6 +116,10 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                     </div>
 
                     <div class="mja-actions">
+                        <!-- Sends every Approved batch now instead of waiting for the hourly job (golive #451). -->
+                        @if (MayOperateBatches) {
+                            <mja-send-approved-batches [ApprovedCount]="ApprovedBatchCount" (Sent)="LoadBatches()" />
+                        }
                         @if (MayOperateBatches) {
                             <button mjButton variant="primary" size="sm" type="button" (click)="OpenBuildBatchModal()">
                                 <i class="fa-solid fa-plus"></i> Build Batch
@@ -460,6 +466,25 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                         </div>
                     }
 
+                    <!-- golive #448: an entry dated after the posting date would reach the ERP before it happened, so it waits. -->
+                    @if (PreviewAfterPostingDateCount > 0) {
+                        <div class="mja-banner mja-banner-held-back" role="status">
+                            <i class="fa-solid fa-calendar-plus"></i>
+                            <span>
+                                {{ PreviewAfterPostingDateCount }} entr{{ PreviewAfterPostingDateCount === 1 ? 'y is' : 'ies are' }}
+                                dated after the posting date and held back. They stay Pending for a batch posted on or after their own date.
+                                <details>
+                                    <summary>Show {{ PreviewAfterPostingDateEntries.length < PreviewAfterPostingDateCount ? 'the oldest ' + PreviewAfterPostingDateEntries.length : (PreviewAfterPostingDateCount === 1 ? 'it' : 'them') }}</summary>
+                                    <ul class="mja-held-back-list">
+                                        @for (e of PreviewAfterPostingDateEntries; track e.ID) {
+                                            <li><b>{{ e.EntryNumber }}</b>@if (e.Description) { · {{ e.Description }} } — {{ e.Reason }}</li>
+                                        }
+                                    </ul>
+                                </details>
+                            </span>
+                        </div>
+                    }
+
                     <!-- Candidate List -->
                     @if (IsPreviewLoading) {
                         <div class="mja-modal-loading">
@@ -569,6 +594,18 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             font-size: 13px;
             font-weight: 500;
         }
+        .mja-banner-held-back {
+            align-items: flex-start;
+        }
+        .mja-banner-held-back summary {
+            cursor: pointer;
+            margin-top: 4px;
+        }
+        .mja-held-back-list {
+            margin: 4px 0 0;
+            padding-left: 18px;
+            font-weight: 400;
+        }
         .mja-banner--success {
             background: #f0fdf4;
             color: #166534;
@@ -606,6 +643,13 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             align-items: center;
             justify-content: space-between;
             gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .mja-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
             flex-wrap: wrap;
         }
 
@@ -1209,6 +1253,10 @@ export class AccountingBatchesPageComponent implements OnInit {
     public PreviewOutOfOrderSkipCount = 0;
     /** Entries dated before their company's posting start date: held back, and left Pending, by every build. */
     public PreviewBeforePostingStartCount = 0;
+    /** Entries dated after the posting date (golive #448): held back until a batch posts on or after their date. */
+    public PreviewAfterPostingDateCount = 0;
+    /** The oldest of those, each with the reason it is held back. */
+    public PreviewAfterPostingDateEntries: HeldBackEntryWire[] = [];
     /** Numbers each preview request. Only the latest one's response is applied (#254): ticking
      *  fast fires overlapping previews, and a slower earlier one must not overwrite a newer one. */
     private previewRequestSeq = 0;
@@ -1246,6 +1294,11 @@ export class AccountingBatchesPageComponent implements OnInit {
     public CanDecide(batch: BatchItem): boolean {
         if (batch.Status !== 'Pending' || this.DecidingBatchID === batch.ID) return false;
         return MayDecideBatch(batch, Metadata.Provider?.CurrentUser?.ID, this.companyApprovers);
+    }
+
+    /** How many listed batches are Approved: what Send approved batches will send (golive #451). */
+    public get ApprovedBatchCount(): number {
+        return this.Batches.filter(b => b.Status === 'Approved').length;
     }
 
     /** Dispatch sends an Approved batch to the ERP; it needs the batch-operator Authorization (#448). */
@@ -1792,6 +1845,8 @@ export class AccountingBatchesPageComponent implements OnInit {
                 this.PreviewGrossCredits = previewRes.GrossCredits;
                 this.PreviewOutOfOrderSkipCount = previewRes.OutOfOrderSkipCount;
                 this.PreviewBeforePostingStartCount = previewRes.BeforePostingStartCount;
+                this.PreviewAfterPostingDateCount = previewRes.AfterPostingDateCount;
+                this.PreviewAfterPostingDateEntries = previewRes.AfterPostingDateEntries;
                 this.setCoveredDateRange(this.PreviewEntries);
             } else {
                 this.ModalErrorMessage = previewRes.ErrorMessage ?? 'Could not load the entries that match these criteria. Try again.';
@@ -1829,6 +1884,8 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.PreviewGrossCredits = 0;
         this.PreviewOutOfOrderSkipCount = 0;
         this.PreviewBeforePostingStartCount = 0;
+        this.PreviewAfterPostingDateCount = 0;
+        this.PreviewAfterPostingDateEntries = [];
         this.PreviewCoveredStartDate = null;
         this.PreviewCoveredEndDate = null;
     }

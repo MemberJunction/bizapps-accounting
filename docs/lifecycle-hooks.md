@@ -56,6 +56,9 @@ company.
 **Validates (bc-aidp-next-golive#316):** setting, moving or clearing `BooksClosedThroughDate` is
 refused unless the saving user holds `MJ.BizApps.Accounting.BooksClosedThroughDate.Set` (the Finance
 role). An authorization missing from the catalog is held by nobody. Other edits are not checked.
+**Validates (bc-aidp-next-golive#447):** the same rule for `PostingStartDate`, behind its own
+authorization, `MJ.BizApps.Accounting.PostingStartDate.Set` (the Finance role). Both checks share
+`profile-date-authorizations.ts` in the engine base with the Periods page, which hides the buttons.
 - *(The profile's 5 default GL-account refs were RETIRED 2026-07-23 — role/link model replaces them.)*
 - *(Period generation was REMOVED 2026-07-06 — no `AccountingPeriod` rows exist to create.)*
 
@@ -82,6 +85,15 @@ original's `ReversedByJournalEntryID` (the one field the immutability trigger le
 The reversal's `EffectiveDate` is the later of today's business day (`BusinessTimeZoneEngine`) and the
 original's `EffectiveDate`, so a reversal never lands in a period before the entry it reverses (#266).
 
+### W10 — Re-dating a Pending entry *(✅ `JournalEntryEntityServer.SaveRedatedEffectiveDate(day)`, golive #448)*
+**Fires:** only from `Accounting.RedatePendingJournalEntries`, after it has checked the caller (the
+batch-operator Authorization), the company's `BooksClosedThroughDate` and `PostingStartDate`, and that
+the move stays in the entry's fiscal year.
+**Does:** moves a saved, Pending, unbatched entry's `EffectiveDate` and saves it. During that save
+`EffectiveDateChangeAllowed` is true; it is false on every other save, so a rule that makes `EffectiveDate`
+immutable on saved entries (#391) consults it to let this one change through. A manual entry's approval
+re-routes as for any date change.
+
 ### W9 — JE attachment validation *(✅ `JournalEntryEntityServer.ts`)*
 **Fires:** whenever a JE is saved with a non-null `FileID`.
 **Does:** verifies the `FileID` references an existing `__mj.File` (the DB FK is the hard guarantee).
@@ -105,6 +117,11 @@ auto-refresh, and exposes:
   Cardinality=Many roles throw `ROLE_NOT_SINGULAR` (BA-D34).
 - **`ResolveLinkedAccounts(...)`** — every covering Active link for a Many role (`BankAccount`).
   One roles return the same 0-or-1 winner as `ResolveLinkedAccount`.
+- **`ResolveFirstLinkedAccount(records, role, asOfDate, options)`** — the first record in a caller-ordered
+  walk with a link; when none has one, reloads the cache once and retries (bc-aidp-next-golive#438), so
+  links written straight to the database are found without a server restart.
+  **`RefreshAfterLinkMiss()`** is that reload for callers that walk themselves: shared between concurrent
+  callers, and skipped (returns false) within 30 s of the last one.
 - the **pure draft pipeline** (`runDraftPipeline`) + the typed contract (`JournalEntryDraft`,
   `CreateJournalEntryResult`, the 10 error codes) — importable by Orders' client code with zero server deps.
 
