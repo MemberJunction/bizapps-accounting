@@ -3,14 +3,14 @@
  * (`Accounting.BuildJournalEntryBatch` / `Accounting.RegenerateJournalEntryBatch` / `Accounting.DispatchJournalEntryBatch` /
  * `Accounting.RecordJournalEntryBatchDecision` / `Accounting.GetJournalEntryBatchApprovalState` /
  * `Accounting.ArchiveJournalEntryBatch` / `Accounting.CancelJournalEntryBatch` / `Accounting.ResumeJournalEntryBatchPosting` /
- * `Accounting.GetStrandedJournalEntries`).
+ * `Accounting.GetStrandedJournalEntries` / `Accounting.DispatchApprovedJournalEntryBatches`).
  *
  * Deliberately NOT a hand-written GraphQL client (the old shape, which talked to the deleted
  * BatchDispatchResolver): batch actions run the batching engine server-side, so they travel MJ's
  * Remote Operations stack — `provider.RouteOperation(key, input)` marshals them over the generic
  * ExecuteRemoteOperation mutation. This file exists only to give components typed inputs and the
- * legacy result shapes they already bind to; it holds NO logic (four-surface doctrine, Amith
- * 2026-07-28: the UI calls remote ops + prebuilt queries — nothing else).
+ * legacy result shapes they already bind to; it holds NO logic (four-surface doctrine:
+ * the UI calls remote ops + prebuilt queries — nothing else).
  *
  * Error contract (unchanged): each method catches/logs and returns a `{ Success: false,
  * ErrorMessage }`-shaped result rather than throwing — the UI renders a friendly message without
@@ -56,6 +56,24 @@ interface CancelJournalEntryBatchOutputWire {
   ConfirmationKind?: DispatchConfirmationKind;
 }
 interface ResumeJournalEntryBatchPostingOutputWire { Status: string; JournalEntriesPosted: number }
+
+/**
+ * One batch's outcome from `Accounting.DispatchApprovedJournalEntryBatches` (bc-aidp-next-golive#451).
+ * Keep in sync with `DispatchApprovedJournalEntryBatchOutcome` in CoreEntitiesServer's JournalEntryBatchOperations.ts.
+ */
+export interface SendApprovedBatchOutcome {
+  JournalEntryBatchID: string;
+  JournalEntryBatchNumber: string;
+  CompanyID: string;
+  Company: string | null;
+  /** The batch's status after the send, or the status it was left at. */
+  Status: string;
+  /** True when the batch is recorded Posted. */
+  Posted: boolean;
+  /** Why the batch did not post, or what happened to it instead. Null when this run posted it. */
+  Message: string | null;
+}
+interface DispatchApprovedJournalEntryBatchesOutputWire { Batches: SendApprovedBatchOutcome[]; PostedCount: number }
 
 /**
  * One batch holding entries at `Batched` that no run will pick up (#145). Keep in sync with
@@ -133,6 +151,13 @@ export interface StrandedJournalEntriesResult {
   ErrorMessage?: string;
 }
 
+export interface SendApprovedBatchesResult {
+  Success: boolean;
+  Batches: SendApprovedBatchOutcome[];
+  PostedCount: number;
+  ErrorMessage?: string;
+}
+
 export interface JournalEntryBatchApprovalState {
   Success: boolean;
   Approved: boolean;
@@ -186,6 +211,19 @@ export interface PreviewJournalEntryBatchOutputWire {
   GrossCredits: number;
   OutOfOrderSkipCount: number;
   BeforePostingStartCount: number;
+  AfterPostingDateCount?: number;
+  AfterPostingDateEntries?: HeldBackEntryWire[];
+}
+
+/** An entry the preview reports as held back, and why (golive #448). */
+export interface HeldBackEntryWire {
+  ID: string;
+  EntryNumber: string;
+  EffectiveDate: string;
+  EntryTypeCode: string;
+  CompanyID: string;
+  Description: string | null;
+  Reason: string;
 }
 
 export interface PreviewJournalEntryBatchResult {
@@ -207,6 +245,12 @@ export interface PreviewJournalEntryBatchResult {
    * date: held back, and left Pending, by every build.
    */
   BeforePostingStartCount: number;
+  /**
+   * How many entries the other criteria admit that are dated after the posting date (golive #448):
+   * held back until a batch posts on or after their date. `AfterPostingDateEntries` lists the oldest.
+   */
+  AfterPostingDateCount: number;
+  AfterPostingDateEntries: HeldBackEntryWire[];
   ErrorMessage?: string;
 }
 
@@ -245,7 +289,7 @@ export class JournalEntryBatchDispatchClient {
     try {
       const res = await this.dataProvider.RouteOperation<PreviewJournalEntryBatchOptionsInput, PreviewJournalEntryBatchOutputWire>(
         'Accounting.PreviewJournalEntryBatch', options ?? {});
-      if (!res.Success || !res.Output) return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0, ErrorMessage: res.ErrorMessage ?? 'The server returned no result. Try again; if it keeps happening, ask an administrator to check the server logs.' };
+      if (!res.Success || !res.Output) return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0, AfterPostingDateCount: 0, AfterPostingDateEntries: [], ErrorMessage: res.ErrorMessage ?? 'The server returned no result. Try again; if it keeps happening, ask an administrator to check the server logs.' };
       return {
         Success: true,
         Candidates: res.Output.Candidates ?? [],
@@ -255,11 +299,13 @@ export class JournalEntryBatchDispatchClient {
         GrossCredits: res.Output.GrossCredits ?? 0,
         OutOfOrderSkipCount: res.Output.OutOfOrderSkipCount ?? 0,
         BeforePostingStartCount: res.Output.BeforePostingStartCount ?? 0,
+        AfterPostingDateCount: res.Output.AfterPostingDateCount ?? 0,
+        AfterPostingDateEntries: res.Output.AfterPostingDateEntries ?? [],
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`JournalEntryBatchDispatchClient.PreviewJournalEntryBatch failed: ${msg}`);
-      return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0, ErrorMessage: msg };
+      return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0, AfterPostingDateCount: 0, AfterPostingDateEntries: [], ErrorMessage: msg };
     }
   }
 
@@ -305,6 +351,25 @@ export class JournalEntryBatchDispatchClient {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`JournalEntryBatchDispatchClient.DispatchJournalEntryBatch failed: ${msg}`);
       return { Success: false, ErrorMessage: msg };
+    }
+  }
+
+  /**
+   * Send every Approved batch to its ERP now, one at a time, through the same send as
+   * `DispatchJournalEntryBatch` (bc-aidp-next-golive#451). Omit `companyIds` for every company.
+   * `Success` means the run happened; each batch's own result is in `Batches`, and one batch failing
+   * does not stop the rest.
+   */
+  public async DispatchApprovedJournalEntryBatches(companyIds?: string[]): Promise<SendApprovedBatchesResult> {
+    try {
+      const res = await this.dataProvider.RouteOperation<{ CompanyIDs: string[] | null }, DispatchApprovedJournalEntryBatchesOutputWire>(
+        'Accounting.DispatchApprovedJournalEntryBatches', { CompanyIDs: companyIds?.length ? companyIds : null });
+      if (!res.Success || !res.Output) return { Success: false, Batches: [], PostedCount: 0, ErrorMessage: res.ErrorMessage ?? 'The server returned no result. Try again; if it keeps happening, ask an administrator to check the server logs.' };
+      return { Success: true, Batches: res.Output.Batches ?? [], PostedCount: res.Output.PostedCount ?? 0 };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      LogError(`JournalEntryBatchDispatchClient.DispatchApprovedJournalEntryBatches failed: ${msg}`);
+      return { Success: false, Batches: [], PostedCount: 0, ErrorMessage: msg };
     }
   }
 

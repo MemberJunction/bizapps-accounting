@@ -2,8 +2,8 @@
  * Server-side subclass of GLAccount — always-applies invariants for the chart of accounts.
  *
  * The rule that MUST hold on every save regardless of caller:
- *   **Identity fields are immutable from the moment the record is created** (Amith 2026-07-29 —
- *   immediate + unconditional; supersedes the earlier referenced-by-JE-lines gate). Why the
+ *   **Identity fields are immutable from the moment the record is created** (immediate +
+ *   unconditional; supersedes the earlier referenced-by-JE-lines gate). Why the
  *   stronger form: gating on references left a window where an unreferenced-by-JE-lines account
  *   could change CompanyID while GLAccountLink / IntercompanyAccountMatch rows pointed at it,
  *   silently re-aiming them (the probe-C hole). Freezing identity at creation kills the whole
@@ -87,7 +87,7 @@ export class GLAccountEntityServer extends mjBizAppsAccountingGLAccountEntity {
   };
 
   /**
-   * Identity lock — IMMEDIATE and UNCONDITIONAL (Amith 2026-07-29, supersedes the
+   * Identity lock — IMMEDIATE and UNCONDITIONAL (supersedes the
    * referenced-by-JE-lines gate): the identity fields are frozen the moment the record is
    * created, NOT gated on JE-line references. This closes the whole drift class at the root —
    * an account that can never change company/code/type cannot silently re-aim its GLAccountLink

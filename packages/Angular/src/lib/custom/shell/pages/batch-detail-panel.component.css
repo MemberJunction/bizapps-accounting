@@ -40,7 +40,7 @@
   font-variant-numeric: tabular-nums;
 }
 .mono {
-  font-family: var(--mj-font-mono, monospace);
+  font-family: var(--mj-font-family-mono);
   font-size: 12px;
 }
 
@@ -88,6 +88,28 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Source column (bc-aidp-next-golive#452): the entry's source record, as a link. */
+.bdp__source {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bdp__source-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--mj-text-link);
+  cursor: pointer;
+  font: inherit;
+}
+.bdp__source-link:hover {
+  text-decoration: underline;
+}
+.bdp__source-none {
+  color: var(--mj-text-muted);
 }
 
 .bdp__empty,

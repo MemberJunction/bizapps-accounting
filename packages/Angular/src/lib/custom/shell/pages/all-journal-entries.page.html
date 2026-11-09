@@ -1,13 +1,13 @@
-<!-- Sub-page of a left-nav shell. NO page-title card (Marcelo 2026-08-04): the rail already names
+<!-- Sub-page of a left-nav shell. NO page-title card: the rail already names
      the page, and the verbs live in the CATEGORY header — the fused stats+toolbar subheader below
      is the page's whole chrome (the orders All-Orders idiom, our list-page standard). -->
 <!-- The scrollable body is the interior primitive left-nav-content expects. [Padding]=false: the
      page owns the gutter (16px sides) so the strip / toolbar / grid bubbles align edge-for-edge
      with the header-interior bubble above (whose margin is 16px) — body-interior's responsive
-     24/32px default made every bubble narrower than the header (Marcelo 2026-08-04). -->
+     24/32px default made every bubble narrower than the header. -->
 <mj-page-body-interior [Padding]="false">
   <div class="aje-body">
-  <!-- The ONE subheader band (Marcelo 2026-08-04): the title card is gone (the rail already names
+  <!-- The ONE subheader band: the title card is gone (the rail already names
        the page) and the stats + toolbar fuse into a single subheader-styled card. Each figure is a
        filtered COUNT over the SAME predicate the grid uses (MaxRows 1 + TotalRowCount — §0), so a
        figure can never disagree with the rows; a zero-count status is hidden. -->
@@ -33,7 +33,7 @@
     (PresetToggled)="OnPresetToggled($event)">
     <label class="aje-field">
       <span class="aje-field__label">Company</span>
-      <!-- CHECKBOX multi-select (Marcelo 2026-08-05): narrow to any set of companies; empty = all. -->
+      <!-- CHECKBOX multi-select: narrow to any set of companies; empty = all. -->
       <mja-check-dropdown
         [Options]="Companies"
         [SelectedIDs]="CompanyIDs"

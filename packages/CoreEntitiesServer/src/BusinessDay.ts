@@ -94,6 +94,27 @@ export async function loadBoundDay(
   return loadBusinessDayOf(bound, contextUser, provider, companyID);
 }
 
+/** `YYYY-MM-DDT00:00[:00[.000]]Z` or `+00:00`: a calendar day held as UTC midnight, written out by
+ *  `JSON.stringify` or `toISOString()` of what `FromCalendarDay` and a DATE column produce. */
+const UTC_MIDNIGHT_TEXT = /^(\d{4}-\d{2}-\d{2})T00:00(?::00(?:\.0{1,9})?)?(?:Z|\+00:00)$/;
+
+/**
+ * The calendar day a journal entry draft's EffectiveDate names (#427), by the rules of
+ * {@link loadBoundDay} with one addition: a UTC-midnight string is that day, as a UTC-midnight
+ * `Date` is. That is the text a calendar day becomes when a `Date` crosses JSON, and drafts have
+ * always stored it as that day. Any other date-time is an instant, filed on the business day it
+ * falls on; `2026-09-30T19:30:00-05:00` is 30 September, although its UTC day is 1 October.
+ * Throws, naming `context`, on a value that is neither a calendar day nor a date-time with an offset.
+ */
+export async function loadEffectiveDay(
+  value: DateBound, context: string, contextUser: UserInfo, provider: IMetadataProvider, companyID?: string,
+): Promise<CalendarDay> {
+  requireDateBound(value, context);
+  const utcMidnight = typeof value === 'string' ? UTC_MIDNIGHT_TEXT.exec(value) : null;
+  if (utcMidnight) return utcMidnight[1];
+  return loadBoundDay(value, context, contextUser, provider, companyID);
+}
+
 /**
  * A batch's PostingDate — the journal date the ERP receives — as a calendar day: the day the caller
  * asked for, read by the same shape rules as a cutoff ({@link loadBoundDay}), or today's business day

@@ -1,7 +1,7 @@
 /**
  * GenerateReversalOperation — 'Accounting.GenerateJournalEntryReversal' as a code-only Remote
- * Operation. Replaces the hand-written JournalEntryResolver (four-surface doctrine, Amith
- * 2026-07-28: an action that runs entity/engine logic server-side travels the remote-op stack).
+ * Operation. Replaces the hand-written JournalEntryResolver (four-surface doctrine:
+ * an action that runs entity/engine logic server-side travels the remote-op stack).
  *
  * Thin by design: the business logic — a NEW Pending JE with Dr/Cr swapped, dimension tags +
  * counterparty carried, typed Code='Reversal', back-referenced both ways, the no-double-reverse /
@@ -34,6 +34,7 @@ export interface GenerateReversalOutput {
 @RegisterClass(BaseRemotableOperation, 'Accounting.GenerateJournalEntryReversal')
 export class GenerateReversalOperation extends BaseRemotableOperation<GenerateReversalInput, GenerateReversalOutput> {
   public readonly OperationKey = 'Accounting.GenerateJournalEntryReversal';
+  public readonly RequiredScope = 'accounting:write';
 
   protected async InternalExecute(input: GenerateReversalInput, provider: IMetadataProvider, user: UserInfo): Promise<GenerateReversalOutput> {
     if (!input?.JournalEntryID) throw new Error('The entry was not reversed: no journal entry was given.');

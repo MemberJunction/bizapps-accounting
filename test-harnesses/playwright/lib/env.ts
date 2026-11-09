@@ -9,43 +9,26 @@
  *   MJDEV_SLUG          (default: bizapps-accounting-dev)
  *   MJEXPLORER_PORT     (default: resolved from mjdev, else 4200)
  *   MJAPI_PORT          (default: resolved from mjdev, else 4000)
- *   MJDEV_BIN           (default: <workspace>/bin/mjdev — resolved relative to this file)
+ *   MJDEV_BIN           (default: the nearest bin/mjdev above the repo, else mjdev on PATH)
  */
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { MJDEV_BIN as HARNESS_MJDEV_BIN } from '../../harness-paths.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** test-harnesses/playwright/ */
 export const HARNESS_DIR = path.resolve(__dirname, '..');
 
-/** Walk up from a start dir until we find `bin/mjdev` (the workspace root). */
-function findMjdevBin(start: string): string | null {
-  let dir = start;
-  for (let i = 0; i < 12; i++) {
-    const candidate = path.join(dir, 'bin', 'mjdev');
-    if (existsSync(candidate)) return candidate;
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return null;
-}
 /** Gitignored local-auth folder (storageState etc.). */
 export const TEST_AUTH_DIR = path.resolve(HARNESS_DIR, '..', 'test-auth');
 export const STORAGE_STATE = path.join(TEST_AUTH_DIR, 'storage-state.json');
 
 export const SLUG = process.env.MJDEV_SLUG ?? 'bizapps-accounting-dev';
 
-/**
- * The mjdev launcher (`<workspace>/bin/mjdev`). The harness lives several levels under the
- * workspace root; rather than hardcode the count, we walk up looking for `bin/mjdev`. Overridable
- * via MJDEV_BIN.
- */
-export const MJDEV_BIN =
-  process.env.MJDEV_BIN ?? findMjdevBin(HARNESS_DIR) ?? path.resolve(HARNESS_DIR, '..', '..', '..', '..', '..', '..', '..', '..', 'bin', 'mjdev');
+/** The mjdev launcher, resolved once for every harness (../../harness-paths.mts). */
+export const MJDEV_BIN = HARNESS_MJDEV_BIN;
 
 /**
  * Resolve a service's actual serving port FROM mjdev (`mjdev ps <slug> --json`) by process label.

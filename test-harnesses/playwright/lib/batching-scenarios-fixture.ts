@@ -17,10 +17,9 @@
  *   teardown '<json>'      → removes everything (JEs found via the companies' GL accounts,
  *                            batches via their line items' CompanyID; FK-aware, triggers toggled).
  *
- * Run from the INSTANCE WORKTREE ROOT. Exit: 0 ok · 2 error. NEVER awaits pool.close (finishAndExit).
+ * Run from the repo root. Exit: 0 ok · 2 error. NEVER awaits pool.close (finishAndExit).
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
@@ -37,6 +36,7 @@ import type {
 import type { mjBizAppsCommonPersonEntity, mjBizAppsCommonOrganizationEntity } from '@mj-biz-apps/common-entities';
 import * as harnessExitNS from '../../server/harness-exit.js';
 import * as triggerPreflightNS from '../../server/trigger-preflight.js';
+import { LoadHarnessEnv } from '../../harness-paths.mjs';
 
 type FinishAndExit = (summary: string, code: number, ...pools: Array<sql.ConnectionPool | undefined>) => never;
 type AssertTriggers = (pool: sql.ConnectionPool, schema?: string) => Promise<void>;
@@ -66,9 +66,9 @@ interface CompanyResult { companyId: string; cfoPersonId: string | null }
 interface Scenarios { runTag: string; counterpartyId: string; flowId: string; coA: CompanyResult; coB: CompanyResult; coC: CompanyResult }
 
 async function connect(): Promise<Pools> {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   const { DB_HOST: host, DB_DATABASE: database, DB_USERNAME: user, DB_PASSWORD: password } = process.env;
-  if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env — run from the instance worktree root.');
+  if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env (looked in the working directory, then the repo root and each folder above it).');
   const port = Number(process.env.DB_PORT ?? 1433);
   const opt = { encrypt: false, trustServerCertificate: true };
   const pool = await new sql.ConnectionPool({ server: host, port, user, password, database, options: opt }).connect();

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, Ho
 import { MJLeftNavComponent, MJLeftNavItem, MJLeftNavSection } from '@memberjunction/ng-ui-components';
 import { ShellRailStateService } from './shell-rail-state.service';
 
-/** Hover-to-expand timings (Marcelo 2026-07-21). Enter is delayed so an accidental graze does not pop
+/** Hover-to-expand timings. Enter is delayed so an accidental graze does not pop
  *  the rail open; leave has a small grace so a wobble off the edge doesn't collapse it mid-reach. */
 const HOVER_EXPAND_DELAY_MS = 450;
 const HOVER_COLLAPSE_DELAY_MS = 160;
@@ -61,11 +61,11 @@ export class ShellRailComponent implements OnInit, OnDestroy {
   @Output() ItemClicked = new EventEmitter<MJLeftNavItem>();
 
   /**
-   * Collapsed = icons only. Marcelo's ruling (2026-07-16): default EXPANDED, and a plain toggle —
+   * Collapsed = icons only. Default EXPANDED, and a plain toggle —
    * no pin/auto-expand-on-hover. A rail that expands when the pointer grazes it moves the target
    * you were aiming at; deliberate is better than clever.
    *
-   * The state itself lives in the APP-WIDE ShellRailStateService (Marcelo 2026-07-21), not as a field
+   * The state itself lives in the APP-WIDE ShellRailStateService, not as a field
    * here — otherwise each category's own rail instance keeps its own copy and switching top-nav
    * categories resets it. Reading through the service means every rail reflects the same live value.
    */
@@ -75,13 +75,13 @@ export class ShellRailComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Hover-to-expand (Marcelo 2026-07-21): while COLLAPSED, hovering the rail (after a delay) expands it
+   * Hover-to-expand: while COLLAPSED, hovering the rail (after a delay) expands it
    * as an OVERLAY that floats over the content — it does NOT change the reserved layout width, so the
    * body never shifts. Transient (not persisted): mouse-only, desktop-only (the mobile drawer is its own
    * thing). Superseded the earlier no-hover ruling now that overlay + delay remove the "moves the target
    * you were aiming at" problem the old instant-hover would have had.
    *
-   * OFF BY DEFAULT (Marcelo 2026-07-30): the machinery stays (cleanly gated here), but no shell opts in
+   * OFF BY DEFAULT: the machinery stays (cleanly gated here), but no shell opts in
    * today — the toggle is the affordance. Re-enable per-shell with `[HoverPeek]="true"` if it earns its
    * way back.
    */
@@ -119,7 +119,7 @@ export class ShellRailComponent implements OnInit, OnDestroy {
 
   @HostListener('mouseenter')
   onRailEnter(): void {
-    if (!this.HoverPeek) return; // feature gated off by default (Marcelo 2026-07-30)
+    if (!this.HoverPeek) return; // feature gated off by default
     if (!this.Collapsed) return; // expanded rail has nothing to peek
     this.clearTimers();
     this.enterTimer = setTimeout(() => { this.HoverExpanded = true; this.cdr.markForCheck(); }, HOVER_EXPAND_DELAY_MS);
@@ -163,7 +163,7 @@ export class ShellRailComponent implements OnInit, OnDestroy {
     // Flip + persist through the shared service, so ALL rail instances (every category) reflect it live.
     this.railState.Toggle();
     // A deliberate collapse click OVERRIDES an in-progress hover-peek: cancel the peek + its timers so the
-    // rail snaps shut instantly instead of staying open because the pointer is still over it (Marcelo).
+    // rail snaps shut instantly instead of staying open because the pointer is still over it.
     this.clearTimers();
     this.HoverExpanded = false;
     this.cdr.markForCheck();

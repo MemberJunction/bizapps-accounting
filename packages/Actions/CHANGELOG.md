@@ -1,5 +1,72 @@
 # @mj-biz-apps/accounting-actions
 
+## 0.26.0
+
+### Minor Changes
+
+- ccee5c0: Add a "Send approved batches" button to the Batches page (bc-aidp-next-golive#451). It calls the new `Accounting.DispatchApprovedJournalEntryBatches` Remote Operation, which requires the batch-operator Authorization (the Finance role), takes an optional company filter, sends every Approved batch through the same send as the per-batch Dispatch button, and returns each batch's outcome; one batch failing does not stop the rest. The hourly dispatch action now shares that selection and send and still runs only as the system user. The ERP sync panel is relabelled "Pull accounts and dimensions from ERP" and points to the Batches page for posting.
+
+### Patch Changes
+
+- Updated dependencies [a56dd15]
+- Updated dependencies [167a3dc]
+- Updated dependencies [ccee5c0]
+- Updated dependencies [81b934e]
+  - @mj-biz-apps/accounting-core-entities-server@0.26.0
+
+## 0.25.1
+
+### Patch Changes
+
+- Updated dependencies [a2783f1]
+  - @mj-biz-apps/accounting-core-entities-server@0.25.1
+
+## 0.25.0
+
+### Minor Changes
+
+- b3592ca: Add `Accounting.DispatchApprovedJournalEntryBatches` and an hourly scheduled job that runs it. The job sends every Approved journal entry batch to its ERP through the same send as the Dispatch button, so each send passes the CFO approval gate, the approved-content check and the ERP lookup. It approves nothing and never retries a Failed batch. Only the MJ system user may run it.
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-core-entities-server@0.25.0
+
+## 0.24.0
+
+### Patch Changes
+
+- Updated dependencies [96b1a48]
+- Updated dependencies [201d11f]
+- Updated dependencies [5ee4741]
+- Updated dependencies [7b88d06]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [803a7ab]
+- Updated dependencies [6d866b6]
+- Updated dependencies [74e2ad9]
+- Updated dependencies [47d5474]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [140106d]
+- Updated dependencies [fa4f5fa]
+- Updated dependencies [ecdc1e0]
+- Updated dependencies [003d4e6]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [4c0476c]
+- Updated dependencies [aff9c70]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [a7c8e83]
+- Updated dependencies [074060f]
+- Updated dependencies [ea5f9f7]
+  - @mj-biz-apps/accounting-core-entities-server@0.24.0
+
+## 0.23.0
+
+### Patch Changes
+
+- b5646b8: Requires MemberJunction 6.1.6, the 6.1 LTS release QA runs. Every `@memberjunction/*` range and both root overrides are `^6.1.6`, and `mj-app.json` declares `>=6.1.6 <7.0.0`.
+- Updated dependencies [12a7026]
+- Updated dependencies [b5646b8]
+  - @mj-biz-apps/accounting-core-entities-server@0.23.0
+
 ## 0.22.2
 
 ### Patch Changes

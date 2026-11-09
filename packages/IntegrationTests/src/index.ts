@@ -5,6 +5,7 @@
  *   acct-world   AW1–AW3  metadata lookup + stamp ApprovalCFOUserID on world companies
  *   acct-ledger  AL1      Journal Entry RunView
  *   acct-batch   AB1      PreviewJournalEntryBatch over remote ops (does not consume pending JEs)
+ *   acct-isa     I1–I8    MJ IS-A on AccountingCompanyProfile IS-A MJ: Companies (own fixtures, removed)
  */
 import { LoadGeneratedEntities } from '@mj-biz-apps/accounting-entities';
 
@@ -15,6 +16,7 @@ export * from './wire.js';
 export * from './checks/acct-world.checks.js';
 export * from './checks/acct-ledger.checks.js';
 export * from './checks/acct-batch.checks.js';
+export * from './checks/acct-isa.checks.js';
 
 export function LoadAccountingIntegrationTests(): void {
     // side-effect import is the registration

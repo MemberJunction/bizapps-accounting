@@ -3,7 +3,7 @@
  * test can assert WHICH journal entries a filter admits rather than how the filter string reads.
  *
  * It evaluates the small SQL subset the engine emits (`=`, `<>`, `>=`, `<`, `<=`, `IN`, `NOT IN`,
- * `AND`, `OR`, `NOT`, parentheses) over plain rows whose dates are 'YYYY-MM-DD' strings, which
+ * `IS NULL`, `IS NOT NULL`, `AND`, `OR`, `NOT`, parentheses) over plain rows whose dates are 'YYYY-MM-DD' strings, which
  * compare correctly as text. A filter using SQL outside that subset fails loudly.
  */
 import type { IMetadataProvider, UserInfo } from '@memberjunction/core';
@@ -24,11 +24,15 @@ export interface JournalRow {
   Status: string;
   EntryTypeID: string;
   Description: string | null;
+  /** Manual-entry approval (golive #353): set when the entry needs approval. */
+  ApprovalLevel?: 'Standard' | 'CFO' | null;
+  ApprovedAt?: string | null;
 }
 
 export interface ProfileRow {
   ID: string;
   PostingStartDate: Date | null;
+  BooksClosedThroughDate?: Date | null;
 }
 
 interface ViewParams {
@@ -47,24 +51,30 @@ interface ViewResult {
 
 /** A journal row with sensible defaults; override what the case is about. */
 export function journal(id: string, companyId: string, effectiveDate: string, overrides: Partial<JournalRow> = {}): JournalRow {
-  return { ID: id, EntryNumber: `JE-${id}`, CompanyID: companyId, EffectiveDate: effectiveDate, Status: 'Pending', EntryTypeID: MANUAL_TYPE_ID, Description: null, ...overrides };
+  return { ID: id, EntryNumber: `JE-${id}`, CompanyID: companyId, EffectiveDate: effectiveDate, Status: 'Pending', EntryTypeID: MANUAL_TYPE_ID, Description: null, ApprovalLevel: null, ApprovedAt: null, ...overrides };
 }
 
-/** A profile with a PostingStartDate as the provider returns a DATE column: UTC midnight. */
-export function profile(companyId: string, postingStartDate: string | null): ProfileRow {
-  return { ID: companyId, PostingStartDate: postingStartDate ? new Date(`${postingStartDate}T00:00:00.000Z`) : null };
+/** A profile with its DATE columns as the provider returns them: UTC midnight. */
+export function profile(companyId: string, postingStartDate: string | null, booksClosedThroughDate: string | null = null): ProfileRow {
+  return { ID: companyId, PostingStartDate: dateColumn(postingStartDate), BooksClosedThroughDate: dateColumn(booksClosedThroughDate) };
+}
+
+function dateColumn(day: string | null): Date | null {
+  return day ? new Date(`${day}T00:00:00.000Z`) : null;
 }
 
 /** Compile the engine's ExtraFilter subset to a row predicate. */
 export function compileFilter(filter: string): (row: object) => boolean {
   const js = filter
+    .replace(/\b(\w+) IS NOT NULL\b/g, '(r.$1 != null)')
+    .replace(/\b(\w+) IS NULL\b/g, '(r.$1 == null)')
     .replace(/\b(\w+) NOT IN \(([^)]*)\)/g, '!([$2].includes(r.$1))')
     .replace(/\b(\w+) IN \(([^)]*)\)/g, '[$2].includes(r.$1)')
     .replace(/\b(\w+)\s*(<>|>=|<=|<|>|=)\s*'/g, (_m, col: string, op: string) => `r.${col} ${op === '=' ? '===' : op === '<>' ? '!==' : op} '`)
     .replace(/\bAND\b/g, '&&')
     .replace(/\bOR\b/g, '||')
     .replace(/\bNOT\b/g, '!');
-  if (/\b(IS|LIKE|BETWEEN|EXISTS|SELECT)\b/.test(filter)) throw new Error(`in-memory provider: unsupported filter: ${filter}`);
+  if (/\b(IS|LIKE|BETWEEN|EXISTS|SELECT)\b/.test(filter.replace(/\b\w+ IS (NOT )?NULL\b/g, ''))) throw new Error(`in-memory provider: unsupported filter: ${filter}`);
   return new Function('r', `return (${js});`) as (row: object) => boolean;
 }
 
@@ -91,8 +101,10 @@ function resolve(params: ViewParams, data: { journals: JournalRow[]; profiles: P
       : [{ ID: SUMMARY_TYPE_ID, Code: 'JournalEntryBatchSummary' }, { ID: MANUAL_TYPE_ID, Code: 'Manual' }];
   }
   if (params.EntityName === ACP_ENTITY) {
-    if (params.ExtraFilter !== 'PostingStartDate IS NOT NULL') throw new Error(`in-memory provider: unexpected profile filter ${params.ExtraFilter}`);
-    return data.profiles.filter(p => p.PostingStartDate !== null);
+    if (params.ExtraFilter === 'PostingStartDate IS NOT NULL') return data.profiles.filter(p => p.PostingStartDate !== null);
+    // The build's books-closed read names one company.
+    if (params.ExtraFilter?.startsWith('ID=')) return data.profiles.filter(compileFilter(params.ExtraFilter));
+    throw new Error(`in-memory provider: unexpected profile filter ${params.ExtraFilter}`);
   }
   if (params.EntityName === JE_ENTITY) {
     return params.ExtraFilter ? data.journals.filter(compileFilter(params.ExtraFilter)) : data.journals;

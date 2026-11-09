@@ -29,15 +29,12 @@
  * state and are intentionally NOT touched by teardown. Verification uses raw mssql queries
  * so a wrong count is caught even if the entity layer reports success.
  *
- * USAGE (cwd MUST be the instance worktree root so .env resolves, e.g.
- *   ~/MJDev/instances/accounting-engine-dev/mj):
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block0-runtime.ts
+ * USAGE (from the repo root; .env lookup: ../harness-paths.mts):
+ *   npx tsx test-harnesses/server/block0-runtime.ts
  *
  * Exit code: 0 = all passed, 1 = test failures, 2 = bootstrap error.
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'path';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 import { assertInvariantTriggers } from './trigger-preflight.js';
@@ -54,6 +51,7 @@ import type {
   mjBizAppsAccountingJournalEntryEntity,
   mjBizAppsAccountingJournalEntryBatchEntity,
 } from '@mj-biz-apps/accounting-entities';
+import { LoadHarnessEnv } from '../harness-paths.mjs';
 
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
@@ -83,6 +81,7 @@ const EXPECTED_ROLES: ReadonlyArray<{ sequence: number; name: string }> = [
   { sequence: 90, name: 'Processing Fee' },
   { sequence: 100, name: 'Unbilled Receivable' },
   { sequence: 110, name: 'Customer Deposits' },
+  { sequence: 120, name: 'Gift Card Liability' },
 ];
 
 const RUN_TAG = `BLOCK0-${Date.now()}`;
@@ -123,14 +122,14 @@ function sequencePart(num: string): number {
 interface Ctx { pool: sql.ConnectionPool; user: UserInfo; currencyCode: string }
 
 async function bootstrap(): Promise<Ctx> {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   const host = process.env.DB_HOST;
   const database = process.env.DB_DATABASE;
   const user = process.env.DB_USERNAME;
   const password = process.env.DB_PASSWORD;
   const schema = process.env.MJ_CORE_SCHEMA || '__mj';
   if (!host || !database || !user || !password) {
-    throw new Error('Missing DB settings in .env (DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD). Run from the instance worktree root.');
+    throw new Error('Missing DB settings in .env (DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD). Looked in the working directory, then the repo root and each folder above it.');
   }
   const pool = await new sql.ConnectionPool({
     server: host, port: Number(process.env.DB_PORT ?? 1433), user, password, database,
@@ -139,9 +138,9 @@ async function bootstrap(): Promise<Ctx> {
 
   // NOTE on permissions: CodeGen creates the EntityPermission rows for every
   // __mj_BizAppsAccounting entity on this instance, so NO permission grant is needed here.
-  await setupSQLServerClient(new SQLServerProviderConfigData(pool, schema));
+  const sqlProvider = await setupSQLServerClient(new SQLServerProviderConfigData(pool, schema));
   await assertInvariantTriggers(pool); // pre-flight: fail fast if any invariant trigger is missing/disabled
-  await UserCache.Instance.Refresh(pool);
+  await UserCache.Instance.Refresh(sqlProvider);
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('No context user found in UserCache.');
 
@@ -298,9 +297,8 @@ async function main(): Promise<void> {
     assert(seq > firstEntrySeq, `expected sequence > ${firstEntrySeq}, got ${seq} ('${je.EntryNumber}')`);
   });
 
-  // ─── W3 — batch numbering (still the GLOBAL singleton sequence; ⚠ DR-5: the column
-  // description promises BATCH-{CompanyCode}-{seq} but spAssignNextJournalEntryBatchNumber emits the
-  // global BATCH-{seq} — asserted here as the sproc actually behaves; see plans/donor-audit.md) ──
+  // ─── W3 — batch numbering (the GLOBAL singleton sequence: spAssignNextJournalEntryBatchNumber
+  // emits BATCH-{seq:000000} with no company segment, as the column description says since #352) ──
   const makeBatch = async (): Promise<mjBizAppsAccountingJournalEntryBatchEntity> => {
     const batch = await md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, user);
     batch.NewRecord();

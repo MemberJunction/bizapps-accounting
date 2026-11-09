@@ -1,5 +1,81 @@
 # @mj-biz-apps/accounting-engine-base
 
+## 0.26.0
+
+### Minor Changes
+
+- 501999c: Add `ResolveFirstLinkedAccount` and `RefreshAfterLinkMiss` to `AccountingEngineBase`: when a link walk finds no GL account for a role, the engine reloads its cache once (throttled to one reload per 30 seconds, shared between concurrent callers) and retries, so GL account links written directly to the database are picked up without restarting the server (bc-aidp-next-golive#438).
+- a56dd15: A Periods page for month close, and a Finance gate on the posting start date (golive #447).
+
+  - Only holders of the new `MJ.BizApps.Accounting.PostingStartDate.Set` authorization (granted to the Finance role) can set, move or clear a company's `PostingStartDate` on its Accounting Company Profile, the same way `BooksClosedThroughDate` is gated.
+  - The Accounting app gains a Periods nav item: one row per active company with its books-closed and posting start dates. Close month / Reopen month move the books-closed date by whole calendar months, and a month still under way cannot be closed. The posting start date is read-only with an Edit behind a confirmation, and shows how many pending entries it holds back (the batch preview's count). The buttons show only to holders of each authorization.
+  - `@mj-biz-apps/accounting-engine-base` exports `UserCanSetBooksClosedThroughDate`, `UserCanSetPostingStartDate` and both authorization names, plus `CloseMonthThrough`, `ReopenMonthThrough` and `CanCloseMonth`.
+
+### Patch Changes
+
+- Updated dependencies [b78bf88]
+  - @mj-biz-apps/accounting-entities@0.26.0
+
+## 0.25.1
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.25.1
+
+## 0.25.0
+
+### Patch Changes
+
+- Updated dependencies [1d11c39]
+- Updated dependencies [69680e9]
+- Updated dependencies [a54fd4e]
+  - @mj-biz-apps/accounting-entities@0.25.0
+
+## 0.24.0
+
+### Minor Changes
+
+- ea5f9f7: Batch approval and archive checks (#446, #447, #448, #451, #452):
+
+  - A batch moves to Approved only through the approval decision; a plain save (the generic form or the GraphQL update) that sets Status = Approved is refused, and the approver is always the user who approved (#447).
+  - The batch audit fields (who built, approved, archived, cancelled or sent it, and when) are written by the server only; a plain save that changes one is refused (#451).
+  - Sending a batch re-checks its approval: the batch must record an approver who did not build it, and an approval decision attributed to another person does not count (#446).
+  - Building, regenerating, dispatching and archiving a batch require the Finance role, through the new `MJ.BizApps.Accounting.JournalEntryBatches.Operate` Authorization (metadata); the batch pages hide those actions from users without it. The scheduled build and auto-post are unaffected (#448).
+  - Archiving a batch is possible only through the Archive action: before approval only the company's configured approver may archive it (the builder may still cancel it), past approval the approver or whoever approved the batch; the batch pages show Archive only to them (#448). `Archive()` checks who may archive before the batch's status, so a refused user does not see the ERP's reference.
+  - Another server package can no longer silently replace the batch approval gate, ERP poster and ERP lookup: a replacement is used only in unit tests or when the `ACCOUNTING_DISPATCH_SERVICES_OVERRIDE` environment variable names it, and is logged either way (#452).
+
+- 74e2ad9: A company's `BooksClosedThroughDate` closes its months (golive #316).
+
+  - Only holders of the new `MJ.BizApps.Accounting.BooksClosedThroughDate.Set` authorization (granted to the Finance role) can set, move or clear it on the Accounting Company Profile. Every change is kept in the profile's record-change history.
+  - Every batch build refuses a posting date on or before it, and the batch workspace and the Build Batch dialog say so before the click. A failed read of the date refuses the build.
+  - Regenerating a Pending batch refuses too when the month of its posting date has closed since it was built, because Regenerate keeps that date; the message says to cancel the batch and build a new one.
+  - A batch the ERP rejects still goes `Failed` with the ERP's message, and now also raises a new `ERP_POSTING_REJECTED` finance exception, one per failed send.
+  - `@mj-biz-apps/accounting-engine-base` exports the shared rule (`IsInClosedBooks`, `FirstOpenDay`, `ClosedBooksPostingDateProblem`) and `AccountingEngineBase.BooksClosedThroughFor`, for apps that date entries into the ledger.
+
+### Patch Changes
+
+- Updated dependencies [ff56bcc]
+- Updated dependencies [0ffa7e7]
+- Updated dependencies [266cf9c]
+- Updated dependencies [a577db6]
+- Updated dependencies [d51bb87]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [da5d2c6]
+- Updated dependencies [a74ce5f]
+- Updated dependencies [5677f94]
+- Updated dependencies [f7b9b1c]
+  - @mj-biz-apps/accounting-entities@0.24.0
+
+## 0.23.0
+
+### Patch Changes
+
+- b5646b8: Requires MemberJunction 6.1.6, the 6.1 LTS release QA runs. Every `@memberjunction/*` range and both root overrides are `^6.1.6`, and `mj-app.json` declares `>=6.1.6 <7.0.0`.
+- Updated dependencies [b5646b8]
+  - @mj-biz-apps/accounting-entities@0.23.0
+
 ## 0.22.2
 
 ### Patch Changes

@@ -2,8 +2,8 @@
  * A Division, Department or Branch owns no active GL accounts (bc-aidp-next-golive#313). It uses
  * its legal entity's books, so an account it owned would book entries under a company with no ERP
  * connection and no approver. Refused from both sides: creating or reactivating such an account
- * (GLAccountEntityServer), and turning a company that owns active accounts into one of those types
- * (AccountingCompanyProfileEntityServer).
+ * (GLAccountEntityServer), and creating a profile of one of those types for, or turning into one, a
+ * company that owns active accounts (AccountingCompanyProfileEntityServer).
  *
  * No DB: real EntityInfo from init data, saved state via LoadFromData (old values set, as a load
  * from the database sets them), and the provider's RunView
@@ -144,17 +144,20 @@ describe('AccountingCompanyProfileEntityServer — a company with active account
     expect((await acp.ValidateAsync()).Success).toBe(true);
   });
 
-  const newProfile = (entityType: string, id: string | null = COMPANY): AccountingCompanyProfileEntityServer => {
+  const newProfile = (
+    entityType: AccountingCompanyProfileEntityServer['EntityType'],
+    id: string | null = COMPANY,
+  ): AccountingCompanyProfileEntityServer => {
     const acp = new AccountingCompanyProfileEntityServer(info);
     acp.NewRecord();
     if (id !== null) acp.ID = id;
     acp.CompanyCode = 'BRAND';
-    acp.EntityType = entityType as AccountingCompanyProfileEntityServer['EntityType'];
+    acp.EntityType = entityType;
     acp.FunctionalCurrencyCode = 'USD';
     return acp;
   };
 
-  it.each(['Division', 'Department', 'Branch'])('refuses a new %s profile on a company that owns an active account', async (type) => {
+  it.each(['Division', 'Department', 'Branch'] as const)('refuses a new %s profile for a company that already owns an active account', async (type) => {
     const acp = newProfile(type);
     const calls = stubRunView(acp, [{ Code: '1200' }]);
 
@@ -165,13 +168,13 @@ describe('AccountingCompanyProfileEntityServer — a company with active account
     expect(calls[0]).toEqual({ EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${COMPANY}' AND IsActive=1` });
   });
 
-  it('accepts a new Division profile on a company with no active accounts', async () => {
+  it('accepts a new Division profile for a company with no active accounts', async () => {
     const acp = newProfile('Division');
     stubRunView(acp, []);
     expect((await acp.ValidateAsync()).Success).toBe(true);
   });
 
-  it('does not read accounts for a new profile of a type that keeps books', async () => {
+  it('accepts a new legal-entity profile for a company that owns active accounts, without reading them', async () => {
     const acp = newProfile('Subsidiary');
     const calls = stubRunView(acp, [{ Code: '1200' }]);
     expect((await acp.ValidateAsync()).Success).toBe(true);

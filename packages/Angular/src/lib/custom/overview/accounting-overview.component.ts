@@ -1,7 +1,8 @@
 import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { CompositeKey, RunView } from '@memberjunction/core';
+import { CompositeKey, Metadata, RunView } from '@memberjunction/core';
+import { UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
 import { NavigationService } from '@memberjunction/ng-shared';
 import { MJButtonDirective } from '@memberjunction/ng-ui-components';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
@@ -74,9 +75,11 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                         <button mjButton variant="secondary" size="sm" type="button" (click)="CreateNewJournalEntry()">
                             <i class="fa-solid fa-plus"></i> New Journal Entry
                         </button>
-                        <button mjButton variant="primary" size="sm" type="button" (click)="CreateNewBatch()">
-                            <i class="fa-solid fa-layer-group"></i> Build Batch
-                        </button>
+                        @if (MayBuild) {
+                            <button mjButton variant="primary" size="sm" type="button" (click)="CreateNewBatch()">
+                                <i class="fa-solid fa-layer-group"></i> Build Batch
+                            </button>
+                        }
                     </div>
                 </div>
 
@@ -185,9 +188,11 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                         <h2 class="mja-card-title"><i class="fa-solid fa-layer-group"></i> Recent Journal Entry Batches</h2>
                         <span class="mja-card-subtitle">Latest ERP posting batches and consolidated General Ledger runs</span>
                     </div>
-                    <button mjButton variant="primary" size="sm" type="button" (click)="CreateNewBatch()">
-                        <i class="fa-solid fa-plus"></i> Build Batch
-                    </button>
+                    @if (MayBuild) {
+                        <button mjButton variant="primary" size="sm" type="button" (click)="CreateNewBatch()">
+                            <i class="fa-solid fa-plus"></i> Build Batch
+                        </button>
+                    }
                 </div>
 
                 @if (IsLoading) {
@@ -204,9 +209,11 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                             <h4>No Batches Created Yet</h4>
                             <p>There are <strong>{{ KPIs.PendingJournalEntries }} Pending Journal Entries</strong> in the subledger ready to be consolidated into posting batches.</p>
                         </div>
-                        <button mjButton variant="primary" size="sm" type="button" (click)="CreateNewBatch()">
-                            <i class="fa-solid fa-plus"></i> Build Batch Now
-                        </button>
+                        @if (MayBuild) {
+                            <button mjButton variant="primary" size="sm" type="button" (click)="CreateNewBatch()">
+                                <i class="fa-solid fa-plus"></i> Build Batch Now
+                            </button>
+                        }
                     </div>
                 } @else {
                     <div class="mja-table-wrap">
@@ -322,7 +329,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
         .mja-kpi-tile { display: flex; flex-direction: column; gap: 2px; }
         .mja-kpi-label { font-size: 11px; font-weight: 600; color: var(--mj-text-muted, #64748b); text-transform: uppercase; letter-spacing: 0.04em; }
-        .mja-kpi-val { font-size: 16px; font-weight: 700; font-family: var(--mj-font-mono, monospace); color: var(--mj-text-primary, #0f172a); }
+        .mja-kpi-val { font-size: 16px; font-weight: 700; font-family: var(--mj-font-family-mono); color: var(--mj-text-primary, #0f172a); }
         .mja-val--blue { color: #0284c7; }
         .mja-val--green { color: #16a34a; }
         .mja-val--amber { color: #d97706; }
@@ -428,7 +435,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
         .mja-stage-count {
             font-size: 20px;
             font-weight: 800;
-            font-family: var(--mj-font-mono, monospace);
+            font-family: var(--mj-font-family-mono);
             color: var(--mj-text-primary, #0f172a);
         }
 
@@ -436,7 +443,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             font-size: 11px;
             font-weight: 600;
             color: var(--mj-text-muted, #64748b);
-            font-family: var(--mj-font-mono, monospace);
+            font-family: var(--mj-font-family-mono);
         }
 
         /* Chart Styling */
@@ -501,7 +508,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             transform: translateX(-50%);
             font-size: 10px;
             font-weight: 700;
-            font-family: var(--mj-font-mono, monospace);
+            font-family: var(--mj-font-family-mono);
             color: #0284c7;
             opacity: 0;
             transition: opacity 0.15s ease;
@@ -564,7 +571,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
         .mja-batch-num {
             color: var(--mj-brand-primary, #0284c7);
-            font-family: var(--mj-font-mono, monospace);
+            font-family: var(--mj-font-family-mono);
         }
 
         .mja-target-pill {
@@ -857,8 +864,16 @@ export class AccountingOverviewPageComponent implements OnInit {
      * 2026-09-12 with 4 pending entries in the subledger: two clicks, two batches, TotalEntries 0,
      * every entry still unbatched.
      */
+    /**
+     * Whether the signed-in user holds the batch-operator Authorization (the Finance role) that a
+     * build requires on the server (#448). The server stays the authority; this only decides what shows.
+     */
+    public get MayBuild(): boolean {
+        return UserCanOperateJournalEntryBatches(Metadata.Provider?.CurrentUser, Metadata.Provider?.Authorizations);
+    }
+
     public async CreateNewBatch(): Promise<void> {
-        if (!this.navService) return;
+        if (!this.navService || !this.MayBuild) return;
         await this.navService.OpenNavItemByName('Batches');
     }
 }

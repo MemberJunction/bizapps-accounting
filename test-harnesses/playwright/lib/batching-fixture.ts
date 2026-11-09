@@ -14,16 +14,14 @@
  *            Prints: { companyId, companyName, runTag, cfoPersonId: '', jeId, expected }
  *   teardown <companyId> → FK-aware, company-rooted cleanup (disables triggers to drop locked rows).
  *
- * Run from the INSTANCE WORKTREE ROOT (so .env resolves), exactly like the server harnesses:
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/playwright/lib/batching-fixture.ts setup
+ * Run from the repo root, like the server harnesses (.env lookup: ../../harness-paths.mts):
+ *   npx tsx test-harnesses/playwright/lib/batching-fixture.ts setup
  *   npx tsx .../batching-fixture.ts teardown <companyId> <cfoPersonId>
  *
  * Exit: 0 ok · 2 error. NEVER closes the pool with `await` before exit (harness-notes #1) — uses
  * finishAndExit.
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'node:path';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 import '@memberjunction/server-bootstrap-lite';
@@ -38,6 +36,7 @@ import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-
 // both shapes so the fixture is robust regardless of how tsx resolves them.
 import * as harnessExitNS from '../../server/harness-exit.js';
 import * as triggerPreflightNS from '../../server/trigger-preflight.js';
+import { LoadHarnessEnv } from '../../harness-paths.mjs';
 
 type FinishAndExit = (summary: string, code: number, ...pools: Array<sql.ConnectionPool | undefined>) => never;
 type AssertTriggers = (pool: sql.ConnectionPool, schema?: string) => Promise<void>;
@@ -63,9 +62,9 @@ const RUN_TAG = `PWBATCH-${Date.now().toString(36).toUpperCase()}`;
 interface Pools { pool: sql.ConnectionPool; teardownPool: sql.ConnectionPool; user: UserInfo }
 
 async function connect(): Promise<Pools> {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   const { DB_HOST: host, DB_DATABASE: database, DB_USERNAME: user, DB_PASSWORD: password } = process.env;
-  if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env — run from the instance worktree root.');
+  if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env (looked in the working directory, then the repo root and each folder above it).');
   const port = Number(process.env.DB_PORT ?? 1433);
   const opt = { encrypt: false, trustServerCertificate: true };
   const pool = await new sql.ConnectionPool({ server: host, port, user, password, database, options: opt }).connect();

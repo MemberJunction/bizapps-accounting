@@ -10,7 +10,8 @@ import {
   mjBizAppsAccountingJournalEntryBatchEntity,
 } from '@mj-biz-apps/accounting-entities';
 import { JournalEntryBatchDispatchClient } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
-import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import { AccountingEngineBase, UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
+import { BusinessTimeZoneEngine, IsBeforeDay, ToCalendarDay } from '@mj-biz-apps/common-entities';
 import { resolveBatchStatusWindow } from './batch-status-window';
 
 /** Generated value-list unions (rule 2c: derived from the entity, never hand-copied). */
@@ -34,9 +35,10 @@ export interface PreviewEntry { ID: string; EntryNumber: string; EffectiveDate: 
 
 /** One batch row in the table, with its inferred date range + lazily-loaded JE detail. */
 /**
- * The batch's own fields are PICKED from the generated entity class, never re-declared (Amith,
- * PR #148 review). Everything below the intersection is derived or UI state, not a column:
- * the inferred date range, the company list, and the expand/detail cache.
+ * The batch's own fields are PICKED from the generated entity class, never re-declared, so the
+ * compiler checks every field name and type against the schema. Everything below the
+ * intersection is derived or UI state, not a column: the inferred date range, the company list,
+ * and the expand/detail cache.
  *
  * `BatchedAt` is re-declared as nullable on purpose — the column is NOT NULL, but this page
  * builds rows before the value is resolved.
@@ -60,7 +62,7 @@ export type BatchRow = Pick<
 type SortField = 'Status' | 'TargetSystem' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'StartDate' | 'EndDate' | 'BatchedAt';
 
 /**
- * Batch Status — the filterable roll-up over every JE batch. Enhances the read-only view (Marcelo, 2026-07-08):
+ * Batch Status — the filterable roll-up over every JE batch. Enhances the read-only view with:
  * status toggles + company (incl. All) + target-system filters, an inferred Start→End date range per batch (from
  * its journal entries), summary stats, an in-page Build Batch action, and an expandable per-batch row whose indented
  * table shows that batch's journal entries and their Dr/Cr lines (account, company, amounts). It loads batches +
@@ -88,6 +90,14 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   public PreviewEntries: PreviewEntry[] = [];
   public PreviewStart: Date | null = null;
   public PreviewEnd: Date | null = null;
+  /**
+   * `YYYY-MM-DD`; the build includes entries dated on or before it. Defaults to today's business day
+   * when the preview opens, like the batch workspace and the Build Batch modal (#426); cleared, the
+   * pool runs through the posting date, which this screen leaves at today.
+   */
+  public BuildCutoffDate = '';
+  /** Every unbatched Pending entry; the preview shows the ones the cutoff admits. */
+  private buildCandidates: PreviewEntry[] = [];
 
   public Batches: BatchRow[] = [];
   public Companies: { ID: string; Name: string }[] = [];
@@ -98,7 +108,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
 
   /** Filters. Empty status set = show all; null company/target = "All". */
   public SelectedStatuses = new Set<BatchStatus>();
-  /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = no narrowing. */
+  /** MULTI-select company narrowing: empty = no narrowing. */
   public SelectedCompanyIDs: string[] = [];
   public SelectedTarget: TargetSystem | null = null;
   /** Target used by the in-page Build action (defaults to the filtered target, else Business Central). */
@@ -121,7 +131,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   async GetResourceDisplayName(_data: ResourceData): Promise<string> { return 'Batch Status'; }
 
   /** The category header's Refresh reaches this dashboard through the shared channel —
-   *  the inline mj-refresh-button was removed (Marcelo 2026-08-05: the header owns the ONE
+   *  the inline mj-refresh-button was removed (the header owns the ONE
    *  refresh control, orders-style). Subscribing is also what makes the header button SHOW
    *  while this page is mounted (CanRefreshActivePage = HasSubscriber). */
   /** OPTIONAL: provided per category shell; a directly-mounted resource (or a bare TestBed) has none. */
@@ -187,7 +197,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   public OnToDateChange(v: string): void { this.ToDate = v || null; this.ActiveWindow = null; this.cdr.markForCheck(); }
 
   /**
-   * Moving-window presets (Robert 2026-07-09: "last day/week/month" windows). Sets the From/To
+   * Moving-window presets (last day / week / month). Sets the From/To
    * range. Anchored on the BUSINESS day via `resolveBatchStatusWindow`
    * (`BusinessTimeZoneEngine.Instance.Today()`), not the browser's local day — see that file for
    * why this component may read the engine directly.
@@ -278,10 +288,20 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
 
   // ─── build-batch preview → build ─────────────────────────────────────────────
 
+  /**
+   * Whether the signed-in user holds the batch-operator Authorization (the Finance role) that a build
+   * requires on the server (#448). The server stays the authority; this only decides what shows.
+   */
+  public get MayBuild(): boolean {
+    return UserCanOperateJournalEntryBatches(this.contextUser(), this.ProviderToUse.Authorizations);
+  }
+
   /** Open the preview: gather the journal entries a build would include + the span they cover. */
   public async OpenBuildPreview(): Promise<void> {
+    if (!this.MayBuild) return;
     this.BuildPreviewVisible = true;
     this.PreviewLoading = true;
+    if (!this.BuildCutoffDate) this.BuildCutoffDate = BusinessTimeZoneEngine.Instance.Today();
     this.clearActionMessage();
     this.cdr.markForCheck();
     try {
@@ -307,24 +327,48 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
     const lines = jes.length ? await this.loadLines(jes.map(j => j.ID)) : [];
     const totalByJe = new Map<string, number>();
     for (const l of lines) totalByJe.set(l.JournalEntryID, (totalByJe.get(l.JournalEntryID) ?? 0) + (l.DebitAmount ?? 0));
-    this.PreviewEntries = jes.map(j => ({
+    this.buildCandidates = jes.map(j => ({
       ID: j.ID, EntryNumber: j.EntryNumber,
       EffectiveDate: j.EffectiveDate ? new Date(j.EffectiveDate) : null,
       EntryType: j.EntryType, Description: j.Description,
       Amount: Math.round((totalByJe.get(j.ID) ?? 0) * 100) / 100,
     }));
+    this.applyBuildCutoff();
+  }
+
+  public OnBuildCutoffChange(day: string): void {
+    this.BuildCutoffDate = day ?? '';
+    this.applyBuildCutoff();
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * Narrow the candidates to what the build takes: entries dated through the earlier of the cutoff
+   * and the posting date. This screen sends no posting date, so the server uses today's business day.
+   */
+  private applyBuildCutoff(): void {
+    const today = BusinessTimeZoneEngine.Instance.Today();
+    const cutoff = this.BuildCutoffDate;
+    const through = cutoff && IsBeforeDay(cutoff, today) ? cutoff : today;
+    this.PreviewEntries = this.buildCandidates.filter(e => {
+      const day = ToCalendarDay(e.EffectiveDate);
+      return !day || !IsBeforeDay(through, day);
+    });
     const times = this.PreviewEntries.map(e => e.EffectiveDate).filter((d): d is Date => d instanceof Date).map(d => d.getTime());
     this.PreviewStart = times.length ? new Date(Math.min(...times)) : null;
     this.PreviewEnd = times.length ? new Date(Math.max(...times)) : null;
   }
 
   public async OnBuildJournalEntryBatch(): Promise<void> {
-    if (this.Building) return;
+    if (this.Building || !this.MayBuild) return;
     this.Building = true;
     this.clearActionMessage();
     this.cdr.markForCheck();
     try {
-      const res = await new JournalEntryBatchDispatchClient(this.ProviderToUse as GraphQLDataProvider).BuildJournalEntryBatch(this.BuildTarget);
+      const res = await new JournalEntryBatchDispatchClient(this.ProviderToUse as GraphQLDataProvider).BuildJournalEntryBatch({
+        TargetSystem: this.BuildTarget,
+        Cutoff: this.BuildCutoffDate || null,
+      });
       if (res.Success && res.NothingToBatch) {
         this.setActionMessage('No pending journal entries to batch.', false);
         this.BuildPreviewVisible = false;
@@ -404,7 +448,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   /** JE headers per batch (for the inferred date range + to fetch each batch's lines on expand). */
   private async loadJEHeaders(): Promise<Map<string, JEHeader[]>> {
     // The batch's own SUMMARY JE also carries JournalEntryBatchID — it is the consolidation OF the sources,
-    // so counting it alongside them doubles every amount (Marcelo 2026-07-30: a 350/350 batch
+    // so counting it alongside them doubles every amount (a 350/350 batch
     // drilled down as 700/700). Exclude summaries here so the map holds SOURCE JEs only; the
     // detail then re-derives the same netted posting the summary persists.
     const [res, batches] = await Promise.all([

@@ -5,8 +5,9 @@
  * the persist step is stubbed on BaseEntity so the test sees what the subclass hands it.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { BaseEntity, EntityInfo } from '@memberjunction/core';
+import { BaseEntity, EntityInfo, RunView } from '@memberjunction/core';
 import { AccountingCompanyProfileEntityServer } from '../AccountingCompanyProfileEntityServer.js';
+import { DEFAULT_CHART_OF_ACCOUNTS } from '../SeedData.js';
 
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 
@@ -63,5 +64,55 @@ describe('AccountingCompanyProfileEntityServer (OperatingTimeZone on create)', (
       await acp.Save();
     }
     expect(persisted).toEqual(['America/Chicago', 'UTC']);
+  });
+});
+
+/**
+ * SeedDefaultChartOfAccounts reads the company's existing GL account codes with a filter built from
+ * the profile's ID (issue #384). The ID goes through the UUID guard like every other ID this file
+ * puts in a filter, so a value that is not a UUID is refused before any query runs.
+ */
+describe('AccountingCompanyProfileEntityServer.SeedDefaultChartOfAccounts (company ID filter)', () => {
+  let info: EntityInfo;
+  let filters: string[];
+
+  beforeEach(() => {
+    info = createEntityInfo(ACP_ENTITY, ['ID', 'CompanyCode', 'FunctionalCurrencyCode']);
+    filters = [];
+    // Every starter code already exists, so the seed reads and creates nothing.
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (params) => {
+      filters.push(String(params.ExtraFilter));
+      return {
+        Success: true,
+        Results: DEFAULT_CHART_OF_ACCOUNTS.map(a => ({ Code: a.code })),
+        RowCount: DEFAULT_CHART_OF_ACCOUNTS.length,
+        TotalRowCount: DEFAULT_CHART_OF_ACCOUNTS.length,
+        ExecutionTime: 0,
+        ErrorMessage: '',
+        UserViewRunID: '',
+      };
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('filters on the company ID as a guarded GUID literal', async () => {
+    const id = '6F1C2D3E-4A5B-4C6D-8E7F-901234ABCDEF';
+    const acp = new AccountingCompanyProfileEntityServer(info);
+    acp.LoadFromData({ ID: id, CompanyCode: 'ACME', FunctionalCurrencyCode: 'USD' });
+
+    await acp.SeedDefaultChartOfAccounts();
+
+    expect(filters).toEqual([`CompanyID='${id}'`]);
+  });
+
+  it('refuses an ID that is not a UUID before running any query', async () => {
+    const acp = new AccountingCompanyProfileEntityServer(info);
+    acp.LoadFromData({ ID: "x' OR 1=1--", CompanyCode: 'ACME', FunctionalCurrencyCode: 'USD' });
+
+    await expect(acp.SeedDefaultChartOfAccounts()).rejects.toThrow(/not a valid UUID/);
+    expect(filters).toEqual([]);
   });
 });

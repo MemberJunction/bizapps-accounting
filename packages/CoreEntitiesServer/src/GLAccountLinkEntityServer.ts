@@ -1,7 +1,7 @@
 /**
  * Server-side subclass of GLAccountLink — the write-time tie guard for account resolution.
  *
- * THE RULE (Amith 2026-07-29, the retained half of the BA-D32 package): no ambiguous tie per
+ * THE RULE (the retained half of the BA-D32 package): no ambiguous tie per
  * (record, role, company, window). Overlapping windows are legitimate and necessary — that is how
  * a link is superseded (`pickActiveLinkIndex`: latest StartedAt wins). What is NOT legitimate is
  * two Active links for the same (EntityID, RecordID, GLAccountRoleID) whose accounts belong to
@@ -12,7 +12,7 @@
  * Cardinality=Many roles (BankAccount, BA-D34) skip this guard: N Active same-window links
  * are the point. ResolveLinkedAccount refuses those roles; ResolveLinkedAccounts returns the set.
  *
- * COMPANY IS DERIVED, NOT STORED (Amith 2026-07-29): the link's company is its GLAccount's
+ * COMPANY IS DERIVED, NOT STORED: the link's company is its GLAccount's
  * CompanyID, read through the FK. Safe because GLAccount identity fields are immutable from
  * creation (GLAccountEntityServer), so the derivation can never drift. Links to DIFFERENT
  * companies' accounts may share a window freely — that is exactly the multi-company case

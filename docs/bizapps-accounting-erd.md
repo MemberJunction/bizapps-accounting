@@ -7,8 +7,8 @@
 > (≤5 entity boxes) so it renders full-size on a 13" laptop — open in VS Code
 > Markdown preview, or paste a block into https://mermaid.live to zoom.
 >
-> **Current as of 2026-10-11** — read forward from every migration through
-> `V202610051600__v0.21.x__AccountingCompanyProfile_Parent_Tree.sql`: 26 tables, none dropped. The
+> **Current as of 2026-10-18** — read forward from every migration through
+> `V202610181300__v0.23.x__Manual_Journal_Entry_Approval.sql`: 26 tables, none dropped. The
 > last diff against a live `__mj_BizAppsAccounting` schema (every column) was on 2026-08-29;
 > `test-harnesses/server/_maint-erd-drift.ts` reproduces it. Its live table count also includes
 > Skyway's `flyway_schema_history`, which `mj migrate --schema` keeps in this schema.
@@ -29,7 +29,15 @@
 > - **Seal mismatch** (#216): `SealMismatchDetectedAt`; a locked entry's dimension tags are frozen
 >   (`trg_JELD_Immutability`).
 > - **`AccountingCompanyProfile.PostingStartDate`**: entries dated before it never batch.
+> - **`AccountingCompanyProfile.BooksClosedThroughDate`**: the last day finance has closed; dates on or before it are in a closed month.
 > - **Company parents may nest**: `trg_ACP_NoChains` refuses a cycle instead of a chain (50010).
+> - **Manual journal entry approval** (golive #353): `GLAccount.IsControlAccount`;
+>   `AccountingCompanyProfile.ManualJournalEntryApprovalThreshold` (empty = off) and
+>   `ManualJournalEntryApproverRoleID` (FK `__mj.Role`); on `JournalEntry`, `ApprovalLevel`
+>   (`Standard` | `CFO`; set = needs approval), `ApprovalRequestedByUserID`, `ApprovalTaskID` (FK
+>   `__mj_BizAppsTasks.Task`), `ApprovedAt`, `ApprovedByUserID`. `CK_JournalEntry_ApprovedBeforeBatch`
+>   keeps an unapproved entry out of every batch; `trg_JournalEntry_ApprovalIntegrity` (50035-50039)
+>   guards the approval columns and fixes the origin pair (`LinkedEntityID`/`LinkedRecordID`) after insert.
 >
 > **Earlier (to 2026-08-29):**
 > - **NEW `AccountingEngineExtension`** (ERP provider layer Rev 2) — host registry for Open App
@@ -137,6 +145,7 @@ flowchart TD
 
     Company -->|IS-A Disjoint - same UUID| ACP
     User -->|ApprovalCFOUserID| ACP
+    Role -->|ManualJournalEntryApproverRoleID| ACP
     Currency --> ACP
     Currency --> CSR
     Company -->|owns COA| GLAccount
@@ -165,6 +174,8 @@ flowchart TD
     Batch -.->|SummaryJournalEntryID| JournalEntry
     User -->|batched / approved by| Batch
     Task -->|ApprovalTaskID| Batch
+    Task -->|ApprovalTaskID: manual entry| JournalEntry
+    User -->|approval requested / approved by| JournalEntry
     Company --> JESeq
     Company -->|optional scope| AEE
     TaxAuthority --> TaxJurisdiction
@@ -193,6 +204,7 @@ erDiagram
     %% ---- company / profile / currency ----
     Company ||--o| AccountingCompanyProfile : "IS-A Disjoint - same UUID"
     User ||--o{ AccountingCompanyProfile : "ApprovalCFOUserID"
+    Role |o--o{ AccountingCompanyProfile : "ManualJournalEntryApproverRoleID"
     Currency ||--o{ AccountingCompanyProfile : "Functional / Reporting"
     AccountingCompanyProfile |o--o{ AccountingCompanyProfile : "parent (Division/Dept/Branch use its books)"
     Currency ||--o{ CurrencySpotRate : "From / To"
@@ -263,6 +275,8 @@ erDiagram
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID"
     User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy / ArchivedBy / CancelledBy / ERPNotPostedConfirmedBy / SentBy"
     Task |o--o{ JournalEntryBatch : "ApprovalTaskID (__mj_BizAppsTasks)"
+    Task |o--o{ JournalEntry : "ApprovalTaskID - manual entry approval (__mj_BizAppsTasks)"
+    User |o--o{ JournalEntry : "ApprovalRequestedBy / ApprovedBy"
     Company ||--o{ JournalEntrySequence : "per-company per-FY numbering"
     %% ---- tax ----
     TaxAuthority ||--o{ TaxJurisdiction : ""
@@ -298,8 +312,11 @@ erDiagram
         int FiscalYearStartMonth
         int FiscalYearStartDay
         date PostingStartDate "nullable - entries dated before it never batch"
+        date BooksClosedThroughDate "nullable - dates on or before it are in a closed month"
         uuid ParentAccountingCompanyID FK
         uuid ApprovalCFOUserID FK
+        decimal ManualJournalEntryApprovalThreshold "nullable - empty = manual-entry approval off"
+        uuid ManualJournalEntryApproverRoleID FK "nullable - __mj.Role"
         bool IsActive
     }
     Currency {
@@ -331,6 +348,7 @@ erDiagram
         string ExternalAccountID
         bool IsActive
         bool IsSystemSeeded
+        bool IsControlAccount "manual entries on it always need the CFO"
         string Description
     }
     GLAccountRole {
@@ -404,6 +422,11 @@ erDiagram
         decimal PredictedAnomalyProbability "Predictive Studio anomaly probability"
         string PredictedAnomalyRiskBand "Predictive Studio anomaly risk band"
         datetimeoffset PredictedAnomalyScoredAt "Predictive Studio score timestamp"
+        string ApprovalLevel "Standard | CFO - set = manual entry needs approval"
+        uuid ApprovalRequestedByUserID FK "who raised it - may not approve"
+        uuid ApprovalTaskID FK "__mj_BizAppsTasks.Task"
+        datetimeoffset ApprovedAt "batch candidate once set"
+        uuid ApprovedByUserID FK
     }
     JournalEntryLine {
         uuid ID PK
@@ -565,6 +588,7 @@ erDiagram
 erDiagram
     Company ||--o| AccountingCompanyProfile : "IS-A Disjoint - same UUID"
     User ||--o{ AccountingCompanyProfile : "ApprovalCFOUserID"
+    Role |o--o{ AccountingCompanyProfile : "ManualJournalEntryApproverRoleID"
     Currency ||--o{ AccountingCompanyProfile : "Functional / Reporting currency"
     AccountingCompanyProfile |o--o{ AccountingCompanyProfile : "ParentAccountingCompanyID - nests, no cycles"
 
@@ -583,8 +607,11 @@ erDiagram
         int FiscalYearStartMonth
         int FiscalYearStartDay
         date PostingStartDate "nullable - entries dated before it never batch"
+        date BooksClosedThroughDate "nullable - dates on or before it are in a closed month"
         uuid ParentAccountingCompanyID FK "nullable - Division/Department/Branch use the legal entity found up this chain"
         uuid ApprovalCFOUserID FK "batch approver - a security identity"
+        decimal ManualJournalEntryApprovalThreshold "nullable - at or below: approver role; above: CFO; empty = off"
+        uuid ManualJournalEntryApproverRoleID FK "nullable - __mj.Role; empty sends every manual entry to the CFO"
         bool IsActive
     }
     Currency {
@@ -626,6 +653,7 @@ erDiagram
         string ExternalAccountID "nullable"
         bool IsActive
         bool IsSystemSeeded "minimal ~10-12 account seed"
+        bool IsControlAccount "default 0 - a manual entry with a line on it always needs the Approval CFO"
         string Description
     }
     GLAccountRole {
@@ -707,6 +735,7 @@ erDiagram
     JournalEntry ||--|{ JournalEntryLine : "balanced - SUM Dr = SUM Cr on lock"
     GLAccount ||--o{ JournalEntryLine : "GLAccountID - must match header company (trigger)"
     JournalEntry |o--o| JournalEntry : "Reverses / ReversedBy - pen not pencil"
+    Task |o--o{ JournalEntry : "ApprovalTaskID - manual entry approval (golive #353)"
     JournalEntryLine ||--o{ JournalEntryLineDimension : "line tags"
     Dimension ||--o{ JournalEntryLineDimension : "DimensionID"
     Dimension ||--o{ DimensionValue : "DimensionID"
@@ -731,6 +760,11 @@ erDiagram
         decimal PredictedAnomalyProbability "Predictive Studio anomaly probability"
         string PredictedAnomalyRiskBand "Predictive Studio anomaly risk band"
         datetimeoffset PredictedAnomalyScoredAt "Predictive Studio score timestamp"
+        string ApprovalLevel "Standard | CFO - set = manual entry needs approval"
+        uuid ApprovalRequestedByUserID FK "who raised it - may not approve"
+        uuid ApprovalTaskID FK "__mj_BizAppsTasks.Task"
+        datetimeoffset ApprovedAt "batch candidate once set"
+        uuid ApprovedByUserID FK
     }
     JournalEntryLine {
         uuid ID PK
@@ -838,8 +872,8 @@ erDiagram
         int TotalEntries "control totals"
         decimal TotalDebits
         decimal TotalCredits
-        uuid ApprovalTaskID "FK to __mj_BizAppsTasks.Task (#22) - both-or-neither with RaisedAt (CHECK)"
-        datetimeoffset ApprovalTaskRaisedAt "nullable"
+        uuid ApprovalTaskID "FK to __mj_BizAppsTasks.Task (#22) - both-or-neither with RaisedAt (CHECK); unique when set, set once (50035, #313)"
+        datetimeoffset ApprovalTaskRaisedAt "nullable - set with ApprovalTaskID, then frozen (50035)"
         string ExternalJournalEntryBatchRef "nullable"
         datetimeoffset SentAt "nullable - latest send; a retry overwrites it"
         uuid SentByUserID FK "nullable - whose dispatch last entered Sent (#184)"
@@ -866,7 +900,10 @@ and advance the count by one (50030). A locked entry's lines and their dimension
 (50006, 50033, #216); a `Failed` retry that finds the batch already in the ERP is recorded `Posted`
 even over a broken seal, and `SealMismatchDetectedAt` flags it. That flag is written only by the
 `Sent` → `Posted` update of a retry (`SendAttemptCount` above 1) and is never changed or cleared
-after; no insert carries it (50034). `Archived` keeps the members
+after; no insert carries it (50034). The approval Task pointer is set once, by the build: once
+`ApprovalTaskID` is set, neither it nor `ApprovalTaskRaisedAt` changes or clears, in any status
+(`trg_JournalEntryBatch_ApprovalTaskSetOnce`, 50035), and `UQ_JournalEntryBatch_ApprovalTaskID` keeps two
+batches from naming the same Task (#313). `Archived` keeps the members
 locked for good. Summary is excluded from netting/count/sweep via its type's `IsJournalEntryBatchSummary` flag (the
 discriminator). Footing is checked in code, by `JournalEntryBatchEntityServer` at approval and again
 at dispatch; whether a database trigger should also assert it is still open
@@ -1040,11 +1077,13 @@ erDiagram
 The month-end review list. Detectors in consuming apps raise rows through
 `Accounting.RaiseFinanceExceptions` (idempotent on type + `DedupeKey`; a repeat refreshes an Open
 row's creator fields and summary), and accounting raises `ERP_POSTING_NOT_READ_BACK` itself when a
-batch the ERP accepted cannot be read back; a holder of
-`MJ.BizApps.Accounting.FinanceExceptions.Clear` (the Finance role) who did not create the source
-record clears them through `Accounting.ClearFinanceException`. `Open → Reviewed | Corrected`, both
+batch the ERP accepted cannot be read back; a reviewer who did not create the source record clears
+them through `Accounting.ClearFinanceException`, holding `MJ.BizApps.Accounting.FinanceExceptions.Clear`
+(the Finance role) or, where a host has granted them, the per-type, unattributed-creator or
+escalated-creator right (golive #320 §4; `docs/lifecycle-hooks.md` §2c). `Open → Reviewed | Corrected`, both
 terminal; `FinanceExceptionEntityServer` refuses any other status change and any delete. A company's
-month is ready to close when it has no Open rows (saved query "Finance Exceptions Ready To Close").
+month is ready to close when it has no Open rows (saved query "Finance Exceptions Ready To Close");
+saved query "Finance Exceptions Cleared" lists every clearing decision by month.
 The six types and their thresholds are seeded by `metadata/finance-exception-types`.
 
 ```mermaid

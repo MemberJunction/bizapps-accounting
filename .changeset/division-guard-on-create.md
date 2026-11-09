@@ -2,4 +2,4 @@
 '@mj-biz-apps/accounting-core-entities-server': patch
 ---
 
-A new Accounting Company Profile created as a Division, Department or Branch is refused when its company owns active GL accounts, the same check a saved profile already gets when its type changes.
+A new Accounting Company Profile whose company has no ID yet skips the check for active GL accounts instead of failing on the missing ID; that company is new and owns nothing.

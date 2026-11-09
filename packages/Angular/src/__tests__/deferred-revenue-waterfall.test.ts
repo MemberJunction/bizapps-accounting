@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RunView, type RunViewResult } from '@memberjunction/core';
 import { FromCalendarDay } from '@mj-biz-apps/common-entities';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
@@ -58,6 +59,7 @@ const LAST_BUSINESS_DAY_OF_JANUARY = new Date('2026-02-01T03:00:00.000Z');
  * `EffectiveDate` unset and the creation instant goes through `Set`.
  */
 async function mockEntry(fields: {
+    ID?: string;
     EntryNumber: string;
     EffectiveDate: Date | null;
     CreatedAt?: Date;
@@ -70,6 +72,7 @@ async function mockEntry(fields: {
 }): Promise<mjBizAppsAccountingJournalEntryEntity> {
     const entry = await entityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY);
     entry.NewRecord();
+    if (fields.ID) entry.Set('ID', fields.ID);
     if (fields.CompanyID) entry.CompanyID = fields.CompanyID;
     entry.EntryNumber = fields.EntryNumber;
     if (fields.EffectiveDate) entry.EffectiveDate = fields.EffectiveDate;
@@ -275,6 +278,7 @@ describe('DeferredRevenueWaterfallComponent', () => {
     });
 
     describe('reversals', () => {
+        // The business day is 31 January 2026 (see LAST_BUSINESS_DAY_OF_JANUARY).
         useBusinessClock({
             BusinessZone: 'America/Chicago',
             BusinessSqlZone: 'Central Standard Time',
@@ -291,6 +295,13 @@ describe('DeferredRevenueWaterfallComponent', () => {
             return comp;
         }
 
+        /** Answers the component's reversal-date load with these rows. */
+        function reversalsInDatabase(rows: Array<{ ID: string; EffectiveDate: string }>) {
+            return vi.spyOn(RunView.prototype, 'RunView').mockResolvedValue(
+                { Success: true, Results: rows } as unknown as RunViewResult,
+            );
+        }
+
         async function standing(): Promise<mjBizAppsAccountingJournalEntryEntity> {
             return mockEntry({
                 EntryNumber: '5001',
@@ -301,36 +312,93 @@ describe('DeferredRevenueWaterfallComponent', () => {
             });
         }
 
-        it('leaves out an entry that has been reversed', async () => {
-            const comp = render([
-                await standing(),
-                await mockEntry({
-                    EntryNumber: '5002',
-                    EffectiveDate: FromCalendarDay('2026-01-01'),
-                    LinkedRecordID: 'sub-term-1',
-                    Description: 'Monthly Subscription Rev Rec',
-                    CreditAmount: 400,
-                    ReversedByJournalEntryID: 'reversal-1',
-                }),
-            ]);
+        async function reversed(): Promise<mjBizAppsAccountingJournalEntryEntity> {
+            return mockEntry({
+                ID: 'original-1',
+                EntryNumber: '5002',
+                EffectiveDate: FromCalendarDay('2026-01-01'),
+                LinkedRecordID: 'sub-term-1',
+                Description: 'Monthly Subscription Rev Rec',
+                CreditAmount: 400,
+                ReversedByJournalEntryID: 'reversal-1',
+            });
+        }
+
+        async function reversal(day: string): Promise<mjBizAppsAccountingJournalEntryEntity> {
+            return mockEntry({
+                ID: 'reversal-1',
+                EntryNumber: '5003',
+                EffectiveDate: FromCalendarDay(day),
+                LinkedRecordID: 'sub-term-1',
+                Description: 'Reversal of 5002: recognize in error',
+                CreditAmount: 400,
+                ReversesJournalEntryID: 'original-1',
+            });
+        }
+
+        it('leaves out a reversed entry once its reversal, loaded by ID, is dated on or before today', async () => {
+            const load = reversalsInDatabase([{ ID: 'REVERSAL-1', EffectiveDate: '2026-01-31' }]);
+            const comp = render([await standing(), await reversed()]);
+            await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+            await load.mock.results[0].value;
             expect(comp.Summary.TotalDeferredBeginning).toBe(100);
             expect(comp.Summary.TotalRecognizedToDate).toBe(100);
         });
 
-        it('leaves out a reversal entry passed in with its original', async () => {
-            const comp = render([
-                await standing(),
-                await mockEntry({
-                    EntryNumber: '5003',
-                    EffectiveDate: FromCalendarDay('2026-01-10'),
-                    LinkedRecordID: 'sub-term-1',
-                    Description: 'Reversal of 5001: recognize in error',
-                    CreditAmount: 100,
-                    ReversesJournalEntryID: 'original-1',
-                }),
-            ]);
+        it('counts a reversed entry until its reversal, loaded by ID, takes effect (#430)', async () => {
+            const load = reversalsInDatabase([{ ID: 'REVERSAL-1', EffectiveDate: '2026-02-01' }]);
+            const comp = render([await standing(), await reversed()]);
+            await vi.waitFor(() => expect(comp.Summary.TotalDeferredBeginning).toBe(500));
+            expect(comp.Summary.TotalRecognizedToDate).toBe(500);
+            expect(load).toHaveBeenCalledTimes(1);
+            expect(load.mock.calls[0][0]).toMatchObject({ ExtraFilter: "ID IN ('reversal-1')" });
+        });
+
+        it('reads a reversal passed in with its original, without loading it', async () => {
+            const load = reversalsInDatabase([]);
+            const comp = render([await standing(), await reversed(), await reversal('2026-02-01')]);
+            expect(comp.Summary.TotalDeferredBeginning).toBe(500);
+            expect(comp.Summary.TotalRecognizedToDate).toBe(500);
+            expect(load).not.toHaveBeenCalled();
+        });
+
+        it('leaves out both once a reversal passed in with its original reaches its day', async () => {
+            const load = reversalsInDatabase([]);
+            const comp = render([await standing(), await reversed(), await reversal('2026-01-31')]);
             expect(comp.Summary.TotalDeferredBeginning).toBe(100);
             expect(comp.Summary.TotalRecognizedToDate).toBe(100);
+            expect(load).not.toHaveBeenCalled();
+        });
+
+        it('leaves out a reversal entry passed in without its original', async () => {
+            const comp = render([await standing(), await reversal('2026-01-10')]);
+            expect(comp.Summary.TotalDeferredBeginning).toBe(100);
+            expect(comp.Summary.TotalRecognizedToDate).toBe(100);
+        });
+    });
+
+    describe('release state of a month (#429)', () => {
+        const cell = (Amount: number, RecognizedAmount: number) => ({
+            MonthKey: '2026-01', MonthLabel: "Jan '26", MonthShort: 'Jan', Year: '2026',
+            Amount, RecognizedAmount, IsPastOrCurrent: true,
+        });
+
+        it('is Released only when the whole month is recognized', () => {
+            const comp = new DeferredRevenueWaterfallComponent();
+            expect(comp.ReleaseStateOf(cell(83.33, 83.33))).toBe('Released');
+            // Floating-point sums of the same entries still read as the whole month.
+            expect(comp.ReleaseStateOf(cell(0.1 + 0.2, 0.3))).toBe('Released');
+        });
+
+        it('is PartlyReleased when only some of the month is recognized', () => {
+            const comp = new DeferredRevenueWaterfallComponent();
+            expect(comp.ReleaseStateOf(cell(83.33, 38.71))).toBe('PartlyReleased');
+        });
+
+        it('is Scheduled when none is recognized, and Empty when the month has no amount', () => {
+            const comp = new DeferredRevenueWaterfallComponent();
+            expect(comp.ReleaseStateOf(cell(83.33, 0))).toBe('Scheduled');
+            expect(comp.ReleaseStateOf(cell(0, 0))).toBe('Empty');
         });
     });
 

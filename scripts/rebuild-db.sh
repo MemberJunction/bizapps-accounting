@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# Rebuild the local development database from scratch.
+# Build the local development database from scratch.
 #
-# WHY THIS EXISTS: the standing pre-production practice is that schema changes EDIT THE BASELINE
-# MIGRATION IN PLACE rather than adding fix-up migrations. That is only safe if rebuilding from zero
-# is routine — otherwise the baseline drifts from what anyone actually has installed. This script is
-# that routine, and it is the same one bizapps-orders uses.
+# FOR A NEW, EMPTY DATABASE ONLY. It drops the database named in .env, so it is not a development
+# loop: schema changes are new V migrations applied with `pnpm run mj:migrate` (see
+# docs/database-migrations.md). The script applies every migration as committed and never edits a
+# file in the repo.
 #
 # WHAT IT DOES
 #   1. drop + recreate the database
@@ -19,17 +19,18 @@
 #                         exits 0 on statement failures — so common's V migrations, including the
 #                         Person.DisplayName computed column that tasks' views join on, were
 #                         silently skipped on every rebuild.)
-#   4. this app's migrations
+#   4. bizapps-tasks
+#   5. this app's migrations, the baseline in full followed by every V migration
 #
 # bizapps-tasks is a declared dependency AND the baseline now references its schema —
 # FK_JEBatch_ApprovalTask points at __mj_BizAppsTasks.Task (#22 item 1) — so it is applied as
 # step 4, before this app's migrations. Its migrations are written against its OWN schema
 # (${flyway:defaultSchema} = __mj_BizAppsTasks), so plain `mj migrate --schema` applies them.
 #
-# AFTER THIS, still by hand (they need judgement, not automation):
-#   pnpm run mj:codegen                     # regenerate entity metadata + SQL objects
-#   scripts/append-codegen.sh              # append the generated SQL below the migration's banner
+# AFTER THIS, by hand:
+#   pnpm run mj:codegen                     # should find nothing to change; output means drift
 #   pnpm run mj sync push --dir metadata    # seed currencies + GL account roles
+#   pnpm run build
 #
 # Usage: scripts/rebuild-db.sh
 set -euo pipefail
@@ -57,10 +58,10 @@ PARSE
 
 : "${DB_DATABASE:?DB_DATABASE is not set — check .env}"
 
-# Tracks the MJ line this repo's package.json pins (^6.1.0-edge.0). A rebuild against v5 core now
-# installs a schema older than the code expects — Entity.GeneratedBaseViewName and
+# Tracks the MJ line this repo's package.json pins (^6.1.6). A rebuild against v5 core installs a
+# schema older than the code expects — Entity.GeneratedBaseViewName and
 # EntityRelationship.RelatedRecordCollection are both v6 columns, and CodeGen writes to them.
-MJ_VERSION="${MJ_CORE_VERSION:-v6.1.0-edge.1}"
+MJ_VERSION="${MJ_CORE_VERSION:-v6.1.6}"
 COMMON_REPO="${BIZAPPS_COMMON_REPO:-$ROOT/../bizapps-common}"
 TASKS_REPO="${BIZAPPS_TASKS_REPO:-$ROOT/../bizapps-tasks}"
 MJ="node $ROOT/node_modules/@memberjunction/cli/bin/run.js"
@@ -86,28 +87,12 @@ $MJ migrate -t "${MJ_VERSION}"
 say "3/5  bizapps-common"
 $MJ migrate --schema __mj_BizAppsCommon --dir "$COMMON_REPO/migrations"
 
-# TRIM THE GENERATED HALF BEFORE APPLYING. Once CodeGen output lives in the baseline, a rebuild
-# produces a database whose entity metadata is ALREADY current — so the next CodeGen run has nothing
-# to do and emits only a delta, which append-codegen.sh then refuses (rightly) as a partial. Worse,
-# stale generated SQL referencing a table the hand-authored half no longer creates fails the migrate
-# outright. The cycle is only self-consistent if the rebuild applies the hand-authored DDL alone and
-# CodeGen regenerates the rest from scratch. This is what makes "edit the baseline in place" safe.
 say "4/5  bizapps-tasks"
 $MJ migrate --schema __mj_BizAppsTasks --dir "$TASKS_REPO/migrations"
 
-say "5/5  bizapps-accounting (hand-authored DDL only)"
-MARKER='CODEGEN OUTPUT — GENERATED CODE BELOW THIS LINE'
-ACCT_MIGRATION=$(grep -rl "$MARKER" "$ROOT/migrations"/*.sql | head -1)
-if [[ -n "$ACCT_MIGRATION" ]]; then
-    MARKER_LINE=$(grep -n "$MARKER" "$ACCT_MIGRATION" | head -1 | cut -d: -f1)
-    BANNER_END=$(awk -v s="$MARKER_LINE" 'NR>=s && /^-- =+$/ { last=NR } NR>s && !/^--/ && NF { exit } END { print last }' "$ACCT_MIGRATION")
-    GENERATED_LINES=$(( $(wc -l < "$ACCT_MIGRATION") - BANNER_END ))
-    if (( GENERATED_LINES > 0 )); then
-        printf '  trimming %s lines of generated output (CodeGen will regenerate them)\n' "$GENERATED_LINES"
-        head -n "$BANNER_END" "$ACCT_MIGRATION" > "$ACCT_MIGRATION.tmp"
-        mv "$ACCT_MIGRATION.tmp" "$ACCT_MIGRATION"
-    fi
-fi
+# The baseline is applied in full, generated half included: V migrations call the CRUD procs it
+# creates (the Metadata_Sync files call spCreateCurrency, for one), so trimming it fails the migrate.
+say "5/5  bizapps-accounting"
 # --schema is REQUIRED, not optional. Without it `mj migrate` uses the CORE schema's flyway history,
 # which already carries a SQL_BASELINE from step 2 — so flyway skips this app's `B` baseline entirely
 # and reports "0 applied" while creating nothing.
@@ -116,8 +101,7 @@ $MJ migrate --schema __mj_BizAppsAccounting --dir "$ROOT/migrations"
 say "Done"
 cat <<'NEXT'
 Next, in order:
-  pnpm run mj:codegen
-  scripts/append-codegen.sh
+  pnpm run mj:codegen                     # should find nothing to change
   pnpm run mj sync push --dir metadata
   pnpm run build
 NEXT

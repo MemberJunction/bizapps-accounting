@@ -1,5 +1,100 @@
 # @mj-biz-apps/accounting-server
 
+## 0.26.0
+
+### Minor Changes
+
+- 167a3dc: New remote operation `Accounting.RedatePendingJournalEntries` (bc-aidp-next-golive#448) moves Pending, unbatched journal entries to a corrected day in place, all or nothing, named by their source record (LinkedEntity + LinkedRecordIDs) or by ID. It needs the batch-operator Authorization (the Finance role) and refuses a batched or posted entry, a reversed entry, a day on or before the books-closed-through date or before the posting start date, and a move across fiscal years. `JournalEntryEntityServer.SaveRedatedEffectiveDate` is the one save that may change a saved entry's date, and `EffectiveDateChangeAllowed` tells a date-immutability rule to let it through.
+
+  The batch preview now reports entries dated after the posting date: `AfterPostingDateCount`, and the oldest 50 in `AfterPostingDateEntries` with the reason each is held back. The Build Batch dialog and the batch workspace show them next to the posting start date notice.
+
+### Patch Changes
+
+- Updated dependencies [b78bf88]
+- Updated dependencies [a56dd15]
+- Updated dependencies [167a3dc]
+- Updated dependencies [ccee5c0]
+- Updated dependencies [81b934e]
+  - @mj-biz-apps/accounting-entities@0.26.0
+  - @mj-biz-apps/accounting-core-entities-server@0.26.0
+  - @mj-biz-apps/accounting-actions@0.26.0
+
+## 0.25.1
+
+### Patch Changes
+
+- Updated dependencies [a2783f1]
+  - @mj-biz-apps/accounting-core-entities-server@0.25.1
+  - @mj-biz-apps/accounting-actions@0.25.1
+  - @mj-biz-apps/accounting-entities@0.25.1
+
+## 0.25.0
+
+### Patch Changes
+
+- Updated dependencies [1d11c39]
+- Updated dependencies [b3592ca]
+- Updated dependencies [69680e9]
+- Updated dependencies [a54fd4e]
+  - @mj-biz-apps/accounting-entities@0.25.0
+  - @mj-biz-apps/accounting-actions@0.25.0
+  - @mj-biz-apps/accounting-core-entities-server@0.25.0
+
+## 0.24.0
+
+### Minor Changes
+
+- 266cf9c: New nullable column `AccountingCompanyProfile.BooksClosedThroughDate` (DATE): the last day of the latest month finance has closed for the company. A date on or before it is in a closed month. NULL means nothing is closed; existing profiles read NULL. Includes the CodeGen output for the column (entity subclass, GraphQL types, profile form field).
+- a577db6: A journal entry batch's cancel reason holds 1,000 characters, up from 500 (`JournalEntryBatch.CancelReason` is `NVARCHAR(1000)`). Migration `V202610201000` widens the column and regenerates the batch's base view and create/update/delete procedures, whose `@CancelReason` parameter was `nvarchar(500)` (#307).
+- d51bb87: Three column descriptions now say what the code does (#352): `JournalEntryBatchNumber` gives the global `BATCH-{seq:000000}` format with no company segment; `FinanceException.DedupeKey` says a repeat raise refreshes an Open row's creator fields and summary; `GLAccount.IsSystemSeeded` names `AccountingCompanyProfileEntityServer.SeedDefaultChartOfAccounts()` instead of the removed procedure. A new migration updates the extended properties and, through its CodeGen block, the entity field metadata.
+
+### Patch Changes
+
+- Updated dependencies [96b1a48]
+- Updated dependencies [ff56bcc]
+- Updated dependencies [201d11f]
+- Updated dependencies [5ee4741]
+- Updated dependencies [0ffa7e7]
+- Updated dependencies [7b88d06]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [803a7ab]
+- Updated dependencies [6d866b6]
+- Updated dependencies [266cf9c]
+- Updated dependencies [74e2ad9]
+- Updated dependencies [a577db6]
+- Updated dependencies [47d5474]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [d51bb87]
+- Updated dependencies [140106d]
+- Updated dependencies [fa4f5fa]
+- Updated dependencies [ecdc1e0]
+- Updated dependencies [003d4e6]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [4c0476c]
+- Updated dependencies [aff9c70]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [a7c8e83]
+- Updated dependencies [074060f]
+- Updated dependencies [ea5f9f7]
+- Updated dependencies [da5d2c6]
+- Updated dependencies [a74ce5f]
+- Updated dependencies [5677f94]
+- Updated dependencies [f7b9b1c]
+  - @mj-biz-apps/accounting-core-entities-server@0.24.0
+  - @mj-biz-apps/accounting-entities@0.24.0
+  - @mj-biz-apps/accounting-actions@0.24.0
+
+## 0.23.0
+
+### Patch Changes
+
+- b5646b8: Requires MemberJunction 6.1.6, the 6.1 LTS release QA runs. Every `@memberjunction/*` range and both root overrides are `^6.1.6`, and `mj-app.json` declares `>=6.1.6 <7.0.0`.
+- Updated dependencies [12a7026]
+- Updated dependencies [b5646b8]
+  - @mj-biz-apps/accounting-core-entities-server@0.23.0
+  - @mj-biz-apps/accounting-entities@0.23.0
+  - @mj-biz-apps/accounting-actions@0.23.0
+
 ## 0.22.2
 
 ### Patch Changes

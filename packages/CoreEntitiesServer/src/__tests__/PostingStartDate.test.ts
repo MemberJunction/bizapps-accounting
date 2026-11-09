@@ -54,7 +54,7 @@ describe('pendingCandidateFilter — the per-company PostingStartDate floor', ()
     const { p } = providers([profile(CO_A, null)]);
     // The only date clause is the posting-date bound every pool carries; no floor clause is added.
     expect(await pendingCandidateFilter({ postingDate: '2026-09-30' }, testUser, p))
-      .toBe(`Status='Pending' AND EntryTypeID<>'e9521aa3-f4ef-4ec5-a899-d9dd59f320b7' AND EffectiveDate < '2026-10-01'`);
+      .toBe(`Status='Pending' AND EntryTypeID<>'e9521aa3-f4ef-4ec5-a899-d9dd59f320b7' AND EffectiveDate < '2026-10-01' AND (ApprovalLevel IS NULL OR ApprovedAt IS NOT NULL)`);
     expect(await admittedIds({}, [profile(CO_A, null)])).toEqual(JOURNALS.map(j => j.ID).sort());
   });
 

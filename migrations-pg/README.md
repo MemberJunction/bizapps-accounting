@@ -47,11 +47,24 @@ Some patterns have no clean T-SQL ↔ PG equivalent (e.g. PG-specific deferrable
 
 Both are committed; deployments choose at runtime.
 
+The swap applies only to `migrationsLocation` in `mj.config.cjs`, never to an explicit `--dir`. That is why `pnpm run mj:migrate` passes no `--dir`. A hand-run `mj migrate --dir ./migrations` runs the T-SQL set on either platform; on PostgreSQL pass `--dir ./migrations-pg`. `mj.config.cjs` must not set `mjRepoVersion`: with it set and no `--dir`, `mj migrate` fetches MJ core's migrations instead of this repo's.
+
+## Quote the schema name
+
+PostgreSQL folds unquoted names to lowercase, so `__mj_BizAppsAccounting` unquoted means the schema `__mj_bizappsaccounting`. `mj migrate --schema` and the Open App installer create `"__mj_BizAppsAccounting"` quoted, and MJ's PostgreSQL provider quotes mixed-case names in runtime SQL, so every reference in `migrations-pg/` must be quoted too. The converter emits the name unquoted. After converting a file, quote it (and the `${mjSchema}_BizApps*` sibling schemas) before committing:
+
+```bash
+perl -pi -e 's/(?<!["\[\x27])__mj_BizAppsAccounting(?!["\]\x27])/"__mj_BizAppsAccounting"/g; s/(?<!")(\$\{mjSchema\}_BizApps\w+)(?!")/"$1"/g' migrations-pg/<file>.sql
+```
+
+Also replace the converter's header note that calls the unquoted name deliberate (see any committed file for the wording). The pattern leaves T-SQL comments (`[__mj_BizAppsAccounting]`) and string literals (`'__mj_BizAppsAccounting'`) alone. This is the one post-conversion edit allowed to a `.pg.sql` file until the converter quotes the name itself.
+
 ## CI
 
 Two checks, at two points:
 
 - **Counterpart present** (`.github/scripts/check-pg-counterpart.sh`). On a PR into `next` that adds a T-SQL migration with no matching `.pg.sql`, it adds a warning and does not fail. On the release PR (`rr: pg counterparts` in `release-readiness.yml`) it fails for any migration added since the last release tag that has no counterpart.
+- **Schema name quoted** (`.github/workflows/pg-migrations.yml`, same manual run). Fails on any unquoted `__mj_BizAppsAccounting` in `migrations-pg/`.
 - **PG set applies** (`.github/workflows/pg-migrations.yml`). Spins up PostgreSQL 17 and applies the PG migration set to a fresh database. It runs only when started by hand (`workflow_dispatch`), not on PRs.
 
 ## Filename rules

@@ -13,6 +13,9 @@
  *     code, the per-record lookup is ours — plan §2.1). Cardinality=Many roles throw
  *     ROLE_NOT_SINGULAR rather than returning an arbitrary account (BA-D34).
  *   - ResolveLinkedAccounts(...) — every covering Active link for a Many role (BankAccount).
+ *   - ResolveFirstLinkedAccount(records, role, ...) — the first record in a caller-ordered walk
+ *     with a link, reloading the cache once when none has one (bc-aidp-next-golive#438).
+ *   - RefreshAfterLinkMiss() — the throttled reload behind it, for callers that walk themselves.
  *   - ResolveIntercompanyAccounts(sourceCompanyId, targetCompanyId, asOfDate) — the Due To/Due From
  *     pair for an ordered company pair, used when one company collects cash settling another's
  *     line (BA-D26). Separate from the role/link path on purpose: an intercompany account is
@@ -143,6 +146,33 @@ export interface ResolvedLinkedAccount {
   Dimensions: mjBizAppsAccountingGLAccountLinkDimensionEntity[];
 }
 
+/** One record in a link walk: the polymorphic EntityID + RecordID a GLAccountLink points at. */
+export interface LinkedRecordRef {
+  EntityID: string;
+  RecordID: string;
+}
+
+/** The first record in a walk that resolved, and what it resolved to. */
+export interface FirstLinkedAccount extends ResolvedLinkedAccount {
+  Record: LinkedRecordRef;
+}
+
+/** Options for `ResolveFirstLinkedAccount`. */
+export interface ResolveFirstLinkedAccountOptions {
+  /** Scope to links whose GL account belongs to this company (see `ResolveLinkedAccount`). */
+  ForCompanyID?: string;
+  /** Passed to the reload on a miss; required on the server. */
+  ContextUser?: UserInfo;
+  Provider?: IMetadataProvider;
+}
+
+/**
+ * The shortest gap between two reloads triggered by a miss. A link that is really missing makes
+ * every booking that needs it miss; without a floor, a nightly run over many such lines would
+ * reload the whole cache once per line.
+ */
+export const LINK_MISS_REFRESH_INTERVAL_MS = 30_000;
+
 /** One dimension to stamp on an intercompany leg. `DimensionValueID` null = take it from context. */
 export interface IntercompanyDimensionRequirement {
   DimensionID: string;
@@ -237,6 +267,8 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
   private _currencies: mjBizAppsAccountingCurrencyEntity[] = [];
   private _intercompanyMatches: mjBizAppsAccountingIntercompanyAccountMatchEntity[] = [];
   private _intercompanyMatchDimensions: mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity[] = [];
+  private _linkMissRefresh: Promise<void> | null = null;
+  private _lastLinkMissRefreshAt = 0;
 
   public static get Instance(): AccountingEngineBase {
     return super.getInstance<AccountingEngineBase>();
@@ -333,6 +365,17 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
     };
   }
 
+  /**
+   * The company's books-closed-through date from its Accounting Company Profile, or null when it has
+   * none or nothing is closed (bc-aidp-next-golive#316). A DATE value: read its day with
+   * `ToCalendarDay`, then test it with `IsInClosedBooks` (./books-closed.ts).
+   */
+  public BooksClosedThroughFor(companyId: string | null | undefined): Date | null {
+    const key = uuidKey(companyId);
+    const profile = key ? this.CompanyProfiles.find(p => uuidKey(p.ID) === key) : undefined;
+    return profile?.BooksClosedThroughDate ?? null;
+  }
+
   // ─── the legal-entity walk (bc-aidp-next-golive#313) ─────────────────────────
 
   /**
@@ -360,7 +403,7 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
    * arbitrary account. A guessed bank still balances — the same invisibility BA-D27/D28 exist
    * to prevent. Callers that need the set use `ResolveLinkedAccounts`.
    *
-   * `forCompanyID` (optional — Amith 2026-07-28/29): scope resolution to links whose GL account
+   * `forCompanyID` (optional): scope resolution to links whose GL account
    * belongs to that company. A record (e.g. a shared product) can carry one link per company for
    * the same role; a multi-company caller passes the booking company to get ITS account. The
    * company is derived through the link's GLAccount FK (both tables live in this engine's cache,
@@ -407,6 +450,69 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
           return i === -1 ? [] : [i];
         })();
     return indexes.map(i => this.decorateLink(candidates[i]));
+  }
+
+  /**
+   * The first record in `records` with a link for `role`, in the caller's order (the walk order is
+   * the caller's code, as for `ResolveLinkedAccount`). When no record resolves, the cache is
+   * reloaded once and the walk retried before returning null (bc-aidp-next-golive#438).
+   *
+   * Why: the cache is loaded once per process and updated only by saves made through the
+   * application. A link written straight to the database stays invisible until the server restarts,
+   * so a booking refuses with "not linked" although the link exists. A miss of the whole walk is
+   * rare and already fatal to the booking, so the reload costs nothing on the normal path. A miss on
+   * one record is not a miss of the walk (product → category → company falls through by design),
+   * which is why the retry lives here and not in the per-record `ResolveLinkedAccount`.
+   *
+   * The reload is throttled (`RefreshAfterLinkMiss`), so a retry within the interval of the last
+   * reload returns null without reading again: that reload already saw the database.
+   */
+  public async ResolveFirstLinkedAccount(
+    records: LinkedRecordRef[],
+    role: string,
+    asOfDate: Date,
+    options: ResolveFirstLinkedAccountOptions = {},
+  ): Promise<FirstLinkedAccount | null> {
+    const first = this.firstLinkedAccount(records, role, asOfDate, options.ForCompanyID);
+    if (first || records.length === 0) return first;
+    const reloaded = await this.RefreshAfterLinkMiss(options.ContextUser, options.Provider);
+    return reloaded ? this.firstLinkedAccount(records, role, asOfDate, options.ForCompanyID) : null;
+  }
+
+  /**
+   * Reload the cache after a caller's walk found no link, so links written outside the application
+   * are picked up. Returns true when a reload ran (or one already running finished), false when the
+   * last reload finished less than `LINK_MISS_REFRESH_INTERVAL_MS` ago and there is nothing new to
+   * read. Concurrent callers share one reload. For callers that walk with `ResolveLinkedAccount`
+   * themselves: on a miss, call this and walk again only when it returns true.
+   */
+  public async RefreshAfterLinkMiss(contextUser?: UserInfo, provider?: IMetadataProvider): Promise<boolean> {
+    if (this._linkMissRefresh) {
+      await this._linkMissRefresh;
+      return true;
+    }
+    if (Date.now() - this._lastLinkMissRefreshAt < LINK_MISS_REFRESH_INTERVAL_MS) return false;
+    this._linkMissRefresh = this.Config(true, contextUser, provider).then(() => undefined);
+    try {
+      await this._linkMissRefresh;
+      this._lastLinkMissRefreshAt = Date.now();
+      return true;
+    } finally {
+      this._linkMissRefresh = null;
+    }
+  }
+
+  private firstLinkedAccount(
+    records: LinkedRecordRef[],
+    role: string,
+    asOfDate: Date,
+    forCompanyID?: string,
+  ): FirstLinkedAccount | null {
+    for (const record of records) {
+      const hit = this.ResolveLinkedAccount(record.EntityID, record.RecordID, role, asOfDate, forCompanyID);
+      if (hit) return { ...hit, Record: record };
+    }
+    return null;
   }
 
   private resolveRole(role: string): mjBizAppsAccountingGLAccountRoleEntity | undefined {

@@ -82,7 +82,7 @@ export abstract class AccountingDashboardBase extends BaseAngularComponent {
   public IsLoading = false;
   public LoadError: string | null = null;
 
-  // The old CreateLabel/CreateRequested header-card machinery was removed (Marcelo 2026-08-05):
+  // The old CreateLabel/CreateRequested header-card machinery was removed:
   // the section's create verb lives in the CATEGORY header now, so the dashboards ship no
   // duplicate create button and no header-interior card at all.
 

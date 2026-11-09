@@ -156,6 +156,17 @@
 .bw-warn i {
   color: var(--mj-status-warning);
 }
+.bw-held-back {
+  flex-direction: column;
+  align-items: flex-start;
+}
+.bw-held-back summary {
+  cursor: pointer;
+}
+.bw-held-back-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
 .bw-posting-confirm {
   display: flex;
   align-items: center;
@@ -251,7 +262,7 @@
   white-space: nowrap;
 }
 
-/* Deferred-query controls (Marcelo 2026-07-21): Apply = the query trigger; the empty-state Load
+/* Deferred-query controls: Apply = the query trigger; the empty-state Load
    prompt; the stale-filters hint. */
 .bw-apply {
   align-self: flex-start;
@@ -285,4 +296,26 @@
   margin: 0;
   max-width: 42ch;
   font-size: 13px;
+}
+
+/* Source column (bc-aidp-next-golive#452): the entry's source record, as a link. */
+.bw-source {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bw-source-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--mj-text-link);
+  cursor: pointer;
+  font: inherit;
+}
+.bw-source-link:hover {
+  text-decoration: underline;
+}
+.bw-source-none {
+  color: var(--mj-text-muted);
 }

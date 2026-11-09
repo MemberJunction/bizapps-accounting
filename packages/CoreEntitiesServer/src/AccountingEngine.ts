@@ -26,13 +26,31 @@ import {
   type CreateJournalEntriesInput,
   type CreateJournalEntriesResult,
   type CreateJournalEntryResult,
+  type DraftPipelineOutcome,
   type JEValidationError,
   type JournalEntryDraft,
   type NormalizedLine,
 } from '@mj-biz-apps/accounting-engine-base';
+import { FromCalendarDay } from '@mj-biz-apps/common-entities';
+import { loadEffectiveDay, requireDateBound } from './BusinessDay.js';
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
+const EFFECTIVE_DATE_CONTEXT = 'EffectiveDate';
+
+/**
+ * Stage 1 accepts any EffectiveDate `new Date()` parses. A zone-less date-time parses in the server
+ * process's zone, which is nobody's business day, so it is refused here with the same rule batch
+ * cutoffs use (#427).
+ */
+function effectiveDateErrors(draft: JournalEntryDraft): JEValidationError[] {
+  try {
+    requireDateBound(draft.EffectiveDate, EFFECTIVE_DATE_CONTEXT);
+    return [];
+  } catch (e) {
+    return [{ Code: 'MALFORMED_DRAFT', Message: e instanceof Error ? e.message : String(e) }];
+  }
+}
 
 export class AccountingEngine extends BaseSingleton<AccountingEngine> {
   public static get Instance(): AccountingEngine {
@@ -63,7 +81,7 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       await this.Config(false, contextUser, provider);
 
       // Stages 1-5 — the pure pipeline over the engine caches.
-      let outcome = runDraftPipeline(draft, this.Base.CreatePipelineLookups());
+      let outcome = this.runPipeline(draft);
 
       // Cache-miss retry (bounded to ONE forced refresh): BaseEngine auto-refresh only sees entity
       // events in THIS process tier, so reference rows created by another process (a second MJAPI,
@@ -72,7 +90,7 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       const stalenessCodes = new Set(['ENTRY_TYPE_UNKNOWN', 'ENTRY_TYPE_INACTIVE', 'ACCOUNT_UNKNOWN', 'ACCOUNT_INACTIVE', 'DIMENSION_UNKNOWN', 'DIMENSION_VALUE_UNKNOWN']);
       if (outcome.errors.some(e => stalenessCodes.has(e.Code))) {
         await this.Config(true, contextUser, provider);
-        outcome = runDraftPipeline(draft, this.Base.CreatePipelineLookups());
+        outcome = this.runPipeline(draft);
       }
 
       if (outcome.errors.length > 0) {
@@ -108,12 +126,12 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       }
 
       await this.Config(false, contextUser, provider);
-      let outcomes = drafts.map(d => runDraftPipeline(d, this.Base.CreatePipelineLookups()));
+      let outcomes = drafts.map(d => this.runPipeline(d));
       // One bounded staleness refresh for the whole set (same rationale as the single op).
       const stalenessCodes = new Set(['ENTRY_TYPE_UNKNOWN', 'ENTRY_TYPE_INACTIVE', 'ACCOUNT_UNKNOWN', 'ACCOUNT_INACTIVE', 'DIMENSION_UNKNOWN', 'DIMENSION_VALUE_UNKNOWN']);
       if (outcomes.some(o => o.errors.some(e => stalenessCodes.has(e.Code)))) {
         await this.Config(true, contextUser, provider);
-        outcomes = drafts.map(d => runDraftPipeline(d, this.Base.CreatePipelineLookups()));
+        outcomes = drafts.map(d => this.runPipeline(d));
       }
       const setErrors: JEValidationError[] = outcomes.flatMap((o, i) => o.errors.map(e => ({ ...e, DraftIndex: i })));
       if (setErrors.length > 0) {
@@ -161,6 +179,17 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
     }
   }
 
+  /**
+   * Stages 1-5 over the engine caches, then the EffectiveDate shape check stage 1 does not make
+   * ({@link effectiveDateErrors}). A draft stage 1 already refused keeps the pipeline's own errors.
+   */
+  private runPipeline(draft: JournalEntryDraft): DraftPipelineOutcome {
+    const outcome = runDraftPipeline(draft, this.Base.CreatePipelineLookups());
+    if (outcome.errors.some(e => e.Code === 'MALFORMED_DRAFT')) return outcome;
+    const dateErrors = effectiveDateErrors(draft);
+    return dateErrors.length > 0 ? { errors: dateErrors, normalized: [], companyID: '' } : outcome;
+  }
+
   // ─── stage 6 ───────────────────────────────────────────────────────────────
 
   private async writeJournalEntry(
@@ -189,7 +218,10 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
     const je = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, contextUser);
     je.NewRecord();
     je.CompanyID = normalized[0].CompanyID;
-    je.EffectiveDate = new Date(draft.EffectiveDate);
+    // The business day the caller meant, held as UTC midnight; `new Date()` of a date-time kept its UTC day (#427).
+    je.EffectiveDate = FromCalendarDay(
+      await loadEffectiveDay(draft.EffectiveDate, EFFECTIVE_DATE_CONTEXT, contextUser, provider, je.CompanyID),
+    );
     je.EntryTypeID = entryType.ID;
     je.Status = 'Pending';
     je.Description = draft.Description ?? null;

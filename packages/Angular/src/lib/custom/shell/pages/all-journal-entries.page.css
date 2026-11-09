@@ -90,7 +90,7 @@
   overflow: hidden;
 }
 
-/* The fused subheader (Marcelo 2026-08-04): one band carrying stats + search/chips/filters, styled
+/* The fused subheader: one band carrying stats + search/chips/filters, styled
    like the interior header card it replaced — the page's single piece of top chrome. The internal
    rule divides the stats row from the toolbar row, echoing header-interior's own row divider. */
 .aje-subheader {

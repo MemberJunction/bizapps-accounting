@@ -60,6 +60,15 @@ jobs:
       - name: Validate PG migration filenames
         run: ./.github/scripts/validate-migration-filenames.sh migrations-pg
 
+      # Unquoted, PostgreSQL folds the name to __mj_bizappsaccounting, a schema that neither
+      # `mj migrate --schema` nor MJ's runtime SQL uses. See migrations-pg/README.md.
+      - name: Verify the schema name is quoted in PG migrations
+        run: |
+          if grep -nP '(?<!["\[\x27])__mj_BizAppsAccounting(?!["\]\x27])' migrations-pg/*.sql; then
+            echo "::error::Unquoted __mj_BizAppsAccounting in migrations-pg/ (lines above). Quote it as \"__mj_BizAppsAccounting\"."
+            exit 1
+          fi
+
       # ─── Skip the heavy bits when there are no migrations yet ──────
       - name: Detect migrations
         id: detect

@@ -3,7 +3,7 @@
  * REWORKED 2026-07-23 for the rewritten baseline: batches are SINGLE-COMPANY (D7)
  * and the netted summary is an ORDINARY JournalEntry (typed with the IsJournalEntryBatchSummary-flagged
  * JournalEntryType — issue #24) instead of the retired JournalEntryBatchLineItem tables
- * (Amith's summary-JE model).
+ * (the summary-JE model).
  *
  *   buildJournalEntryBatch(companyId, …): gather that company's Pending JEs → ONE JournalEntryBatch
  *     (one batch per company per run, D7), net their lines to consolidated summary groups
@@ -53,7 +53,8 @@
  *
  * THE §7.2 BATCH-REWORK SLICE LANDED 2026-07-29 (S-D of the donor port): criteria-driven
  * candidate filtering (cutoff/startDate/companies/type-codes — pendingCandidateFilter, plus every
- * company's PostingStartDate floor on every build, preview and sweep),
+ * company's PostingStartDate floor on every build, preview and sweep, and the manual entries
+ * awaiting approval, which no build takes — golive #353, APPROVED_OR_NO_APPROVAL_NEEDED_CLAUSE),
  * explicit-ID builds (buildJournalEntryBatchFromExplicitIds — re-verifies Pending, one batch per company),
  * view-defined batches (buildJournalEntryBatchFromView — snapshot + classify + loud rejects), and the
  * read-only previewBatch that runs the SAME filter/order/netting as the build. The
@@ -74,11 +75,13 @@ import { DatabaseProviderBase, IMetadataProvider, IRunViewProvider, LogError, Lo
 import { UUIDsEqual } from '@memberjunction/global';
 import { UserCache } from '@memberjunction/generic-database-provider';
 import type {
+  AccountingFinanceExceptionToRaise,
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingJournalEntryEntity,
   mjBizAppsAccountingJournalEntryLineEntity,
 } from '@mj-biz-apps/accounting-entities';
 import {
+  ClosedBooksPostingDateProblem,
   NetLines,
   type DimRef,
   type NetGroup,
@@ -216,8 +219,8 @@ export const AutoApproveGate: JournalEntryBatchApprovalGate = { async assertAppr
 
 /**
  * Thrown when a build finds nothing to batch (no candidate JEs, or every group netted to zero so
- * no summary line would be produced). A batch with no summary line is never persisted (Marcelo
- * 2026-07-21) — the empty case is a loud, explicit outcome, not a silent null.
+ * no summary line would be produced). A batch with no summary line is never persisted —
+ * the empty case is a loud, explicit outcome, not a silent null.
  */
 export class EmptyJournalEntryBatchError extends Error {
   public constructor(message: string) {
@@ -238,29 +241,78 @@ export class JournalEntryBatchPostingDateError extends Error {
   }
 }
 
+export const IN_CLAUSE_CHUNK_SIZE = 500;
+
+/** Split `items` into chunks of at most `size` so SQL `IN (...)` clauses and `RunView` row caps stay bounded (#488). */
+export function chunkArray<T>(items: readonly T[], size = IN_CLAUSE_CHUNK_SIZE): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
 /** Refuse the build when any member is dated after the posting day; names the offenders. */
 async function assertPostingDayCoversMembers(jeIds: string[], postingDay: CalendarDay, contextUser: UserInfo, p: Providers): Promise<void> {
   if (jeIds.length === 0) return;
-  const res = await p.rv.RunView<{ EntryNumber: string; EffectiveDate: string }>(
-    {
-      EntityName: JE_ENTITY,
-      ExtraFilter: `ID IN (${jeIds.map(sqlGuid).join(',')}) AND EffectiveDate > '${postingDay}'`,
-      OrderBy: 'EffectiveDate ASC, EntryNumber ASC',
-      Fields: ['EntryNumber', 'EffectiveDate'],
-      ResultType: 'simple',
-      BypassCache: true,
-    },
-    contextUser,
-  );
-  if (!res.Success) throw new Error(`The batch was not built: could not check the entries' dates against the posting date: ${res.ErrorMessage ?? 'unknown error'}`);
-  const later = res.Results ?? [];
+  const later: Array<{ EntryNumber: string; EffectiveDate: string }> = [];
+  for (const chunk of chunkArray(jeIds)) {
+    const res = await p.rv.RunView<{ EntryNumber: string; EffectiveDate: string }>(
+      {
+        EntityName: JE_ENTITY,
+        ExtraFilter: `ID IN (${chunk.map(sqlGuid).join(',')}) AND EffectiveDate > '${postingDay}'`,
+        OrderBy: 'EffectiveDate ASC, EntryNumber ASC',
+        Fields: ['EntryNumber', 'EffectiveDate'],
+        ResultType: 'simple',
+        BypassCache: true,
+        IgnoreMaxRows: true,
+      },
+      contextUser,
+    );
+    if (!res.Success) throw new Error(`The batch was not built: could not check the entries' dates against the posting date: ${res.ErrorMessage ?? 'unknown error'}`);
+    later.push(...(res.Results ?? []));
+  }
   if (later.length === 0) return;
+  later.sort((a, b) => ToCalendarDay(a.EffectiveDate).localeCompare(ToCalendarDay(b.EffectiveDate)) || a.EntryNumber.localeCompare(b.EntryNumber));
   const shown = later.slice(0, 5).map(r => `${r.EntryNumber} (${ToCalendarDay(r.EffectiveDate)})`).join(', ');
   const more = later.length > 5 ? ` and ${later.length - 5} more` : '';
   throw new JournalEntryBatchPostingDateError(
     `Posting date ${postingDay} is earlier than ${later.length} selected entr${later.length === 1 ? 'y' : 'ies'}: ${shown}${more}. ` +
     `Choose a posting date on or after ${ToCalendarDay(later[later.length - 1].EffectiveDate)}, or leave those entries out.`,
   );
+}
+
+/**
+ * Refuse a posting date on or before the company's BooksClosedThroughDate (golive #316). The ERP
+ * would refuse the batch once it was sent, leaving a Failed batch to work out; this says so at the
+ * build. FAILS CLOSED: a read that fails throws, since guessing "open" builds a batch into a month
+ * finance has closed. A company with no profile row, or no date, has nothing closed.
+ * Regenerate keeps the batch's posting date, so its refusal says to cancel and build anew instead.
+ */
+async function assertPostingDayOpen(
+  companyId: string, postingDay: CalendarDay, contextUser: UserInfo, p: Providers,
+  operation: 'buildJournalEntryBatch' | 'regenerateJournalEntryBatch' = 'buildJournalEntryBatch',
+): Promise<void> {
+  const res = await p.rv.RunView<{ BooksClosedThroughDate: Date | string | null }>(
+    {
+      EntityName: ACP_ENTITY,
+      ExtraFilter: `ID=${sqlGuid(companyId)}`,
+      Fields: ['BooksClosedThroughDate'],
+      ResultType: 'simple',
+      BypassCache: true,
+    },
+    contextUser,
+  );
+  if (!res.Success) throw new Error(`${operation}: could not read company ${companyId}'s books-closed-through date: ${res.ErrorMessage ?? 'unknown'}`);
+  const closedThrough = ToCalendarDay(res.Results?.[0]?.BooksClosedThroughDate ?? null);
+  const problem = ClosedBooksPostingDateProblem(postingDay, closedThrough);
+  if (!problem) return;
+  if (operation === 'regenerateJournalEntryBatch') {
+    throw new JournalEntryBatchPostingDateError(
+      `${problem} Regenerate keeps the batch's posting date, so cancel this batch and build a new one with an open posting date.`,
+    );
+  }
+  throw new JournalEntryBatchPostingDateError(problem);
 }
 
 // ─── buildJournalEntryBatch ──────────────────────────────────────────────────────────────
@@ -300,7 +352,7 @@ export async function buildJournalEntryBatch(
  * Build a batch from a SPECIFIC (already-vetted) set of Pending JE IDs belonging to ONE company —
  * the shared one-transaction core of the oldest-forward buildJournalEntryBatch, the explicit-ID build, and the
  * view build. Throws EmptyJournalEntryBatchError when the set nets to zero — a batch with no summary line is
- * never persisted (Marcelo 2026-07-21); the empty case is a loud, explicit outcome, not a silent null.
+ * never persisted; the empty case is a loud, explicit outcome, not a silent null.
  */
 async function buildJournalEntryBatchCore(
   companyId: string,
@@ -314,6 +366,7 @@ async function buildJournalEntryBatchCore(
 ): Promise<BuildJournalEntryBatchResult> {
   const p = resolveProviders(provider);
   const postingDay = await loadPostingDay(postingDate, contextUser, p.md, companyId);
+  await assertPostingDayOpen(companyId, postingDay, contextUser, p);
   await assertPostingDayCoversMembers(jeIds, postingDay, contextUser, p);
   const groups = NetLines(await loadNettableLines(companyId, jeIds, contextUser, p));
   if (groups.length === 0) {
@@ -360,7 +413,7 @@ async function buildJournalEntryBatchCore(
 export async function pendingCompanies(contextUser: UserInfo, provider: IMetadataProvider, options: BuildJournalEntryBatchOptions = {}): Promise<string[]> {
   const p = resolveProviders(provider);
   const res = await p.rv.RunView<{ CompanyID: string }>(
-    { EntityName: JE_ENTITY, ExtraFilter: await pendingCandidateFilter(options, contextUser, p), Fields: ['CompanyID'], ResultType: 'simple', BypassCache: true },
+    { EntityName: JE_ENTITY, ExtraFilter: await pendingCandidateFilter(options, contextUser, p), Fields: ['CompanyID'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
     contextUser,
   );
   return [...new Set((res.Results ?? []).map(r => r.CompanyID))];
@@ -403,27 +456,56 @@ export interface BuildJournalEntryBatchOptions {
  * PostingStartDate keeps the entries dated before it out of every batch.
  */
 export async function pendingCandidateFilter(options: BuildJournalEntryBatchOptions, contextUser: UserInfo, p: Providers): Promise<string> {
-  const { criteria, postingStart } = await candidateFilterParts(options, contextUser, p);
-  return [...criteria, ...postingStart].join(' AND ');
+  const { criteria, postingStart, approval } = await candidateFilterParts(options, contextUser, p);
+  return [...criteria, ...postingStart, ...approval].join(' AND ');
 }
 
 /**
- * The candidate filter in its two halves: `criteria` (status, type, date window, scope) and
- * `postingStart` (one clause per company whose PostingStartDate is later than the per-call
- * startDate). The preview counts what the second half removes from the first.
+ * A manual entry awaiting approval (golive #353) is never a candidate: it has an ApprovalLevel and
+ * no ApprovedAt. Entries that need no approval have no level. CK_JournalEntry_ApprovedBeforeBatch is
+ * the database floor under this clause.
  */
+export const APPROVED_OR_NO_APPROVAL_NEEDED_CLAUSE = '(ApprovalLevel IS NULL OR ApprovedAt IS NOT NULL)';
+
+/** True when an entry is awaiting manual-entry approval, so no batch may take it (golive #353). */
+export function IsAwaitingManualApproval(row: { ApprovalLevel?: string | null; ApprovedAt?: Date | string | null }): boolean {
+  return !!row.ApprovalLevel && !row.ApprovedAt;
+}
+
+/**
+ * The candidate filter's parts: `criteria` (status, type, date window, scope), `postingStart` (one
+ * clause per company whose PostingStartDate is later than the per-call startDate) and `approval`
+ * (manual entries awaiting approval stay out, golive #353). The preview counts what the second and
+ * third parts remove. `afterPostingDate` is the criteria with the posting date's upper bound
+ * swapped for "after the posting date" (still inside any later cutoff), or null when the cutoff is
+ * the tighter bound: the preview lists what the posting date alone holds back (golive #448).
+ */
+interface CandidateFilterParts {
+  criteria: string[];
+  postingStart: string[];
+  approval: string[];
+  afterPostingDate: string[] | null;
+  postingDay: CalendarDay;
+}
+
 async function candidateFilterParts(
   options: BuildJournalEntryBatchOptions,
   contextUser: UserInfo,
   p: Providers,
-): Promise<{ criteria: string[]; postingStart: string[] }> {
+): Promise<CandidateFilterParts> {
   // The start day is resolved once and shared by both halves: a date-time StartDate names its
   // BUSINESS day, and the PostingStartDate comparison must use that same day, not the instant's UTC day.
   const startDay = options.startDate
     ? await loadBoundDay(options.startDate, 'Batch criteria StartDate', contextUser, p.md, scopeCompanyId(options))
     : null;
-  const [criteria, floors] = await Promise.all([criteriaClauses(options, startDay, contextUser, p), loadPostingStartDates(contextUser, p)]);
-  return { criteria, postingStart: postingStartClauses(floors, startDay) };
+  const [window, floors] = await Promise.all([criteriaClauses(options, startDay, contextUser, p), loadPostingStartDates(contextUser, p)]);
+  return {
+    criteria: window.criteria,
+    postingStart: postingStartClauses(floors, startDay),
+    approval: [APPROVED_OR_NO_APPROVAL_NEEDED_CLAUSE],
+    afterPostingDate: window.afterPostingDate,
+    postingDay: window.postingDay,
+  };
 }
 
 /** With exactly one company in scope its zone applies once the engine carries per-company zones;
@@ -437,18 +519,29 @@ async function criteriaClauses(
   startDay: string | null,
   contextUser: UserInfo,
   p: Providers,
-): Promise<string[]> {
+): Promise<{ criteria: string[]; afterPostingDate: string[] | null; postingDay: CalendarDay }> {
   const summaryType = await GetJournalEntryBatchSummaryEntryType(contextUser, p.md);
-  const clauses = [`Status='Pending'`, `EntryTypeID<>'${summaryType.ID}'`];
-  if (startDay) clauses.push(`EffectiveDate >= '${startDay}'`);
+  const base = [`Status='Pending'`, `EntryTypeID<>'${summaryType.ID}'`];
+  if (startDay) base.push(`EffectiveDate >= '${startDay}'`);
   // The pool ends at the earlier of the cutoff and the posting date: an entry dated after the posting
   // date would reach the ERP before it happened (golive #315), so it waits for a later batch.
   const postingDay = await loadPostingDay(options.postingDate, contextUser, p.md, scopeCompanyId(options));
   const cutoffDay = options.cutoff ? await loadBoundDay(options.cutoff, 'Batch criteria Cutoff', contextUser, p.md, scopeCompanyId(options)) : null;
-  const throughDay = cutoffDay && IsBeforeDay(cutoffDay, postingDay) ? cutoffDay : postingDay;
-  clauses.push(`EffectiveDate < '${AddDays(throughDay, 1)}'`); // inclusive whole day
-  // Empty/omitted scope = NO clause (all companies / all types) — never `IN ()`, which is a SQL
-  // syntax error AND would silently mean "nothing".
+  const cutoffIsTighter = !!cutoffDay && !IsBeforeDay(postingDay, cutoffDay);
+  const throughDay = cutoffIsTighter && cutoffDay ? cutoffDay : postingDay;
+  const scope = await scopeClauses(options, contextUser, p);
+  const criteria = [...base, `EffectiveDate < '${AddDays(throughDay, 1)}'`, ...scope]; // inclusive whole day
+  // What the posting date alone holds back: after it, and still on or before a later cutoff.
+  const afterPostingDate = cutoffIsTighter
+    ? null
+    : [...base, `EffectiveDate >= '${AddDays(postingDay, 1)}'`, ...(cutoffDay ? [`EffectiveDate < '${AddDays(cutoffDay, 1)}'`] : []), ...scope];
+  return { criteria, afterPostingDate, postingDay };
+}
+
+/** Company and entry-type scope. Empty/omitted scope = NO clause (all companies / all types) — never
+ *  `IN ()`, which is a SQL syntax error AND would silently mean "nothing". */
+async function scopeClauses(options: BuildJournalEntryBatchOptions, contextUser: UserInfo, p: Providers): Promise<string[]> {
+  const clauses: string[] = [];
   if (options.companyIds?.length) {
     clauses.push(`CompanyID IN (${options.companyIds.map(sqlGuid).join(',')})`);
   }
@@ -478,7 +571,7 @@ export interface PostingStartFloor {
  */
 async function loadPostingStartDates(contextUser: UserInfo, p: Providers): Promise<PostingStartFloor[]> {
   const res = await p.rv.RunView<{ ID: string; PostingStartDate: Date | string | null }>(
-    { EntityName: ACP_ENTITY, ExtraFilter: 'PostingStartDate IS NOT NULL', Fields: ['ID', 'PostingStartDate'], ResultType: 'simple', BypassCache: true },
+    { EntityName: ACP_ENTITY, ExtraFilter: 'PostingStartDate IS NOT NULL', Fields: ['ID', 'PostingStartDate'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
     contextUser,
   );
   if (!res.Success) throw new Error(`The batch was not built: could not load the companies' posting start dates: ${res.ErrorMessage ?? 'unknown error'}`);
@@ -525,7 +618,7 @@ export function partitionByPostingStart<T extends { ID: string; CompanyID: strin
 async function resolveEntryTypeIds(codes: string[], contextUser: UserInfo, p: Providers): Promise<string[]> {
   const inList = codes.map(sqlText).join(',');
   const res = await p.rv.RunView<{ ID: string; Code: string }>(
-    { EntityName: JET_ENTITY, ExtraFilter: `Code IN (${inList})`, Fields: ['ID', 'Code'], ResultType: 'simple', BypassCache: true },
+    { EntityName: JET_ENTITY, ExtraFilter: `Code IN (${inList})`, Fields: ['ID', 'Code'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
     contextUser,
   );
   const rows = res.Results ?? [];
@@ -578,13 +671,23 @@ export async function buildJournalEntryBatchFromExplicitIds(
 ): Promise<BuildJournalEntryBatchResult[]> {
   if (jeIds.length === 0) throw new EmptyJournalEntryBatchError('Nothing to batch: no journal entries were selected.');
   const p = resolveProviders(provider);
-  const inList = jeIds.map(sqlGuid).join(',');
-  const res = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string }>(
-    { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate'], ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  if (!res.Success) throw new Error(`The batch was not built: could not check the selected entries: ${res.ErrorMessage ?? 'unknown error'}`);
-  const rows = res.Results ?? [];
+  const rows: Array<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string; EntryNumber: string; ApprovalLevel: string | null; ApprovedAt: string | null }> = [];
+  for (const chunk of chunkArray(jeIds)) {
+    const inList = chunk.map(sqlGuid).join(',');
+    const res = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string; EntryNumber: string; ApprovalLevel: string | null; ApprovedAt: string | null }>(
+      {
+        EntityName: JE_ENTITY,
+        ExtraFilter: `ID IN (${inList})`,
+        Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate', 'EntryNumber', 'ApprovalLevel', 'ApprovedAt'],
+        ResultType: 'simple',
+        BypassCache: true,
+        IgnoreMaxRows: true,
+      },
+      contextUser,
+    );
+    if (!res.Success) throw new Error(`The batch was not built: could not check the selected entries: ${res.ErrorMessage ?? 'unknown error'}`);
+    rows.push(...(res.Results ?? []));
+  }
   const byId = new Map(rows.map(r => [r.ID.toLowerCase(), r]));
   const stale = jeIds.filter(id => byId.get(id.toLowerCase())?.Status !== 'Pending');
   if (stale.length > 0) {
@@ -594,6 +697,13 @@ export async function buildJournalEntryBatchFromExplicitIds(
     );
   }
   await assertOnOrAfterPostingStart(rows, contextUser, p);
+  const awaiting = rows.filter(IsAwaitingManualApproval);
+  if (awaiting.length > 0) {
+    throw new JournalEntryBatchFromViewError(
+      `The batch was not built: ${awaiting.length} selected entr${awaiting.length === 1 ? 'y is a manual entry' : 'ies are manual entries'} ` +
+      `awaiting approval and cannot be batched until approved: ${awaiting.map(r => r.EntryNumber || r.ID).join(', ')}.`,
+    );
+  }
   const byCompany = new Map<string, string[]>();
   for (const id of jeIds) {
     const companyId = byId.get(id.toLowerCase())!.CompanyID;
@@ -648,8 +758,8 @@ export async function buildJournalEntryBatchFromView(
   options: BuildJournalEntryBatchFromViewOptions = {},
 ): Promise<BuildJournalEntryBatchResult[]> {
   const p = resolveProviders(provider);
-  const viewRes = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string }>(
-    { ViewID: viewId, Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate'], ResultType: 'simple', BypassCache: true },
+  const viewRes = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string; ApprovalLevel: string | null; ApprovedAt: string | null }>(
+    { ViewID: viewId, Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate', 'ApprovalLevel', 'ApprovedAt'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
     contextUser,
   );
   if (!viewRes.Success) throw new JournalEntryBatchFromViewError(`The batch was not built: could not run view ${viewId}: ${viewRes.ErrorMessage ?? 'unknown error'}`);
@@ -663,15 +773,20 @@ export async function buildJournalEntryBatchFromView(
   if (excluded.length > 0) {
     console.warn(`buildJournalEntryBatchFromView: excluded ${excluded.length} non-Pending entr${excluded.length === 1 ? 'y' : 'ies'} (overlap-safe): ${excluded.join(', ')}`);
   }
-  const batchable = await dropBeforePostingStart(pending, viewRes.Results ?? [], contextUser, p);
+  const batchable = dropAwaitingApproval(await dropBeforePostingStart(pending, viewRes.Results ?? [], contextUser, p), viewRes.Results ?? []);
   if (batchable.length === 0) throw new EmptyJournalEntryBatchError('Nothing to batch: the view holds no Pending entries that can be batched.');
   let inWindow = batchable;
   if (options.cutoff || options.startDate) {
-    const winRes = await p.rv.RunView<{ ID: string }>(
-      { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${batchable.map(sqlGuid).join(',')}) AND ${await pendingCandidateFilter(options, contextUser, p)}`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
-      contextUser,
-    );
-    inWindow = (winRes.Results ?? []).map(r => r.ID);
+    const candidateClause = await pendingCandidateFilter(options, contextUser, p);
+    const windowed: string[] = [];
+    for (const chunk of chunkArray(batchable)) {
+      const winRes = await p.rv.RunView<{ ID: string }>(
+        { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${chunk.map(sqlGuid).join(',')}) AND ${candidateClause}`, Fields: ['ID'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+        contextUser,
+      );
+      windowed.push(...(winRes.Results ?? []).map(r => r.ID));
+    }
+    inWindow = windowed;
     if (inWindow.length === 0) throw new EmptyJournalEntryBatchError('Nothing to batch: none of the view\'s entries fall inside the chosen dates.');
   }
   return buildJournalEntryBatchFromExplicitIds(inWindow, targetSystem, batchedByUserId, contextUser, provider, gate, options.postingDate ?? null);
@@ -694,6 +809,21 @@ async function dropBeforePostingStart(
     console.warn(`buildJournalEntryBatchFromView: excluded ${before.length} entr${before.length === 1 ? 'y' : 'ies'} dated before the company's posting start date: ${before.map(r => r.ID).join(', ')}`);
   }
   return onOrAfter.map(r => r.ID);
+}
+
+/**
+ * A view's batchable ids less the manual entries awaiting approval (golive #353). Dropped with a
+ * warning, like the entries before a posting start date: a view is a snapshot of whatever it
+ * matches, and an unapproved entry in it is ordinary, not an operator error.
+ */
+function dropAwaitingApproval(ids: string[], viewRows: Array<{ ID: string; ApprovalLevel?: string | null; ApprovedAt?: Date | string | null }>): string[] {
+  const awaiting = new Set(viewRows.filter(IsAwaitingManualApproval).map(r => r.ID));
+  if (awaiting.size === 0) return ids;
+  const dropped = ids.filter(id => awaiting.has(id));
+  if (dropped.length > 0) {
+    console.warn(`buildJournalEntryBatchFromView: excluded ${dropped.length} manual entr${dropped.length === 1 ? 'y' : 'ies'} awaiting approval: ${dropped.join(', ')}`);
+  }
+  return ids.filter(id => !awaiting.has(id));
 }
 
 /**
@@ -730,6 +860,7 @@ async function loadPendingJEIds(companyId: string, contextUser: UserInfo, p: Pro
       Fields: ['ID'],
       ResultType: 'simple',
       BypassCache: true,
+      IgnoreMaxRows: true,
     },
     contextUser,
   );
@@ -737,12 +868,15 @@ async function loadPendingJEIds(companyId: string, contextUser: UserInfo, p: Pro
 }
 
 async function loadNettableLines(companyId: string, jeIds: string[], contextUser: UserInfo, p: Providers): Promise<NettableLine[]> {
-  const inList = jeIds.map(id => `'${id}'`).join(',');
-  const lineRes = await p.rv.RunView<{ ID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>(
-    { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${inList})`, Fields: ['ID', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  const lines = lineRes.Results ?? [];
+  const lines: Array<{ ID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }> = [];
+  for (const chunk of chunkArray(jeIds)) {
+    const inList = chunk.map(id => `'${id}'`).join(',');
+    const lineRes = await p.rv.RunView<{ ID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>(
+      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${inList})`, Fields: ['ID', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+      contextUser,
+    );
+    lines.push(...(lineRes.Results ?? []));
+  }
   const dimsByLine = await loadDimensionsByLine(lines.map(l => l.ID), contextUser, p);
   // The line's company IS the parent JE's header company (single-company JE, D3; trigger 50019
   // guarantees every line's GLAccount belongs to it) — and every gathered JE belongs to companyId.
@@ -752,15 +886,17 @@ async function loadNettableLines(companyId: string, jeIds: string[], contextUser
 async function loadDimensionsByLine(lineIds: string[], contextUser: UserInfo, p: Providers): Promise<Map<string, DimRef[]>> {
   const byLine = new Map<string, DimRef[]>();
   if (lineIds.length === 0) return byLine;
-  const inList = lineIds.map(id => `'${id}'`).join(',');
-  const res = await p.rv.RunView<{ JournalEntryLineID: string; DimensionID: string; DimensionValueID: string }>(
-    { EntityName: JELD_ENTITY, ExtraFilter: `JournalEntryLineID IN (${inList})`, Fields: ['JournalEntryLineID', 'DimensionID', 'DimensionValueID'], ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  for (const d of res.Results ?? []) {
-    const arr = byLine.get(d.JournalEntryLineID) ?? [];
-    arr.push({ DimensionID: d.DimensionID, DimensionValueID: d.DimensionValueID });
-    byLine.set(d.JournalEntryLineID, arr);
+  for (const chunk of chunkArray(lineIds)) {
+    const inList = chunk.map(id => `'${id}'`).join(',');
+    const res = await p.rv.RunView<{ JournalEntryLineID: string; DimensionID: string; DimensionValueID: string }>(
+      { EntityName: JELD_ENTITY, ExtraFilter: `JournalEntryLineID IN (${inList})`, Fields: ['JournalEntryLineID', 'DimensionID', 'DimensionValueID'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+      contextUser,
+    );
+    for (const d of res.Results ?? []) {
+      const arr = byLine.get(d.JournalEntryLineID) ?? [];
+      arr.push({ DimensionID: d.DimensionID, DimensionValueID: d.DimensionValueID });
+      byLine.set(d.JournalEntryLineID, arr);
+    }
   }
   return byLine;
 }
@@ -856,7 +992,7 @@ async function setSummaryPointerAndTotals(
  * its ExternalSystem matches or is unset) → the account's own Code (the account number — the
  * default; per-company charts mirror the ERP's numbers). `requireExternalAccountID` drops the Code
  * fallback and throws instead, for an ERP that knows accounts only by its own id (QuickBooks Online).
- * ⚠ OPEN with Amith: whether dispatch snapshots this resolution or re-resolves at post time
+ * ⚠ OPEN: whether dispatch snapshots this resolution or re-resolves at post time
  * (the retired batch-line-item snapshot column has no successor yet).
  */
 export async function resolveExternalAccount(
@@ -939,13 +1075,15 @@ async function loadCodesById(
 ): Promise<Map<string, string>> {
   const byId = new Map<string, string>();
   if (ids.length === 0) return byId;
-  const inList = ids.map(id => sqlGuidLiteral(id, `resolveExternalDimensions: invalid id for ${entityName}`)).join(',');
-  const res = await p.rv.RunView<{ ID: string; Code: string }>(
-    { EntityName: entityName, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'Code'], ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  for (const row of res.Results ?? []) {
-    if (row.Code) byId.set(row.ID, row.Code);
+  for (const chunk of chunkArray(ids)) {
+    const inList = chunk.map(id => sqlGuidLiteral(id, `resolveExternalDimensions: invalid id for ${entityName}`)).join(',');
+    const res = await p.rv.RunView<{ ID: string; Code: string }>(
+      { EntityName: entityName, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'Code'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+      contextUser,
+    );
+    for (const row of res.Results ?? []) {
+      if (row.Code) byId.set(row.ID, row.Code);
+    }
   }
   return byId;
 }
@@ -979,7 +1117,22 @@ export interface JournalEntryBatchCancelGate {
   /** Throw unless the user may cancel a Pending batch nobody rejected: the company's CFO or the batch's builder (golive #302). */
   assertMayCancelPending(batchId: string, contextUser: UserInfo): Promise<void>;
   assertMayCancelApproved(batchId: string, contextUser: UserInfo): Promise<void>;
+  /**
+   * Throw unless the user may archive the batch (#448, golive #325): before approval the company's CFO
+   * or a holder of the batch-operator Authorization; past approval the CFO or the batch's approver, as
+   * for a cancel.
+   */
+  assertMayArchive(batchId: string, contextUser: UserInfo): Promise<void>;
   recordCancellation(batchId: string, cancellation: RecordedCancellation, contextUser: UserInfo): Promise<void>;
+  /** Record an archive on the approval Task, closing it when the batch was never approved (golive #325). */
+  recordArchive(batchId: string, archive: RecordedArchive, contextUser: UserInfo): Promise<void>;
+}
+
+/** What an archive records on the approval Task (golive #325). */
+export interface RecordedArchive {
+  reason: string;
+  /** The status the batch was archived FROM, passed in for the same reason as {@link RecordedCancellation.fromStatus}. */
+  fromStatus: string;
 }
 
 /** What a cancel records on the approval Task. */
@@ -1188,6 +1341,9 @@ export async function regenerateJournalEntryBatch(
   if (batch.Status !== 'Pending') {
     throw new Error(`The batch was not rebuilt: it is ${batch.Status}, and only a Pending batch can be rebuilt.`);
   }
+  // The month may have closed since the build; the ERP would refuse the batch under its kept PostingDate.
+  const postingDay = ToCalendarDay(batch.PostingDate);
+  if (postingDay) await assertPostingDayOpen(batch.CompanyID, postingDay, contextUser, p, 'regenerateJournalEntryBatch');
 
   // ONE transaction (D10 rev. 2026-07-29): teardown + re-gather + rebuild commit all-or-none.
   // Candidates are gathered AFTER teardown (inside the transaction) so the batch's own returning
@@ -1201,7 +1357,7 @@ export async function regenerateJournalEntryBatch(
     const jeIds = await loadPendingJEIds(batch.CompanyID, contextUser, p, { postingDate: batch.PostingDate });
     const groups = NetLines(await loadNettableLines(batch.CompanyID, jeIds, contextUser, p));
     if (groups.length === 0) {
-      // Nothing to rebuild — a batch with no summary line is never persisted (Marcelo 2026-07-21):
+      // Nothing to rebuild — a batch with no summary line is never persisted:
       // keep the teardown (members back to the pool), mark the batch Cancelled, and say so loudly.
       await batch.CancelAfterTeardown();
       await dbProvider.CommitTransaction();
@@ -1231,14 +1387,16 @@ export async function regenerateJournalEntryBatch(
 export async function approveJournalEntryBatch(
   batchId: string, approvedByUserId: string, contextUser: UserInfo, provider: IMetadataProvider,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
+  // The batch records its approver from the context user (#447); a different ID here would be a
+  // caller choosing whose approval is recorded.
+  if (!UUIDsEqual(approvedByUserId, contextUser.ID)) {
+    throw new Error(`approveJournalEntryBatch: the approver is recorded as the context user; approvedByUserId ${approvedByUserId} is not the context user ${contextUser.ID}.`);
+  }
   const p = resolveProviders(provider);
-  const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  const batch = await p.md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, contextUser);
   if (!(await batch.Load(batchId))) throw new Error(`The batch was not approved: batch ${batchId} was not found.`);
   if (batch.Status !== 'Pending') throw new Error(`The batch was not approved: it is ${batch.Status}, and only a Pending batch can be approved.`);
-  batch.Status = 'Approved';
-  batch.ApprovedAt = new Date();
-  batch.ApprovedByUserID = approvedByUserId;
-  if (!(await batch.Save())) throw new Error(`The batch was not approved: saving the approval failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown error'}`);
+  if (!(await batch.Approve(contextUser))) throw new Error(`The batch was not approved: saving the approval failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown error'}`);
   return batch;
 }
 
@@ -1406,9 +1564,11 @@ async function sendBatch(
   if (preflight.status === 'Found') return await adoptErpPosting(batch, preflight.externalJournalEntryBatchRef, sealBroken, contextUser, p);
 
   const postResult = await postOrFail(services.CreatePoster(p.md), batch, summaryLines, contextUser);
-  return postResult.success
-    ? await markBatchPosted(batch, postResult.externalJournalEntryBatchRef ?? null, contextUser, p)
-    : await failBatch(batch, postResult.error ?? 'The ERP did not accept the batch and gave no reason.');
+  if (postResult.success) return await markBatchPosted(batch, postResult.externalJournalEntryBatchRef ?? null, contextUser, p);
+  const error = postResult.error ?? 'The ERP did not accept the batch and gave no reason.';
+  const failed = await failBatch(batch, error);
+  await raiseRejectedPosting(failed, error, services, p);
+  return failed;
 }
 
 /**
@@ -1638,7 +1798,7 @@ async function postOrFail(
 async function loadSummaryLines(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo, p: Providers): Promise<mjBizAppsAccountingJournalEntryLineEntity[]> {
   if (!batch.SummaryJournalEntryID) return [];
   const res = await p.rv.RunView<mjBizAppsAccountingJournalEntryLineEntity>(
-    { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${batch.SummaryJournalEntryID}'`, OrderBy: 'LineNumber', ResultType: 'entity_object', BypassCache: true },
+    { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${batch.SummaryJournalEntryID}'`, OrderBy: 'LineNumber', ResultType: 'entity_object', BypassCache: true, IgnoreMaxRows: true },
     contextUser,
   );
   // Loud on failure: an empty result here would send the ERP an empty journal.
@@ -1697,7 +1857,7 @@ async function failAcceptedBatch(batch: JournalEntryBatchEntityServer, saveError
  */
 async function markJournalEntriesGLPosted(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo, p: Providers): Promise<number> {
   const res = await p.rv.RunView<{ ID: string }>(
-    { EntityName: JE_ENTITY, ExtraFilter: `JournalEntryBatchID=${sqlGuid(batch.ID)} AND Status='Batched'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
+    { EntityName: JE_ENTITY, ExtraFilter: `JournalEntryBatchID=${sqlGuid(batch.ID)} AND Status='Batched'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
     contextUser,
   );
   // Loud on failure: an empty result here would report the flip complete with every entry still Batched.
@@ -1796,6 +1956,7 @@ export async function findStrandedJournalEntries(contextUser: UserInfo, provider
       Fields: ['JournalEntryBatchID', 'JournalEntryBatch'],
       ResultType: 'simple',
       BypassCache: true,
+      IgnoreMaxRows: true,
     })),
     contextUser,
   );
@@ -1895,6 +2056,53 @@ async function failBatch(batch: mjBizAppsAccountingJournalEntryBatchEntity, erro
   throw new JournalEntryBatchFailureNotRecordedError(batch.ID, status, acceptedRef, error, saveError);
 }
 
+/** A batch the ERP rejected (golive #316). Finance clears it once the batch is retried or cancelled. */
+export const ERP_POSTING_REJECTED = 'ERP_POSTING_REJECTED';
+/** FinanceException.Summary's length. */
+const FINANCE_EXCEPTION_SUMMARY_MAX = 1000;
+
+/**
+ * Tells finance that the ERP rejected `batch` (golive #316): a Failed status on the batch alone is
+ * seen only by whoever opens the batch list, and a rejection is often a posting date the ERP has
+ * closed, which finance has to act on. One exception per send attempt, so a retry that fails again
+ * is raised again after the first was cleared. Never throws: the batch is already recorded Failed
+ * with the ERP's message, so a raise that fails is logged.
+ */
+async function raiseRejectedPosting(
+  batch: mjBizAppsAccountingJournalEntryBatchEntity, error: string, services: JournalEntryBatchDispatchServices, p: Providers,
+): Promise<void> {
+  const doc = batch.JournalEntryBatchNumber ?? batch.ID;
+  try {
+    const result = await services.RaiseFinanceExceptions({ Exceptions: [rejectedPostingException(batch, error)] }, p.md);
+    const skipped = result.Results?.[0]?.Skipped === true;
+    if (!result.Success || skipped) {
+      const why = skipped ? `the ${ERP_POSTING_REJECTED} type is inactive` : (result.Errors ?? []).map((e) => e.Message).join(' ');
+      LogError(`sendJournalEntryBatch: batch ${doc} was rejected by the ERP, and raising ${ERP_POSTING_REJECTED} failed: ${why}`);
+    }
+  } catch (e) {
+    LogError(`sendJournalEntryBatch: batch ${doc} was rejected by the ERP, and raising ${ERP_POSTING_REJECTED} threw.`, null, e);
+  }
+}
+
+/** The finance exception for a batch the ERP rejected, keyed to the batch and its send attempt. */
+export function rejectedPostingException(batch: mjBizAppsAccountingJournalEntryBatchEntity, error: string): AccountingFinanceExceptionToRaise {
+  const doc = batch.JournalEntryBatchNumber ?? batch.ID;
+  const postingDay = batch.PostingDate ? ToCalendarDay(batch.PostingDate) : null;
+  const summary = `Batch ${doc}${postingDay ? `, posting date ${postingDay},` : ''} was rejected by ${batch.TargetSystem}: ${error} ` +
+    'Fix the cause and send the batch again, or cancel it. If the posting date is in a period the ERP has closed, reopen the period or cancel and rebuild the batch with an open date.';
+  return {
+    TypeCode: ERP_POSTING_REJECTED,
+    SourceEntityName: BATCH_ENTITY,
+    SourceRecordID: batch.ID,
+    CompanyID: batch.CompanyID,
+    Amount: batch.TotalDebits ?? null,
+    // Its month is the close it affects. An unreadable posting date falls back to today's.
+    ExceptionDate: postingDay ?? new Date().toISOString().slice(0, 10),
+    Summary: summary.length > FINANCE_EXCEPTION_SUMMARY_MAX ? `${summary.slice(0, FINANCE_EXCEPTION_SUMMARY_MAX - 1)}…` : summary,
+    DedupeKey: `${batch.ID.toLowerCase()}:${batch.SendAttemptCount ?? 0}`,
+  };
+}
+
 /** The status the database holds for `batch`, reloading it; `Unknown` when the reload fails. */
 async function reloadedStatus(batch: mjBizAppsAccountingJournalEntryBatchEntity): Promise<string> {
   try {
@@ -1917,6 +2125,9 @@ export interface JournalEntryBatchPreviewEntry {
   Description: string | null;
   /** Σ debits on the entry — the money column the preview grid shows. */
   Amount: number;
+  /** D25 origin pair, for the grid's Source link (bc-aidp-next-golive#452). Null on a manual entry. */
+  LinkedEntity: string | null;
+  LinkedRecordID: string | null;
 }
 
 /** One row of the preview's "affected accounts" summary. */
@@ -1956,6 +2167,42 @@ export interface JournalEntryBatchPreviewResult {
    * their company's PostingStartDate. They are not in `Candidates` and no build takes them.
    */
   BeforePostingStartCount: number;
+  /**
+   * How many entries matching the other criteria were left out because they are manual entries
+   * awaiting approval (golive #353). They are not in `Candidates` and no build takes them.
+   */
+  AwaitingApprovalCount: number;
+  /**
+   * How many entries matching the other criteria were left out because they are dated after the
+   * batch's posting date (golive #448): they would reach the ERP before they happened, so they wait
+   * for a batch posted on or after their own date. Entries a cutoff already leaves out are not counted.
+   */
+  AfterPostingDateCount: number;
+  /**
+   * The oldest of those entries (at most {@link AFTER_POSTING_DATE_LIST_LIMIT}), each with the reason
+   * it is held back. The oldest are listed because they are the ones just past the posting date: the
+   * late-entered payment, not next year's recognition schedule.
+   */
+  AfterPostingDateEntries: JournalEntryBatchHeldBackEntry[];
+}
+
+/** An entry the preview reports as held back, and why. */
+export interface JournalEntryBatchHeldBackEntry {
+  ID: string;
+  EntryNumber: string;
+  EffectiveDate: Date;
+  EntryTypeCode: string;
+  CompanyID: string;
+  Description: string | null;
+  Reason: string;
+}
+
+/** How many held-back entries dated after the posting date the preview lists by name. */
+export const AFTER_POSTING_DATE_LIST_LIMIT = 50;
+
+/** Why an entry dated `effectiveDay` is not in a batch posted on `postingDay` — pure. */
+export function AfterPostingDateReason(effectiveDay: string, postingDay: string): string {
+  return `Dated ${effectiveDay}, after the posting date ${postingDay}: it waits for a batch posted on or after ${effectiveDay}.`;
 }
 
 /**
@@ -2026,25 +2273,29 @@ export async function previewBatch(
 ): Promise<JournalEntryBatchPreviewResult> {
   const p = resolveProviders(provider);
   const filter = await candidateFilterParts(options, contextUser, p);
-  const res = await p.rv.RunView<{ ID: string; EntryNumber: string; EffectiveDate: string; EntryTypeID: string; CompanyID: string; Description: string | null }>(
+  // Read WITHOUT the approval part and split here: the entries awaiting approval are counted from
+  // the same read instead of a second query (golive #353). The build applies the full filter.
+  const res = await p.rv.RunView<{ ID: string; EntryNumber: string; EffectiveDate: string; EntryTypeID: string; CompanyID: string; Description: string | null; ApprovalLevel: string | null; ApprovedAt: string | null; LinkedEntity: string | null; LinkedRecordID: string | null }>(
     {
       EntityName: JE_ENTITY,
       ExtraFilter: [...filter.criteria, ...filter.postingStart].join(' AND '),
       OrderBy: 'EffectiveDate ASC, EntryNumber ASC', // the same oldest-first order the build uses
-      Fields: ['ID', 'EntryNumber', 'EffectiveDate', 'EntryTypeID', 'CompanyID', 'Description'],
+      Fields: ['ID', 'EntryNumber', 'EffectiveDate', 'EntryTypeID', 'CompanyID', 'Description', 'ApprovalLevel', 'ApprovedAt', 'LinkedEntity', 'LinkedRecordID'],
       ResultType: 'simple',
       BypassCache: true,
+      IgnoreMaxRows: true,
     },
     contextUser,
   );
   if (!res.Success) throw new Error(`Could not load the entries for the batch preview: ${res.ErrorMessage ?? 'unknown error'}`);
-  const rows = res.Results ?? [];
+  const matching = res.Results ?? [];
+  const rows = matching.filter(r => !IsAwaitingManualApproval(r));
   const included = includedIds ?? new Set(rows.map(r => r.ID));
   const includedRows = rows.filter(r => included.has(r.ID));
 
   // Type CODES for the grid (ID → Code map, one read).
   const typeRes = await p.rv.RunView<{ ID: string; Code: string }>(
-    { EntityName: JET_ENTITY, Fields: ['ID', 'Code'], ResultType: 'simple' }, contextUser);
+    { EntityName: JET_ENTITY, Fields: ['ID', 'Code'], ResultType: 'simple', IgnoreMaxRows: true }, contextUser);
   const codeByTypeId = new Map((typeRes.Results ?? []).map(t => [t.ID.toLowerCase(), t.Code]));
 
   // Net exactly what a build of the INCLUDED set would net (grouped per company like the build).
@@ -2057,12 +2308,14 @@ export async function previewBatch(
   // not: an unticked entry still shows its own value (#253); only the totals above follow the selection.
   const amountByJE = new Map<string, number>();
   if (rows.length > 0) {
-    const lineRes = await p.rv.RunView<{ JournalEntryID: string; DebitAmount: number | null }>(
-      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${rows.map(r => `'${r.ID}'`).join(',')})`, Fields: ['JournalEntryID', 'DebitAmount'], ResultType: 'simple', BypassCache: true },
-      contextUser,
-    );
-    for (const l of lineRes.Results ?? []) {
-      amountByJE.set(l.JournalEntryID, Math.round(((amountByJE.get(l.JournalEntryID) ?? 0) + (l.DebitAmount ?? 0)) * 100) / 100);
+    for (const chunk of chunkArray(rows.map(r => r.ID))) {
+      const lineRes = await p.rv.RunView<{ JournalEntryID: string; DebitAmount: number | null }>(
+        { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${chunk.map(id => `'${id}'`).join(',')})`, Fields: ['JournalEntryID', 'DebitAmount'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+        contextUser,
+      );
+      for (const l of lineRes.Results ?? []) {
+        amountByJE.set(l.JournalEntryID, Math.round(((amountByJE.get(l.JournalEntryID) ?? 0) + (l.DebitAmount ?? 0)) * 100) / 100);
+      }
     }
   }
 
@@ -2075,6 +2328,8 @@ export async function previewBatch(
       CompanyID: r.CompanyID,
       Description: r.Description,
       Amount: amountByJE.get(r.ID) ?? 0,
+      LinkedEntity: r.LinkedEntity,
+      LinkedRecordID: r.LinkedRecordID,
     })),
     AffectedAccounts: await summarizeAffectedAccounts(groups, contextUser, p),
     TotalDebits: totalDebits,
@@ -2084,6 +2339,52 @@ export async function previewBatch(
     PerCompany: perCompanySubtotals(groups),
     OutOfOrderSkipCount: outOfOrderSkipCount(rows, included),
     BeforePostingStartCount: await countBeforePostingStart(filter, contextUser, p),
+    AwaitingApprovalCount: matching.length - rows.length,
+    ...(await loadAfterPostingDate(filter, codeByTypeId, contextUser, p)),
+  };
+}
+
+/**
+ * Entries the posting date alone holds back (golive #448): the other criteria, the posting start
+ * floors and the approval rule admit them, but they are dated after the posting date. One read of
+ * the oldest {@link AFTER_POSTING_DATE_LIST_LIMIT}, which also carries the full count; no read at all
+ * when a cutoff on or before the posting date is the tighter bound.
+ */
+async function loadAfterPostingDate(
+  filter: CandidateFilterParts,
+  codeByTypeId: Map<string, string>,
+  contextUser: UserInfo,
+  p: Providers,
+): Promise<{ AfterPostingDateCount: number; AfterPostingDateEntries: JournalEntryBatchHeldBackEntry[] }> {
+  if (!filter.afterPostingDate) return { AfterPostingDateCount: 0, AfterPostingDateEntries: [] };
+  // One read: with MaxRows set, the provider counts every match into TotalRowCount when the page fills.
+  const list = await p.rv.RunView<{ ID: string; EntryNumber: string; EffectiveDate: string; EntryTypeID: string; CompanyID: string; Description: string | null }>(
+    {
+      EntityName: JE_ENTITY,
+      ExtraFilter: [...filter.afterPostingDate, ...filter.postingStart, ...filter.approval].join(' AND '),
+      OrderBy: 'EffectiveDate ASC, EntryNumber ASC',
+      Fields: ['ID', 'EntryNumber', 'EffectiveDate', 'EntryTypeID', 'CompanyID', 'Description'],
+      MaxRows: AFTER_POSTING_DATE_LIST_LIMIT,
+      ResultType: 'simple',
+      BypassCache: true,
+    },
+    contextUser,
+  );
+  if (!list.Success) {
+    throw new Error(`Could not load the entries dated after the posting date for the batch preview: ${list.ErrorMessage ?? 'unknown error'}`);
+  }
+  const rows = list.Results ?? [];
+  return {
+    AfterPostingDateCount: Math.max(list.TotalRowCount ?? 0, rows.length),
+    AfterPostingDateEntries: rows.slice(0, AFTER_POSTING_DATE_LIST_LIMIT).map(r => ({
+      ID: r.ID,
+      EntryNumber: r.EntryNumber,
+      EffectiveDate: new Date(r.EffectiveDate),
+      EntryTypeCode: codeByTypeId.get(r.EntryTypeID?.toLowerCase()) ?? '',
+      CompanyID: r.CompanyID,
+      Description: r.Description,
+      Reason: AfterPostingDateReason(ToCalendarDay(r.EffectiveDate) ?? String(r.EffectiveDate), filter.postingDay),
+    })),
   };
 }
 
@@ -2104,17 +2405,23 @@ async function countBeforePostingStart(
 
 /** Line loading for a MIXED-company id set (preview only — the build stays per company). */
 async function loadNettableLinesUnscoped(jeIds: string[], contextUser: UserInfo, p: Providers): Promise<NettableLine[]> {
-  const inList = jeIds.map(id => `'${id}'`).join(',');
-  const jeRes = await p.rv.RunView<{ ID: string; CompanyID: string }>(
-    { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'CompanyID'], ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  const companyByJE = new Map((jeRes.Results ?? []).map(j => [j.ID.toLowerCase(), j.CompanyID]));
-  const lineRes = await p.rv.RunView<{ ID: string; JournalEntryID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>(
-    { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${inList})`, Fields: ['ID', 'JournalEntryID', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  const lines = lineRes.Results ?? [];
+  const companyByJE = new Map<string, string>();
+  const lines: Array<{ ID: string; JournalEntryID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }> = [];
+  for (const chunk of chunkArray(jeIds)) {
+    const inList = chunk.map(id => `'${id}'`).join(',');
+    const jeRes = await p.rv.RunView<{ ID: string; CompanyID: string }>(
+      { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'CompanyID'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+      contextUser,
+    );
+    for (const j of jeRes.Results ?? []) {
+      companyByJE.set(j.ID.toLowerCase(), j.CompanyID);
+    }
+    const lineRes = await p.rv.RunView<{ ID: string; JournalEntryID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>(
+      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${inList})`, Fields: ['ID', 'JournalEntryID', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+      contextUser,
+    );
+    lines.push(...(lineRes.Results ?? []));
+  }
   const dimsByLine = await loadDimensionsByLine(lines.map(l => l.ID), contextUser, p);
   return lines.map(l => ({
     companyId: companyByJE.get(l.JournalEntryID.toLowerCase()) ?? '',
@@ -2129,11 +2436,16 @@ async function loadNettableLinesUnscoped(jeIds: string[], contextUser: UserInfo,
 async function summarizeAffectedAccounts(groups: NetGroup[], contextUser: UserInfo, p: Providers): Promise<AffectedAccount[]> {
   if (groups.length === 0) return [];
   const glIds = [...new Set(groups.map(g => g.glAccountId))];
-  const glRes = await p.rv.RunView<{ ID: string; Code: string; Name: string }>(
-    { EntityName: GL_ENTITY, ExtraFilter: `ID IN (${glIds.map(id => `'${id}'`).join(',')})`, Fields: ['ID', 'Code', 'Name'], ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  const glById = new Map((glRes.Results ?? []).map(g => [g.ID.toLowerCase(), g]));
+  const glById = new Map<string, { ID: string; Code: string; Name: string }>();
+  for (const chunk of chunkArray(glIds)) {
+    const glRes = await p.rv.RunView<{ ID: string; Code: string; Name: string }>(
+      { EntityName: GL_ENTITY, ExtraFilter: `ID IN (${chunk.map(id => `'${id}'`).join(',')})`, Fields: ['ID', 'Code', 'Name'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+      contextUser,
+    );
+    for (const g of glRes.Results ?? []) {
+      glById.set(g.ID.toLowerCase(), g);
+    }
+  }
   const byAccount = new Map<string, AffectedAccount>();
   for (const g of groups) {
     const key = g.glAccountId.toLowerCase();

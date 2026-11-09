@@ -53,7 +53,7 @@ export class DimensionsPageComponent extends BaseAngularComponent implements OnI
     { Label: 'Active only', Value: 'Active' },
   ];
 
-  /** Monotonic counter from the category header's "New dimension" verb (Marcelo 2026-08-05). */
+  /** Monotonic counter from the category header's "New dimension" verb. */
   private _createSignal = 0;
   @Input() set CreateSignal(v: number) {
     if (v > this._createSignal) {

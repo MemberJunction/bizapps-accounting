@@ -141,6 +141,22 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Display Name: Posting Start Date
         * * SQL Data Type: date
         * * Description: The first EffectiveDate this company posts to the ERP. Journal entries dated before it never enter a posting batch (for example, history brought in at cutover that the ERP already holds). NULL means no floor: every Pending entry is a candidate.`),
+    ManualJournalEntryApprovalThreshold: z.number().nullable().describe(`
+        * * Field Name: ManualJournalEntryApprovalThreshold
+        * * Display Name: Manual Journal Entry Approval Threshold
+        * * SQL Data Type: decimal(19, 4)
+        * * Description: The amount (total debits) at or below which a manual journal entry is approved by a holder of ManualJournalEntryApproverRoleID; above it, by the Approval CFO. NULL, the default, switches manual-entry approval off for this company: manual entries batch as before.`),
+    ManualJournalEntryApproverRoleID: z.string().nullable().describe(`
+        * * Field Name: ManualJournalEntryApproverRoleID
+        * * Display Name: Manual Journal Entry Approver Role ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Roles (vwRoles.ID)
+        * * Description: The role whose holders approve a manual journal entry at or below ManualJournalEntryApprovalThreshold, never the entry's creator. NULL sends every manual entry to the Approval CFO while the threshold is set.`),
+    BooksClosedThroughDate: z.date().nullable().describe(`
+        * * Field Name: BooksClosedThroughDate
+        * * Display Name: Books Closed Through Date
+        * * SQL Data Type: date
+        * * Description: The last day of the latest month finance has closed for this company. A journal entry batch, progress measurement or correction dated on or before it is in a closed month. NULL means nothing is closed. Set by finance when a close finishes; moving it back reopens a month.`),
     Name: z.string().describe(`
         * * Field Name: Name
         * * Display Name: Company Name
@@ -173,6 +189,10 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Field Name: ApprovalCFOUser
         * * Display Name: Approval CFO User Name
         * * SQL Data Type: nvarchar(100)`),
+    ManualJournalEntryApproverRole: z.string().nullable().describe(`
+        * * Field Name: ManualJournalEntryApproverRole
+        * * Display Name: Manual Journal Entry Approver Role
+        * * SQL Data Type: nvarchar(50)`),
     __mj_Latitude: z.number().nullable().describe(`
         * * Field Name: __mj_Latitude
         * * Display Name: Latitude
@@ -728,7 +748,7 @@ export const mjBizAppsAccountingFinanceExceptionSchema = z.object({
         * * Field Name: DedupeKey
         * * Display Name: Dedupe Key
         * * SQL Data Type: nvarchar(400)
-        * * Description: The detector's identity for this occurrence (e.g. the source record ID, or record ID and month). Unique per type: raising the same key again returns the existing row unchanged.`),
+        * * Description: The detector's identity for this occurrence (e.g. the source record ID, or record ID and month). Unique per type: raising the same key again returns the existing row. If that row is still Open and the repeat raise carries a different creator, its SourceCreatedByUserID, CreatorUnresolved and Summary are updated to match; nothing else changes, and Reviewed or Corrected rows are never touched.`),
     SourceCreatedByUserID: z.string().nullable().describe(`
         * * Field Name: SourceCreatedByUserID
         * * Display Name: Source Created By User ID
@@ -1061,7 +1081,7 @@ export const mjBizAppsAccountingGLAccountSchema = z.object({
         * * Display Name: Is System Seeded
         * * SQL Data Type: bit
         * * Default Value: 0
-        * * Description: TRUE if the account was created by spSeedDefaultChartOfAccounts. Lets reports distinguish platform-shipped accounts from deployment customizations.`),
+        * * Description: TRUE if the account was created by the starter-chart seed, AccountingCompanyProfileEntityServer.SeedDefaultChartOfAccounts(). Lets reports distinguish platform-shipped accounts from deployment customizations.`),
     Description: z.string().nullable().describe(`
         * * Field Name: Description
         * * Display Name: Description
@@ -1077,6 +1097,12 @@ export const mjBizAppsAccountingGLAccountSchema = z.object({
         * * Display Name: Updated At
         * * SQL Data Type: datetimeoffset
         * * Default Value: getutcdate()`),
+    IsControlAccount: z.boolean().describe(`
+        * * Field Name: IsControlAccount
+        * * Display Name: Is Control Account
+        * * SQL Data Type: bit
+        * * Default Value: 0
+        * * Description: A control account (AR, deferred revenue, unbilled, customer deposits, cash, or any account the company names): a manual journal entry with a line on it always needs the company's Approval CFO, whatever its amount. Default 0.`),
     Company: z.string().describe(`
         * * Field Name: Company
         * * Display Name: Company Name
@@ -1390,6 +1416,38 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Display Name: Anomaly Scored At
         * * SQL Data Type: datetimeoffset
         * * Description: Timestamp when the journal entry was last scored by the predictive anomaly model.`),
+    ApprovalLevel: z.union([z.literal('CFO'), z.literal('Standard')]).nullable().describe(`
+        * * Field Name: ApprovalLevel
+        * * Display Name: Approval Level
+        * * SQL Data Type: nvarchar(20)
+    * * Value List Type: List
+    * * Possible Values 
+    *   * CFO
+    *   * Standard
+        * * Description: Set when the entry needs approval: Standard (a holder of the company's manual-entry approver role) or CFO (above the threshold, a line on a control account, or no other approver available). Set when a manual entry is created, or its amounts, accounts, date or company change, while its company has a ManualJournalEntryApprovalThreshold. An entry with a level is not a batch candidate until ApprovedAt is set. NULL: no approval needed.`),
+    ApprovalRequestedByUserID: z.string().nullable().describe(`
+        * * Field Name: ApprovalRequestedByUserID
+        * * Display Name: Approval Requested By User ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+        * * Description: The user whose save raised the current approval request: the creator, or whoever last changed the entry's amounts, accounts, date or company. That user may not approve it. Set exactly when ApprovalLevel is.`),
+    ApprovalTaskID: z.string().nullable().describe(`
+        * * Field Name: ApprovalTaskID
+        * * Display Name: Approval Task ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ_BizApps_Tasks: Tasks (vwTasks.ID)
+        * * Description: The approval Task raised for this manual entry, stamped in the same transaction. The approval is read from this column, never from a Task Link.`),
+    ApprovedAt: z.date().nullable().describe(`
+        * * Field Name: ApprovedAt
+        * * Display Name: Approved At
+        * * SQL Data Type: datetimeoffset
+        * * Description: When the manual entry was approved. Set together with ApprovedByUserID, only on an entry with an ApprovalLevel; cleared when the entry's amounts, accounts, date or company change afterwards.`),
+    ApprovedByUserID: z.string().nullable().describe(`
+        * * Field Name: ApprovedByUserID
+        * * Display Name: Approved By User ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+        * * Description: The user who approved the manual entry: never ApprovalRequestedByUserID. Set together with ApprovedAt.`),
     Company: z.string().describe(`
         * * Field Name: Company
         * * Display Name: Company Name
@@ -1418,6 +1476,18 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Field Name: File
         * * Display Name: File Name
         * * SQL Data Type: nvarchar(500)`),
+    ApprovalRequestedByUser: z.string().nullable().describe(`
+        * * Field Name: ApprovalRequestedByUser
+        * * Display Name: Approval Requested By User
+        * * SQL Data Type: nvarchar(100)`),
+    ApprovalTask: z.string().nullable().describe(`
+        * * Field Name: ApprovalTask
+        * * Display Name: Approval Task
+        * * SQL Data Type: nvarchar(255)`),
+    ApprovedByUser: z.string().nullable().describe(`
+        * * Field Name: ApprovedByUser
+        * * Display Name: Approved By User
+        * * SQL Data Type: nvarchar(100)`),
     AnomalyOutcome: z.string().describe(`
         * * Field Name: AnomalyOutcome
         * * Display Name: Anomaly Outcome
@@ -1496,7 +1566,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Field Name: JournalEntryBatchNumber
         * * Display Name: Batch Number
         * * SQL Data Type: nvarchar(40)
-        * * Description: Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format 'BATCH-{CompanyCode}-{seq:000000}'.`),
+        * * Description: Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format 'BATCH-{seq:000000}': one global sequence shared by every company, with no company segment.`),
     CompanyID: z.string().describe(`
         * * Field Name: CompanyID
         * * Display Name: Company ID
@@ -1643,7 +1713,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
     CancelReason: z.string().nullable().describe(`
         * * Field Name: CancelReason
         * * Display Name: Cancel Reason
-        * * SQL Data Type: nvarchar(500)
+        * * SQL Data Type: nvarchar(1000)
         * * Description: Why this batch was cancelled. Required when an approved batch is cancelled (CK_JournalEntryBatch_CancelAudit); optional when a Pending batch is. Frozen once Cancelled.`),
     CancelledAt: z.date().nullable().describe(`
         * * Field Name: CancelledAt
@@ -2706,6 +2776,46 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     }
 
     /**
+    * * Field Name: ManualJournalEntryApprovalThreshold
+    * * Display Name: Manual Journal Entry Approval Threshold
+    * * SQL Data Type: decimal(19, 4)
+    * * Description: The amount (total debits) at or below which a manual journal entry is approved by a holder of ManualJournalEntryApproverRoleID; above it, by the Approval CFO. NULL, the default, switches manual-entry approval off for this company: manual entries batch as before.
+    */
+    get ManualJournalEntryApprovalThreshold(): number | null {
+        return this.Get('ManualJournalEntryApprovalThreshold');
+    }
+    set ManualJournalEntryApprovalThreshold(value: number | null) {
+        this.Set('ManualJournalEntryApprovalThreshold', value);
+    }
+
+    /**
+    * * Field Name: ManualJournalEntryApproverRoleID
+    * * Display Name: Manual Journal Entry Approver Role ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Roles (vwRoles.ID)
+    * * Description: The role whose holders approve a manual journal entry at or below ManualJournalEntryApprovalThreshold, never the entry's creator. NULL sends every manual entry to the Approval CFO while the threshold is set.
+    */
+    get ManualJournalEntryApproverRoleID(): string | null {
+        return this.Get('ManualJournalEntryApproverRoleID');
+    }
+    set ManualJournalEntryApproverRoleID(value: string | null) {
+        this.Set('ManualJournalEntryApproverRoleID', value);
+    }
+
+    /**
+    * * Field Name: BooksClosedThroughDate
+    * * Display Name: Books Closed Through Date
+    * * SQL Data Type: date
+    * * Description: The last day of the latest month finance has closed for this company. A journal entry batch, progress measurement or correction dated on or before it is in a closed month. NULL means nothing is closed. Set by finance when a close finishes; moving it back reopens a month.
+    */
+    get BooksClosedThroughDate(): Date | null {
+        return this.Get('BooksClosedThroughDate');
+    }
+    set BooksClosedThroughDate(value: Date | null) {
+        this.Set('BooksClosedThroughDate', value);
+    }
+
+    /**
     * * Field Name: Name
     * * Display Name: Company Name
     * * SQL Data Type: nvarchar(50)
@@ -2795,6 +2905,15 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     */
     get ApprovalCFOUser(): string | null {
         return this.Get('ApprovalCFOUser');
+    }
+
+    /**
+    * * Field Name: ManualJournalEntryApproverRole
+    * * Display Name: Manual Journal Entry Approver Role
+    * * SQL Data Type: nvarchar(50)
+    */
+    get ManualJournalEntryApproverRole(): string | null {
+        return this.Get('ManualJournalEntryApproverRole');
     }
 
     /**
@@ -4583,7 +4702,7 @@ export class mjBizAppsAccountingFinanceExceptionEntity extends BaseEntity<mjBizA
     * * Field Name: DedupeKey
     * * Display Name: Dedupe Key
     * * SQL Data Type: nvarchar(400)
-    * * Description: The detector's identity for this occurrence (e.g. the source record ID, or record ID and month). Unique per type: raising the same key again returns the existing row unchanged.
+    * * Description: The detector's identity for this occurrence (e.g. the source record ID, or record ID and month). Unique per type: raising the same key again returns the existing row. If that row is still Open and the repeat raise carries a different creator, its SourceCreatedByUserID, CreatorUnresolved and Summary are updated to match; nothing else changes, and Reviewed or Corrected rows are never touched.
     */
     get DedupeKey(): string {
         return this.Get('DedupeKey');
@@ -5453,7 +5572,7 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
     * * Display Name: Is System Seeded
     * * SQL Data Type: bit
     * * Default Value: 0
-    * * Description: TRUE if the account was created by spSeedDefaultChartOfAccounts. Lets reports distinguish platform-shipped accounts from deployment customizations.
+    * * Description: TRUE if the account was created by the starter-chart seed, AccountingCompanyProfileEntityServer.SeedDefaultChartOfAccounts(). Lets reports distinguish platform-shipped accounts from deployment customizations.
     */
     get IsSystemSeeded(): boolean {
         return this.Get('IsSystemSeeded');
@@ -5493,6 +5612,20 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
     */
     get __mj_UpdatedAt(): Date {
         return this.Get('__mj_UpdatedAt');
+    }
+
+    /**
+    * * Field Name: IsControlAccount
+    * * Display Name: Is Control Account
+    * * SQL Data Type: bit
+    * * Default Value: 0
+    * * Description: A control account (AR, deferred revenue, unbilled, customer deposits, cash, or any account the company names): a manual journal entry with a line on it always needs the company's Approval CFO, whatever its amount. Default 0.
+    */
+    get IsControlAccount(): boolean {
+        return this.Get('IsControlAccount');
+    }
+    set IsControlAccount(value: boolean) {
+        this.Set('IsControlAccount', value);
     }
 
     /**
@@ -6450,6 +6583,78 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     }
 
     /**
+    * * Field Name: ApprovalLevel
+    * * Display Name: Approval Level
+    * * SQL Data Type: nvarchar(20)
+    * * Value List Type: List
+    * * Possible Values 
+    *   * CFO
+    *   * Standard
+    * * Description: Set when the entry needs approval: Standard (a holder of the company's manual-entry approver role) or CFO (above the threshold, a line on a control account, or no other approver available). Set when a manual entry is created, or its amounts, accounts, date or company change, while its company has a ManualJournalEntryApprovalThreshold. An entry with a level is not a batch candidate until ApprovedAt is set. NULL: no approval needed.
+    */
+    get ApprovalLevel(): 'CFO' | 'Standard' | null {
+        return this.Get('ApprovalLevel');
+    }
+    set ApprovalLevel(value: 'CFO' | 'Standard' | null) {
+        this.Set('ApprovalLevel', value);
+    }
+
+    /**
+    * * Field Name: ApprovalRequestedByUserID
+    * * Display Name: Approval Requested By User ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+    * * Description: The user whose save raised the current approval request: the creator, or whoever last changed the entry's amounts, accounts, date or company. That user may not approve it. Set exactly when ApprovalLevel is.
+    */
+    get ApprovalRequestedByUserID(): string | null {
+        return this.Get('ApprovalRequestedByUserID');
+    }
+    set ApprovalRequestedByUserID(value: string | null) {
+        this.Set('ApprovalRequestedByUserID', value);
+    }
+
+    /**
+    * * Field Name: ApprovalTaskID
+    * * Display Name: Approval Task ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ_BizApps_Tasks: Tasks (vwTasks.ID)
+    * * Description: The approval Task raised for this manual entry, stamped in the same transaction. The approval is read from this column, never from a Task Link.
+    */
+    get ApprovalTaskID(): string | null {
+        return this.Get('ApprovalTaskID');
+    }
+    set ApprovalTaskID(value: string | null) {
+        this.Set('ApprovalTaskID', value);
+    }
+
+    /**
+    * * Field Name: ApprovedAt
+    * * Display Name: Approved At
+    * * SQL Data Type: datetimeoffset
+    * * Description: When the manual entry was approved. Set together with ApprovedByUserID, only on an entry with an ApprovalLevel; cleared when the entry's amounts, accounts, date or company change afterwards.
+    */
+    get ApprovedAt(): Date | null {
+        return this.Get('ApprovedAt');
+    }
+    set ApprovedAt(value: Date | null) {
+        this.Set('ApprovedAt', value);
+    }
+
+    /**
+    * * Field Name: ApprovedByUserID
+    * * Display Name: Approved By User ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+    * * Description: The user who approved the manual entry: never ApprovalRequestedByUserID. Set together with ApprovedAt.
+    */
+    get ApprovedByUserID(): string | null {
+        return this.Get('ApprovedByUserID');
+    }
+    set ApprovedByUserID(value: string | null) {
+        this.Set('ApprovedByUserID', value);
+    }
+
+    /**
     * * Field Name: Company
     * * Display Name: Company Name
     * * SQL Data Type: nvarchar(50)
@@ -6510,6 +6715,33 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     */
     get File(): string | null {
         return this.Get('File');
+    }
+
+    /**
+    * * Field Name: ApprovalRequestedByUser
+    * * Display Name: Approval Requested By User
+    * * SQL Data Type: nvarchar(100)
+    */
+    get ApprovalRequestedByUser(): string | null {
+        return this.Get('ApprovalRequestedByUser');
+    }
+
+    /**
+    * * Field Name: ApprovalTask
+    * * Display Name: Approval Task
+    * * SQL Data Type: nvarchar(255)
+    */
+    get ApprovalTask(): string | null {
+        return this.Get('ApprovalTask');
+    }
+
+    /**
+    * * Field Name: ApprovedByUser
+    * * Display Name: Approved By User
+    * * SQL Data Type: nvarchar(100)
+    */
+    get ApprovedByUser(): string | null {
+        return this.Get('ApprovedByUser');
     }
 
     /**
@@ -6956,7 +7188,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     * * Field Name: JournalEntryBatchNumber
     * * Display Name: Batch Number
     * * SQL Data Type: nvarchar(40)
-    * * Description: Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format 'BATCH-{CompanyCode}-{seq:000000}'.
+    * * Description: Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format 'BATCH-{seq:000000}': one global sequence shared by every company, with no company segment.
     */
     get JournalEntryBatchNumber(): string {
         return this.Get('JournalEntryBatchNumber');
@@ -7289,7 +7521,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     /**
     * * Field Name: CancelReason
     * * Display Name: Cancel Reason
-    * * SQL Data Type: nvarchar(500)
+    * * SQL Data Type: nvarchar(1000)
     * * Description: Why this batch was cancelled. Required when an approved batch is cancelled (CK_JournalEntryBatch_CancelAudit); optional when a Pending batch is. Frozen once Cancelled.
     */
     get CancelReason(): string | null {

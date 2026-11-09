@@ -17,20 +17,19 @@ import path from 'node:path';
 import { loginViaMagicLink } from '../lib/auth';
 import { openAccountingApp, openNavItem, captureConsoleErrors, expectNoConsoleErrors, resetCompanyScopeToAll, scopeToCompany } from '../lib/explorer';
 import { HARNESS_DIR } from '../lib/env';
+import { REPO_ROOT, TSX_BIN } from '../../harness-paths.mjs';
 
-const WORKTREE_ROOT = path.resolve(HARNESS_DIR, '..', '..', '..', '..', '..');
-const TSX = path.resolve(WORKTREE_ROOT, 'node_modules', '.bin', 'tsx');
 const FIXTURE = path.resolve(HARNESS_DIR, 'lib', 'batching-fixture.ts');
 let fx: { companyId: string; companyName: string; cfoPersonId: string } | null = null;
 
 test.beforeAll(() => {
-  const out = execFileSync(TSX, [FIXTURE, 'setup'], { cwd: WORKTREE_ROOT, encoding: 'utf8', timeout: 180_000 });
+  const out = execFileSync(TSX_BIN, [FIXTURE, 'setup'], { cwd: REPO_ROOT, encoding: 'utf8', timeout: 180_000 });
   const line = out.split('\n').find((l) => l.startsWith('FIXTURE_JSON '));
   if (!line) throw new Error(`batching-fixture setup emitted no FIXTURE_JSON:\n${out.slice(-500)}`);
   fx = JSON.parse(line.slice('FIXTURE_JSON '.length));
 });
 test.afterAll(() => {
-  if (fx) { try { execFileSync(TSX, [FIXTURE, 'teardown', fx.companyId, fx.cfoPersonId], { cwd: WORKTREE_ROOT, encoding: 'utf8', timeout: 180_000 }); } catch { /* best-effort */ } }
+  if (fx) { try { execFileSync(TSX_BIN, [FIXTURE, 'teardown', fx.companyId, fx.cfoPersonId], { cwd: REPO_ROOT, encoding: 'utf8', timeout: 180_000 }); } catch { /* best-effort */ } }
 });
 
 async function railItem(page: Page, category: string, item: string): Promise<void> {
@@ -75,7 +74,7 @@ test('Build → late candidate → Regenerate re-gathers (5→6 entries, 600→7
   await expect(card.getByText('600.00').first(), 'netted debits 600.00 before regenerate').toBeVisible();
 
   // ── 3. A late candidate lands out-of-band ───────────────────────────────────
-  const out = execFileSync(TSX, [FIXTURE, 'add-je', fx!.companyId], { cwd: WORKTREE_ROOT, encoding: 'utf8', timeout: 180_000 });
+  const out = execFileSync(TSX_BIN, [FIXTURE, 'add-je', fx!.companyId], { cwd: REPO_ROOT, encoding: 'utf8', timeout: 180_000 });
   if (!out.includes('FIXTURE_JSON')) throw new Error(`add-je emitted no FIXTURE_JSON:\n${out.slice(-400)}`);
 
   // ── 4. Regenerate → 4 members, netted 711.00, and the toast states the netting ─
