@@ -31,6 +31,9 @@
 
 /* mj-page-body-interior is display:BLOCK, so no gap reaches these siblings — the SAME token drives
    the space between each band, so "between two cards" is one distance everywhere. */
+/* The company + period filter bar, above everything it bounds. */
+.dash-filters { display: block; margin-bottom: var(--mj-dash-gap); }
+
 .dash-stats { display: flex; gap: var(--mj-dash-gap); flex-wrap: wrap; margin-bottom: var(--mj-dash-gap); }
 
 /* The Credentials `stat-card`: chip, label, big value — in that vertical order. */

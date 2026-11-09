@@ -18,6 +18,11 @@
      It is display:BLOCK — never size a child here with `flex: 1` (a no-op that collapses to zero
      height). Everything below sizes from its own content or an explicit min-height. -->
 <mj-page-body-interior>
+  <!-- Company + period. The company picker is the app-wide scope (the rail chip shows the same
+       selection); the period is shared by every accounting dashboard. Queue cards count every date
+       and say so in their tooltips. -->
+  <mj-accounting-dashboard-filters class="dash-filters"></mj-accounting-dashboard-filters>
+
   @if (LoadError) {
     <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
   }
