@@ -23,6 +23,7 @@ import {
 import {
     JournalEntryBatchDispatchClient,
     PreviewEntryWire,
+    HeldBackEntryWire,
     BuildJournalEntryBatchOptionsInput,
 } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 import { BatchAction, BatchActionDialogState } from '../JournalEntryBatchDispatch/batch-action-dialog/batch-action-dialog.state';
@@ -465,6 +466,25 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                         </div>
                     }
 
+                    <!-- golive #448: an entry dated after the posting date would reach the ERP before it happened, so it waits. -->
+                    @if (PreviewAfterPostingDateCount > 0) {
+                        <div class="mja-banner mja-banner-held-back" role="status">
+                            <i class="fa-solid fa-calendar-plus"></i>
+                            <span>
+                                {{ PreviewAfterPostingDateCount }} entr{{ PreviewAfterPostingDateCount === 1 ? 'y is' : 'ies are' }}
+                                dated after the posting date and held back. They stay Pending for a batch posted on or after their own date.
+                                <details>
+                                    <summary>Show {{ PreviewAfterPostingDateEntries.length < PreviewAfterPostingDateCount ? 'the oldest ' + PreviewAfterPostingDateEntries.length : (PreviewAfterPostingDateCount === 1 ? 'it' : 'them') }}</summary>
+                                    <ul class="mja-held-back-list">
+                                        @for (e of PreviewAfterPostingDateEntries; track e.ID) {
+                                            <li><b>{{ e.EntryNumber }}</b>@if (e.Description) { · {{ e.Description }} } — {{ e.Reason }}</li>
+                                        }
+                                    </ul>
+                                </details>
+                            </span>
+                        </div>
+                    }
+
                     <!-- Candidate List -->
                     @if (IsPreviewLoading) {
                         <div class="mja-modal-loading">
@@ -573,6 +593,18 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             border-radius: 8px;
             font-size: 13px;
             font-weight: 500;
+        }
+        .mja-banner-held-back {
+            align-items: flex-start;
+        }
+        .mja-banner-held-back summary {
+            cursor: pointer;
+            margin-top: 4px;
+        }
+        .mja-held-back-list {
+            margin: 4px 0 0;
+            padding-left: 18px;
+            font-weight: 400;
         }
         .mja-banner--success {
             background: #f0fdf4;
@@ -1221,6 +1253,10 @@ export class AccountingBatchesPageComponent implements OnInit {
     public PreviewOutOfOrderSkipCount = 0;
     /** Entries dated before their company's posting start date: held back, and left Pending, by every build. */
     public PreviewBeforePostingStartCount = 0;
+    /** Entries dated after the posting date (golive #448): held back until a batch posts on or after their date. */
+    public PreviewAfterPostingDateCount = 0;
+    /** The oldest of those, each with the reason it is held back. */
+    public PreviewAfterPostingDateEntries: HeldBackEntryWire[] = [];
     /** Numbers each preview request. Only the latest one's response is applied (#254): ticking
      *  fast fires overlapping previews, and a slower earlier one must not overwrite a newer one. */
     private previewRequestSeq = 0;
@@ -1809,6 +1845,8 @@ export class AccountingBatchesPageComponent implements OnInit {
                 this.PreviewGrossCredits = previewRes.GrossCredits;
                 this.PreviewOutOfOrderSkipCount = previewRes.OutOfOrderSkipCount;
                 this.PreviewBeforePostingStartCount = previewRes.BeforePostingStartCount;
+                this.PreviewAfterPostingDateCount = previewRes.AfterPostingDateCount;
+                this.PreviewAfterPostingDateEntries = previewRes.AfterPostingDateEntries;
                 this.setCoveredDateRange(this.PreviewEntries);
             } else {
                 this.ModalErrorMessage = previewRes.ErrorMessage ?? 'Could not load the entries that match these criteria. Try again.';
@@ -1846,6 +1884,8 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.PreviewGrossCredits = 0;
         this.PreviewOutOfOrderSkipCount = 0;
         this.PreviewBeforePostingStartCount = 0;
+        this.PreviewAfterPostingDateCount = 0;
+        this.PreviewAfterPostingDateEntries = [];
         this.PreviewCoveredStartDate = null;
         this.PreviewCoveredEndDate = null;
     }
