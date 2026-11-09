@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { UserInfo, type IMetadataProvider, type IRemoteOperationProvider, type RemoteOpResult } from '@memberjunction/core';
+import { RunView, UserInfo, type IMetadataProvider, type IRemoteOperationProvider, type RemoteOpResult, type RunViewParams } from '@memberjunction/core';
+import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import {
   MJButtonDirective,
   MJPageHeaderInteriorComponent,
@@ -22,7 +23,7 @@ import { WorkspaceTabStripComponent } from '../../../transfer-pending/workspace-
 import { WorkspaceTipDirective } from '../../../transfer-pending/workspace-tabs/workspace-tip.directive';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { AccountingShellModule } from '../shell.module';
-import { AUGUST_CLOSE_IN_CHICAGO, stubbedReadsProvider, useBusinessClock } from '../../../../__tests__/support/business-clock';
+import { AUGUST_CLOSE_IN_CHICAGO, stubbedReadsProvider, useBusinessClock, viewResult } from '../../../../__tests__/support/business-clock';
 import { BatchOperatorCatalog } from '../../../../__tests__/support/batch-operator';
 
 /**
@@ -141,7 +142,7 @@ describe('JournalEntryBatchWorkspacePageComponent — posting date (golive #315)
   function withPreview(page: JournalEntryBatchWorkspacePageComponent, day: string): void {
     page.Draft!.Preview = {
       Candidates: [{ ID: 'je-1', EntryNumber: 'JE-0001', EffectiveDate: `${day}T00:00:00.000Z`, EntryTypeCode: 'Manual', CompanyID: 'c-1', Description: null, Amount: 100 }],
-      AffectedAccounts: [], TotalDebits: 100, TotalCredits: 100, GrossDebits: 100, GrossCredits: 100, PerCompany: [], OutOfOrderSkipCount: 0, BeforePostingStartCount: 0,
+      AffectedAccounts: [], TotalDebits: 100, TotalCredits: 100, GrossDebits: 100, GrossCredits: 100, PerCompany: [], OutOfOrderSkipCount: 0, BeforePostingStartCount: 0, AfterPostingDateCount: 0, AfterPostingDateEntries: [],
     };
   }
 
@@ -290,7 +291,7 @@ function preview(debits: number): BatchPreview {
     GrossCredits: debits,
     PerCompany: [],
     OutOfOrderSkipCount: 0,
-    BeforePostingStartCount: 0,
+    BeforePostingStartCount: 0, AfterPostingDateCount: 0, AfterPostingDateEntries: [],
   };
 }
 
@@ -579,5 +580,71 @@ describe('JournalEntryBatchWorkspacePageComponent — select all / Clear All (DO
     expect(requested.at(-1)).toEqual([]);
     expect(ticked(fixture)).toEqual([]);
     expect(page.Preview?.Candidates.length).toBe(3);
+  });
+});
+
+/**
+ * The Source column (bc-aidp-next-golive#452): each candidate names the record that created it and
+ * opens it. The preview carries the origin pair; names come from the linked entity's name field.
+ */
+describe('JournalEntryBatchWorkspacePageComponent — candidate source links (DOM)', () => {
+  const NAMED = 'Test: Invoices';
+  const ENTITIES: Record<string, { Name: string; DisplayNameOrName: string; NameField: { Name: string } | null; PrimaryKeys: Array<{ Name: string }> }> = {
+    [NAMED]: { Name: NAMED, DisplayNameOrName: 'Invoices', NameField: { Name: 'InvoiceNumber' }, PrimaryKeys: [{ Name: 'ID' }] },
+  };
+  const open = vi.fn();
+
+  beforeEach(async () => {
+    open.mockReset();
+    vi.spyOn(AccountingEngineBase.Instance, 'Config').mockResolvedValue(undefined);
+    vi.spyOn(JournalEntryBatchWorkspaceClient.prototype, 'Preview').mockResolvedValue({
+      ...preview(300),
+      Candidates: [
+        { ...ENTRY_A, Description: 'Payment PAY-074 — Acme — order ORD-61', LinkedEntity: NAMED, LinkedRecordID: 'inv-1' },
+        { ...ENTRY_B, LinkedEntity: null, LinkedRecordID: null },
+      ],
+    });
+    vi.spyOn(RunView.prototype, 'RunViews').mockImplementation(async (ps: RunViewParams[]) =>
+      ps.map((p) => (p.EntityName === NAMED ? viewResult([{ ID: 'inv-1', InvoiceNumber: 'INV-0001' }]) : viewResult([], 0))));
+    await TestBed.configureTestingModule({
+      declarations: [JournalEntryBatchWorkspacePageComponent],
+      imports: [
+        CommonModule,
+        FormsModule,
+        SharedGenericModule,
+        MJButtonDirective,
+        MJPageHeaderInteriorComponent,
+        MJPageBodyInteriorComponent,
+        MJLeftNavContentComponent,
+        MJStatBadgeComponent,
+        MJAlertComponent,
+        MJEmptyStateComponent,
+        MJDropdownComponent,
+        WorkspaceCardComponent,
+        WorkspaceTabStripComponent,
+        WorkspaceTipDirective,
+      ],
+      providers: [PageRefreshService, { provide: MJFormPresenterService, useValue: { Open: open } }],
+    }).compileComponents();
+  });
+
+  it('shows each candidate source beside its memo and opens the record', async () => {
+    const fixture = TestBed.createComponent(JournalEntryBatchWorkspacePageComponent);
+    const provider = Object.assign(stubbedReadsProvider(), { EntityByName: (name: string) => ENTITIES[name] as never });
+    fixture.componentRef.setInput('Provider', provider);
+    fixture.detectChanges();
+    const page = fixture.componentInstance;
+    page.Apply();
+    await vi.waitFor(() => expect(page.SourceOf(ENTRY_A.ID)?.RecordName).toBe('INV-0001'));
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(Array.from(el.querySelectorAll('.bw-grid th')).map((th) => th.textContent?.trim())).toContain('Source');
+    expect(Array.from(el.querySelectorAll('.bw-source')).map((c) => c.textContent?.trim())).toEqual(['INV-0001', 'Manual']);
+    expect(el.textContent).toContain('Payment PAY-074 — Acme — order ORD-61');
+
+    el.querySelector<HTMLButtonElement>('.bw-source-link')!.click();
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open.mock.calls[0][0].EntityName).toBe(NAMED);
   });
 });

@@ -14,7 +14,7 @@ import { LoadCreateBusinessCentralJournalEntryWithDimensionsAction } from '@mj-b
 // Server-side entity subclasses — must come after accounting-entities so
 // @RegisterClass auto-increment gives these higher priority
 import '@mj-biz-apps/accounting-core-entities-server';
-import { LoadFinanceExceptionEntityServer, LoadFinanceExceptionOperations, LoadJournalEntryBatchOperations, LoadManualJournalEntryOperations, LoadCreateJournalEntriesOperation, LoadCreateJournalEntryOperation, LoadGenerateReversalOperation, LoadGetJournalEntryStatesOperation, LoadRunERPSyncOperation, LoadAccountingERPEngine, LoadAccountingERPProviders } from '@mj-biz-apps/accounting-core-entities-server';
+import { LoadFinanceExceptionEntityServer, LoadFinanceExceptionOperations, LoadJournalEntryBatchOperations, LoadManualJournalEntryOperations, LoadCreateJournalEntriesOperation, LoadCreateJournalEntryOperation, LoadGenerateReversalOperation, LoadRedatePendingJournalEntriesOperation, LoadGetJournalEntryStatesOperation, LoadRunERPSyncOperation, LoadAccountingERPEngine, LoadAccountingERPProviders } from '@mj-biz-apps/accounting-core-entities-server';
 
 // Import generated GraphQL resolvers
 import './generated/generated.js';
@@ -58,6 +58,7 @@ export function LoadBizAppsAccountingServer(): void {
     LoadJournalEntryBatchOperations(); // tree-shaking anchor for the Accounting.BuildJournalEntryBatch/RegenerateJournalEntryBatch/DispatchJournalEntryBatch/RecordBatchDecision/GetBatchApprovalState ops
     LoadManualJournalEntryOperations(); // tree-shaking anchor for 'Accounting.RecordManualJournalEntryDecision' (golive #353)
     LoadGenerateReversalOperation(); // tree-shaking anchor for 'Accounting.GenerateJournalEntryReversal'
+    LoadRedatePendingJournalEntriesOperation(); // tree-shaking anchor for 'Accounting.RedatePendingJournalEntries' (golive #448)
     LoadGetJournalEntryStatesOperation(); // tree-shaking anchor for 'Accounting.GetJournalEntryStates' (read-only)
     LoadRunERPSyncOperation();
     LoadFinanceExceptionEntityServer(); // status guard: FinanceException status changes only through Accounting.ClearFinanceException

@@ -18,6 +18,8 @@
  *                                                            from Failed it is the retry, reusing the batch's approval (#145); every
  *                                                            send checks the ERP first, ConfirmNotAlreadyPostedInERP overriding a
  *                                                            lookup that cannot settle it (#182)
+ *   Accounting.DispatchApprovedJournalEntryBatches → dispatchApprovedJournalEntryBatches(...) every Approved batch through
+ *                                                            sendJournalEntryBatch, one at a time; per-batch outcomes (golive #451)
  *   Accounting.ResumeJournalEntryBatchPosting    → resumeJournalEntryBatchPosting(...) finish a Posted batch's Batched→GLPosted flip; NO ERP call (#145)
  *   Accounting.GetStrandedJournalEntries         → findStrandedJournalEntries(...)  read-only: Failed / partly-flipped Posted batches holding entries (#145)
  *   Accounting.RecordJournalEntryBatchDecision   → gate.recordDecision + approveJournalEntryBatch | cancelJournalEntryBatch (in-app CFO approve/reject;
@@ -61,6 +63,7 @@ import {
   type StrandedJournalEntryBatch,
   type ErpPostingUnconfirmedKind,
 } from './JournalEntryBatchEngine.js';
+import { dispatchApprovedJournalEntryBatches, type ApprovedBatchDispatchOutcome } from './ApprovedBatchDispatch.js';
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 import { ResolvePersonIDForUser } from './person-user-link.js';
@@ -78,8 +81,9 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 
 /**
  * Refuse a caller who does not hold the batch-operator Authorization (#448), before anything is read.
- * Build, Regenerate, Dispatch and Archive change what reaches the ERP or keep entries out of it for
- * good, so beyond entity permissions they need the Finance role's grant. Checked inside the operation,
+ * Build, Regenerate, Dispatch and Resume change what reaches the ERP, so beyond entity permissions they need
+ * the Finance role's grant. Archive does not call this: `Archive()` applies its own rule, which lets the
+ * company's CFO archive without the grant (golive #325). Checked inside the operation,
  * where the request's provider (and its Authorization catalog) is in hand, as ClearFinanceException does.
  * The scheduled build and auto-post call the engine directly, not these operations, so they are unaffected.
  */
@@ -306,6 +310,72 @@ export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<D
   }
 }
 
+// ─── Accounting.DispatchApprovedJournalEntryBatches ──────────────────────────────────────
+
+export interface DispatchApprovedJournalEntryBatchesInput {
+  /** Send only these companies' Approved batches. Omit or empty for every company. */
+  CompanyIDs?: string[] | null;
+}
+
+/** One batch's outcome, for the Batches page's result list. */
+export interface DispatchApprovedJournalEntryBatchOutcome {
+  JournalEntryBatchID: string;
+  JournalEntryBatchNumber: string;
+  CompanyID: string;
+  Company: string | null;
+  /** The batch's status after the send, or the status it was left at. */
+  Status: string;
+  /** True when the batch is recorded Posted after the run. */
+  Posted: boolean;
+  /** Why the batch did not post, or what happened to it instead. Null when this run posted it. */
+  Message: string | null;
+}
+
+export interface DispatchApprovedJournalEntryBatchesOutput {
+  Batches: DispatchApprovedJournalEntryBatchOutcome[];
+  PostedCount: number;
+}
+
+/** The operation's wire shape for one outcome; the message says what the operator needs to know. */
+function toOutcomeWire(o: ApprovedBatchDispatchOutcome): DispatchApprovedJournalEntryBatchOutcome {
+  const posted = o.status === 'Posted';
+  const message = o.takenByAnotherSend ? `Another send took this batch first; it is now ${o.status}.`
+    : posted ? null
+    : o.error ?? `The batch did not post; it is ${o.status}.`;
+  return {
+    JournalEntryBatchID: o.batchId,
+    JournalEntryBatchNumber: o.batchNumber,
+    CompanyID: o.companyId,
+    Company: o.company,
+    Status: o.status,
+    Posted: posted,
+    Message: message,
+  };
+}
+
+/**
+ * Send every Approved batch to its ERP now, one at a time, through the same send as the per-batch
+ * Dispatch button (bc-aidp-next-golive#451): the Batches page's "Send approved batches" button. The
+ * hourly job runs the same selection and send as the system user through the
+ * `Accounting.DispatchApprovedJournalEntryBatches` action; this operation is the person's way in, so
+ * it requires the batch-operator Authorization (the Finance role), checked before any batch is read.
+ * One batch failing does not stop the rest; each batch's outcome is returned. Failed batches are not
+ * retried: each needs the operator's ERP check first.
+ */
+@RegisterClass(BaseRemotableOperation, 'Accounting.DispatchApprovedJournalEntryBatches')
+export class DispatchApprovedJournalEntryBatchesOperation extends BaseRemotableOperation<DispatchApprovedJournalEntryBatchesInput, DispatchApprovedJournalEntryBatchesOutput> {
+  public readonly OperationKey = 'Accounting.DispatchApprovedJournalEntryBatches';
+  public readonly RequiredScope = 'accounting:post';
+
+  protected async InternalExecute(input: DispatchApprovedJournalEntryBatchesInput, provider: IMetadataProvider, user: UserInfo): Promise<DispatchApprovedJournalEntryBatchesOutput> {
+    requireBatchOperator(user, provider, 'DispatchApprovedJournalEntryBatches');
+    const companyIds = input?.CompanyIDs?.length ? input.CompanyIDs : null;
+    const outcomes = await dispatchApprovedJournalEntryBatches({ targetSystem: null, companyIds }, user, provider);
+    const batches = outcomes.map(toOutcomeWire);
+    return { Batches: batches, PostedCount: batches.filter(b => b.Posted).length };
+  }
+}
+
 // ─── Accounting.ResumeJournalEntryBatchPosting ───────────────────────────────────────────
 
 export interface ResumeJournalEntryBatchPostingInput { JournalEntryBatchID: string }
@@ -321,6 +391,7 @@ export class ResumeJournalEntryBatchPostingOperation extends BaseRemotableOperat
   public readonly RequiredScope = 'accounting:post';
 
   protected async InternalExecute(input: ResumeJournalEntryBatchPostingInput, provider: IMetadataProvider, user: UserInfo): Promise<ResumeJournalEntryBatchPostingOutput> {
+    requireBatchOperator(user, provider, 'ResumeJournalEntryBatchPosting');
     if (!input?.JournalEntryBatchID) throw new Error('Posting was not resumed: no batch was given.');
     requireSqlGuid(input.JournalEntryBatchID, 'ResumeJournalEntryBatchPosting');
     const { batch, journalEntriesPosted } = await resumeJournalEntryBatchPosting(input.JournalEntryBatchID, user, provider);
@@ -441,8 +512,8 @@ export interface ArchiveJournalEntryBatchOutput { Status: string; ArchivedAt: st
  * Archive a batch that must never post to the ERP (golive #214). Terminal, makes NO ERP call, and
  * leaves the member journal entries locked at `Batched` — the opposite of a reject/cancel, which
  * returns them to the candidate pool. The legal-from statuses, the required reason and who may
- * archive (#448) are the entity's invariants (JournalEntryBatchEntityServer.Archive); this operation
- * only marshals.
+ * archive (#448, golive #325) are the entity's invariants (JournalEntryBatchEntityServer.Archive);
+ * this operation only marshals.
  */
 @RegisterClass(BaseRemotableOperation, 'Accounting.ArchiveJournalEntryBatch')
 export class ArchiveJournalEntryBatchOperation extends BaseRemotableOperation<ArchiveJournalEntryBatchInput, ArchiveJournalEntryBatchOutput> {
@@ -450,7 +521,6 @@ export class ArchiveJournalEntryBatchOperation extends BaseRemotableOperation<Ar
   public readonly RequiredScope = 'accounting:write';
 
   protected async InternalExecute(input: ArchiveJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<ArchiveJournalEntryBatchOutput> {
-    requireBatchOperator(user, provider, 'ArchiveJournalEntryBatch');
     if (!input?.JournalEntryBatchID) throw new Error('The batch was not archived: no batch was given.');
     requireSqlGuid(input.JournalEntryBatchID, 'ArchiveJournalEntryBatch');
     if (!input?.Reason?.trim()) throw new Error('The batch was not archived: a reason is required, because it is the only record of why this batch will never post.');

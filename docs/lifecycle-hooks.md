@@ -56,6 +56,9 @@ company.
 **Validates (bc-aidp-next-golive#316):** setting, moving or clearing `BooksClosedThroughDate` is
 refused unless the saving user holds `MJ.BizApps.Accounting.BooksClosedThroughDate.Set` (the Finance
 role). An authorization missing from the catalog is held by nobody. Other edits are not checked.
+**Validates (bc-aidp-next-golive#447):** the same rule for `PostingStartDate`, behind its own
+authorization, `MJ.BizApps.Accounting.PostingStartDate.Set` (the Finance role). Both checks share
+`profile-date-authorizations.ts` in the engine base with the Periods page, which hides the buttons.
 - *(The profile's 5 default GL-account refs were RETIRED 2026-07-23 — role/link model replaces them.)*
 - *(Period generation was REMOVED 2026-07-06 — no `AccountingPeriod` rows exist to create.)*
 
@@ -82,6 +85,15 @@ original's `ReversedByJournalEntryID` (the one field the immutability trigger le
 The reversal's `EffectiveDate` is the later of today's business day (`BusinessTimeZoneEngine`) and the
 original's `EffectiveDate`, so a reversal never lands in a period before the entry it reverses (#266).
 
+### W10 — Re-dating a Pending entry *(✅ `JournalEntryEntityServer.SaveRedatedEffectiveDate(day)`, golive #448)*
+**Fires:** only from `Accounting.RedatePendingJournalEntries`, after it has checked the caller (the
+batch-operator Authorization), the company's `BooksClosedThroughDate` and `PostingStartDate`, and that
+the move stays in the entry's fiscal year.
+**Does:** moves a saved, Pending, unbatched entry's `EffectiveDate` and saves it. During that save
+`EffectiveDateChangeAllowed` is true; it is false on every other save, so a rule that makes `EffectiveDate`
+immutable on saved entries (#391) consults it to let this one change through. A manual entry's approval
+re-routes as for any date change.
+
 ### W9 — JE attachment validation *(✅ `JournalEntryEntityServer.ts`)*
 **Fires:** whenever a JE is saved with a non-null `FileID`.
 **Does:** verifies the `FileID` references an existing `__mj.File` (the DB FK is the hard guarantee).
@@ -105,6 +117,11 @@ auto-refresh, and exposes:
   Cardinality=Many roles throw `ROLE_NOT_SINGULAR` (BA-D34).
 - **`ResolveLinkedAccounts(...)`** — every covering Active link for a Many role (`BankAccount`).
   One roles return the same 0-or-1 winner as `ResolveLinkedAccount`.
+- **`ResolveFirstLinkedAccount(records, role, asOfDate, options)`** — the first record in a caller-ordered
+  walk with a link; when none has one, reloads the cache once and retries (bc-aidp-next-golive#438), so
+  links written straight to the database are found without a server restart.
+  **`RefreshAfterLinkMiss()`** is that reload for callers that walk themselves: shared between concurrent
+  callers, and skipped (returns false) within 30 s of the last one.
 - the **pure draft pipeline** (`runDraftPipeline`) + the typed contract (`JournalEntryDraft`,
   `CreateJournalEntryResult`, the 10 error codes) — importable by Orders' client code with zero server deps.
 
@@ -160,18 +177,20 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   back what it loaded passes. The fields stay `AllowUpdateAPI = 1` on purpose: MJ leaves a field with it
   off out of the create and update procedures, so the server's own stamps would not persist either.
 - **`JournalEntryBatchEntityServer.Archive()` authorizes itself (#448)** through the resolved cancel gate's
-  `assertMayArchive`, before anything is written and before the status checks (whose messages name the ERP's reference): before approval only the company's `ApprovalCFOUserID`
-  (the builder may cancel a Pending batch but not archive it, since an archive cannot be undone), past
-  approval the CFO or the batch's approver (who must then have a linked Person). The batch pages show
-  Archive only to those users (`MayArchiveBatch`).
-- **Build, Regenerate, Dispatch and Archive require the Finance role (#448).** Each of the four Remote
+  `assertMayArchive`, before anything is written and before the status checks (whose messages name the ERP's reference): before approval the company's `ApprovalCFOUserID` or a holder
+  of the batch-operator Authorization (the Finance role; a builder without it may cancel a Pending batch but
+  not archive it, since an archive cannot be undone), past approval the CFO or the batch's approver (who must
+  then have a linked Person), with no Authorization required (golive #325). The batch pages show Archive
+  only to those users (`MayArchiveBatch`).
+- **Build, Regenerate and Dispatch require the Finance role (#448).** Each of the three Remote
   Operations first checks the `MJ.BizApps.Accounting.JournalEntryBatches.Operate` Authorization, granted to
   the Finance role in `metadata/authorizations/` and `metadata/authorization-roles/`, through
   `UserCanOperateJournalEntryBatches` (accounting-engine-base, shared with the pages), before reading anything.
   It fails closed: an Authorization missing from the catalog is held by nobody. The scheduled build and
   auto-post (`Accounting.BuildJournalEntryBatches`) call the engine directly as the system user, not these
-  operations, so they are unaffected. The batch pages hide Dispatch, Regenerate, Archive, Build and Retry
-  from users without the grant.
+  operations, so they are unaffected. The batch pages hide Dispatch, Regenerate, Build and Retry
+  from users without the grant. Archive is not one of these operations: `Archive()` applies its own rule
+  above, so the CFO may archive without the grant (golive #325).
 - **`TasksAppApprovalGate.assertApproved` re-checks who approved (#446).** Besides a terminal approval on
   the stamped Task, the batch must record an approver (written only by `Approve()`) who is not its builder,
   and the approval must not be attributed to anyone else: Task Decisions are writable through the tasks
