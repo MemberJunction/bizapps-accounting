@@ -8,7 +8,7 @@
 > Markdown preview, or paste a block into https://mermaid.live to zoom.
 >
 > **Current as of 2026-11-02** — read forward from every migration through
-> `V202611021900__v0.25.x__Post_GoLive_Schema_and_Metadata_Sync.sql`: 28 tables, none dropped. The
+> `V202611091400__v0.26.x__Post_GoLive_Schema_and_Metadata_Sync.sql`: 28 tables, none dropped. The
 > last diff against a live `__mj_BizAppsAccounting` schema (every column) was on 2026-08-29;
 > `test-harnesses/server/_maint-erd-drift.ts` reproduces it. Its live table count also includes
 > Skyway's `flyway_schema_history`, which `mj migrate --schema` keeps in this schema.

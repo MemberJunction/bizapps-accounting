@@ -90,27 +90,29 @@ describe('MayCancelPendingBatch (Cancel on a Pending batch)', () => {
   });
 });
 
-describe('MayArchiveBatch (Archive, #448)', () => {
+describe('MayArchiveBatch (Archive, #448, golive #325)', () => {
   const batch = { CompanyID: COMPANY_ID, BatchedByUserID: BUILDER, ApprovedByUserID: APPROVED_BY };
 
-  it("lets only the company's approver archive a Pending batch — not the builder, who may cancel it", () => {
+  it("lets the company's approver or a Finance batch operator archive a Pending batch — not a builder without the operator grant", () => {
     const pending = { ...batch, Status: 'Pending' as const };
-    expect(MayArchiveBatch(pending, APPROVER, APPROVERS)).toBe(true);
-    expect(MayArchiveBatch(pending, BUILDER, APPROVERS)).toBe(false);
+    expect(MayArchiveBatch(pending, APPROVER, APPROVERS, false)).toBe(true);
+    expect(MayArchiveBatch(pending, BUILDER, APPROVERS, true)).toBe(true);
+    expect(MayArchiveBatch(pending, OTHER, APPROVERS, true)).toBe(true);
+    expect(MayArchiveBatch(pending, BUILDER, APPROVERS, false)).toBe(false);
     expect(MayCancelPendingBatch(pending, BUILDER, APPROVERS)).toBe(true);
-    expect(MayArchiveBatch(pending, APPROVED_BY, APPROVERS)).toBe(false);
-    expect(MayArchiveBatch(pending, OTHER, APPROVERS)).toBe(false);
+    expect(MayArchiveBatch(pending, APPROVED_BY, APPROVERS, false)).toBe(false);
+    expect(MayArchiveBatch(pending, OTHER, APPROVERS, false)).toBe(false);
   });
 
-  it.each(['Approved', 'Failed'] as const)("lets the company's approver and the batch's approver archive a %s batch, not the builder", (status) => {
+  it.each(['Approved', 'Failed'] as const)("lets the company's approver and the batch's approver archive a %s batch (even without the Finance operator grant), not Finance alone or the builder", (status) => {
     const past = { ...batch, Status: status };
-    expect(MayArchiveBatch(past, APPROVER, APPROVERS)).toBe(true);
-    expect(MayArchiveBatch(past, APPROVED_BY, APPROVERS)).toBe(true);
-    expect(MayArchiveBatch(past, BUILDER, APPROVERS)).toBe(false);
-    expect(MayArchiveBatch(past, OTHER, APPROVERS)).toBe(false);
+    expect(MayArchiveBatch(past, APPROVER, APPROVERS, false)).toBe(true);
+    expect(MayArchiveBatch(past, APPROVED_BY, APPROVERS, false)).toBe(true);
+    expect(MayArchiveBatch(past, BUILDER, APPROVERS, true)).toBe(false);
+    expect(MayArchiveBatch(past, OTHER, APPROVERS, true)).toBe(false);
   });
 
   it('shows nothing to a user with no ID', () => {
-    expect(MayArchiveBatch({ ...batch, Status: 'Pending' }, undefined, NO_APPROVERS)).toBe(false);
+    expect(MayArchiveBatch({ ...batch, Status: 'Pending' }, undefined, NO_APPROVERS, true)).toBe(false);
   });
 });

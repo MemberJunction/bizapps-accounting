@@ -1,12 +1,12 @@
 -- =============================================================================
--- Migration: V202611021901__v0.25.x__JournalEntryBatch_ERPPostUnconfirmed_Freeze.pg-only.sql
+-- Migration: V202611091401__v0.26.x__JournalEntryBatch_ERPPostUnconfirmed_Freeze.pg-only.sql
 -- Description: #414 — PostgreSQL twin of the ERPPostUnconfirmedAt rule (50040)
 --              on JournalEntryBatch.
 -- =============================================================================
 --
 -- WHY A PG-ONLY FILE
 --
--- V202611021900__v0.25.x__Post_GoLive_Schema_and_Metadata_Sync updates
+-- V202611091400__v0.26.x__Post_GoLive_Schema_and_Metadata_Sync updates
 -- trg_JournalEntryBatch_Immutability on SQL Server to enforce the transition
 -- rule on ERPPostUnconfirmedAt. The SQL converter does not convert triggers
 -- (its .pg.sql output marks the trigger SKIPPED), so the PostgreSQL trigger is
@@ -18,7 +18,7 @@
 -- Compared at millisecond precision, as on SQL Server: the entity writes
 -- JavaScript dates.
 --
--- Runs after the converted V202611021900 file, once, in order.
+-- Runs after the converted V202611091400 file, once, in order.
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION "__mj_BizAppsAccounting"."fn_trg_JournalEntryBatch_ERPPostUnconfirmedFreeze"()

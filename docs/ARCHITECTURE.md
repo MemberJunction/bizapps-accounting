@@ -36,7 +36,7 @@ Batching (CoreEntitiesServer)        per-company buildJournalEntryBatch (D7) →
 DB invariants (migrations)           14 triggers (incl. single-company floors 50019/50022, summary coherence 50023)
                                      + 2 numbering sprocs (JE per company per FY, batch global)  ◄── the un-bypassable floor
 ```
-ERP master data travels: Explorer / nightly job → **`Accounting.RunERPSync`** → `AccountingERPEngine.SyncMasterData` → `IntegrationEngine.RunSync` (entity maps, per-company isolation) → registered `BaseAccountingEngineExtension` subclasses (FP&A cash import first). Only ERP connections (Business Central, QuickBooks Online) are synced; one with no entity maps, such as a posting-only connection, is reported skipped, not failed (#256). Journal dispatch: approved batch → (the Dispatch button, `Accounting.DispatchJournalEntryBatch`, or the hourly `Accounting.DispatchApprovedJournalEntryBatches` job, which sends every `Approved` batch and never retries a `Failed` one) → `sendJournalEntryBatch` → `PostJournalBatch` → MJ verb `CreateJournalEntry` (account **numbers**, AM-4). The pre-flight lookup and the post choose the same connection: the batch company's one active connection for the target, or among several the one whose Configuration has `"postJournalEntries": true`, else refuse. Its `CompanyIntegrationID` is sent to the verb (#256, MJ#4867). Accounting never writes `CashBalance`.
+ERP master data travels: Explorer / nightly job → **`Accounting.RunERPSync`** → `AccountingERPEngine.SyncMasterData` → `IntegrationEngine.RunSync` (entity maps, per-company isolation) → registered `BaseAccountingEngineExtension` subclasses (FP&A cash import first). Only ERP connections (Business Central, QuickBooks Online) are synced; one with no entity maps, such as a posting-only connection, is reported skipped, not failed (#256). Journal dispatch: approved batch → (the Dispatch button, `Accounting.DispatchJournalEntryBatch`, or the Batches page's Send approved batches button, the `Accounting.DispatchApprovedJournalEntryBatches` operation for Finance-role users, or the hourly action of the same name, which runs as the system user; both send every `Approved` batch through `dispatchApprovedJournalEntryBatches` and never retry a `Failed` one, golive #451) → `sendJournalEntryBatch` → `PostJournalBatch` → MJ verb `CreateJournalEntry` (account **numbers**, AM-4). The pre-flight lookup and the post choose the same connection: the batch company's one active connection for the target, or among several the one whose Configuration has `"postJournalEntries": true`, else refuse. Its `CompanyIntegrationID` is sent to the verb (#256, MJ#4867). Accounting never writes `CashBalance`.
 
 How a write travels: caller (Orders, browser, script) → **`Accounting.CreateJournalEntry`** →
 engine pipeline → `BaseEntity.Save()` in one TransactionGroup (hooks number; triggers enforce;
@@ -207,6 +207,13 @@ refuses a draft that spans companies, checks balance, and writes atomically. Hoo
   rejects goes `Failed` with its message and raises an `ERP_POSTING_REJECTED` finance exception.
   Apps that date entries into the ledger read the same date (orders' progress attestation and
   supersede); the shared rule is `books-closed.ts` in the engine base.
+- **Periods page (golive #447):** the Accounting app's Periods nav item lists each active company's
+  books-closed and posting start dates. Close month / Reopen month move `BooksClosedThroughDate` by
+  whole months to a month end (`CloseMonthThrough` / `ReopenMonthThrough` in `books-closed.ts`); a
+  month still under way cannot be closed. The posting start date has an Edit behind a confirmation,
+  and its held-back count is the batch preview's `BeforePostingStartCount`. Changing
+  `PostingStartDate` needs `MJ.BizApps.Accounting.PostingStartDate.Set` (the Finance role), checked
+  by the profile's server entity like the books-closed date.
 - **Recovery past Approved (#145):** a `Failed` batch is retried by dispatching it again
   (`Failed → Sent`; the gate and the coherence check re-run, the original approval is reused). A
   `Failed` batch may already be in the ERP, so every send first looks the batch number up there

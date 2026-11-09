@@ -1,5 +1,18 @@
 # @mj-biz-apps/accounting-integration-tests
 
+## 0.26.0
+
+### Patch Changes
+
+- Updated dependencies [b78bf88]
+  - @mj-biz-apps/accounting-entities@0.26.0
+
+## 0.25.1
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.25.1
+
 ## 0.25.0
 
 ### Patch Changes

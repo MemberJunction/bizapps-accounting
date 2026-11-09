@@ -42,6 +42,7 @@ import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 import { JournalEntryBatchDispatchServices } from './JournalEntryBatchDispatchServices.js';
 import {
   checkFailedBatchBeforeCancel,
+  chunkArray,
   JournalEntryBatchMismatchDuringCancelError,
   JournalEntryBatchPostedDuringCancelError,
   recordFailedBatchPosted,
@@ -627,20 +628,24 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
   private async loadSummaryLines(summaryId: string, user: UserInfo | undefined): Promise<{ lines: SummaryLineContent[]; dimensions: SummaryLineDimensionContent[] }> {
     const rv = this.ProviderToUse as unknown as IRunViewProvider;
     const lineRes = await rv.RunView<SummaryLineContent>(
-      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID=${sqlGuidLiteral(summaryId, 'summary journal entry')}`, Fields: ['ID', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple', BypassCache: true },
+      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID=${sqlGuidLiteral(summaryId, 'summary journal entry')}`, Fields: ['ID', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
       user,
     );
     if (!lineRes.Success) throw new Error(`Could not load the batch's summary lines: ${lineRes.ErrorMessage ?? 'unknown error'}`);
     const lines = lineRes.Results ?? [];
     if (lines.length === 0) return { lines, dimensions: [] };
 
-    const lineIds = lines.map(l => sqlGuidLiteral(l.ID, 'summary journal entry line')).join(', ');
-    const dimRes = await rv.RunView<SummaryLineDimensionContent>(
-      { EntityName: JELD_ENTITY, ExtraFilter: `JournalEntryLineID IN (${lineIds})`, Fields: ['JournalEntryLineID', 'DimensionID', 'DimensionValueID'], ResultType: 'simple', BypassCache: true },
-      user,
-    );
-    if (!dimRes.Success) throw new Error(`Could not load the dimensions on the batch's summary lines: ${dimRes.ErrorMessage ?? 'unknown error'}`);
-    return { lines, dimensions: dimRes.Results ?? [] };
+    const dimensions: SummaryLineDimensionContent[] = [];
+    for (const chunk of chunkArray(lines)) {
+      const lineIds = chunk.map(l => sqlGuidLiteral(l.ID, 'summary journal entry line')).join(', ');
+      const dimRes = await rv.RunView<SummaryLineDimensionContent>(
+        { EntityName: JELD_ENTITY, ExtraFilter: `JournalEntryLineID IN (${lineIds})`, Fields: ['JournalEntryLineID', 'DimensionID', 'DimensionValueID'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+        user,
+      );
+      if (!dimRes.Success) throw new Error(`Could not load the dimensions on the batch's summary lines: ${dimRes.ErrorMessage ?? 'unknown error'}`);
+      dimensions.push(...(dimRes.Results ?? []));
+    }
+    return { lines, dimensions };
   }
 
   // ─── owned collections (read-only hydration — JE.Lines-style) ─────────────
@@ -650,9 +655,27 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    * JournalEntryBatchID so it rides the same lock machinery). Lazy; cached per instance; `forceRefresh` to
    * re-read. READ-ONLY by convention: mutating members happens through their own entities /
    * the engine — the batch never writes other aggregates outside its sanctioned lock-release.
+   *
+   * Uses `IgnoreMaxRows: true` (#488) rather than `this.Members.Load()`, because `RelatedRecordCollection.Load()`
+   * does not set `IgnoreMaxRows` and would truncate batches larger than the entity's `UserViewMaxRows` cap.
    */
-  public async LoadMembers(forceRefresh = false, _contextUser?: UserInfo): Promise<readonly mjBizAppsAccountingJournalEntryEntity[]> {
-    await this.Members.Load(forceRefresh);
+  public async LoadMembers(forceRefresh = false, contextUser?: UserInfo): Promise<readonly mjBizAppsAccountingJournalEntryEntity[]> {
+    if (!this.IsSaved) return this.Members.Items;
+    if (!forceRefresh && this.Members.IsLoaded) return this.Members.Items;
+    const rv = this.ProviderToUse as unknown as IRunViewProvider;
+    const res = await rv.RunView<mjBizAppsAccountingJournalEntryEntity>(
+      {
+        EntityName: JE_ENTITY,
+        ExtraFilter: `JournalEntryBatchID=${sqlGuidLiteral(this.ID, 'batch ID')}`,
+        OrderBy: this.Members.OrderByClause,
+        ResultType: 'entity_object',
+        BypassCache: true,
+        IgnoreMaxRows: true,
+      },
+      contextUser ?? this.ContextCurrentUser,
+    );
+    if (!res.Success) throw new Error(`Could not load the batch's member entries: ${res.ErrorMessage ?? 'unknown error'}`);
+    this.Members.SetLoadedItems(res.Results ?? []);
     return this.Members.Items;
   }
 
@@ -927,10 +950,11 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    * trg_JournalEntry_Immutability's unlock (it sanctions Batched→Pending only while the owning batch
    * is Pending or Cancelled).
    *
-   * Who may archive is checked first, before anything is written (#448): before approval only the
-   * company's configured approver, past approval the configured approver or the batch's approver.
-   * Archiving keeps the member entries out of every future batch for good, so unlike a cancel, which
-   * can be undone by rebuilding, the builder may not archive a Pending batch.
+   * Who may archive is checked first, before anything is written (#448, golive #325): before approval
+   * the company's configured approver or a holder of the batch-operator Authorization (the Finance
+   * role), past approval the configured approver or the batch's approver. Archiving keeps the member
+   * entries out of every future batch for good, so unlike a cancel, which can be undone by rebuilding,
+   * a builder without that Authorization may not archive a Pending batch.
    *
    * The archive is recorded on the batch's approval Task in the same transaction (golive #325):
    * a Pending batch's Task is closed, so the approver is no longer asked to decide on it; past
@@ -1042,7 +1066,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
 
     // Force the next read to go to the database: the teardown above deleted rows this collection may
     // be holding, and a stale member list is a batch claiming to lock entries that are gone.
-    await this.Members.Load(true);
+    await this.LoadMembers(true, user);
     this._summary = undefined;
   }
 
@@ -1050,7 +1074,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     const rv = this.ProviderToUse as unknown as IRunViewProvider;
     const md = this.ProviderToUse as unknown as IMetadataProvider;
     const res = await rv.RunView<{ ID: string }>(
-      { EntityName: JE_ENTITY, ExtraFilter: `JournalEntryBatchID='${this.ID}' AND Status='Batched'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
+      { EntityName: JE_ENTITY, ExtraFilter: `JournalEntryBatchID='${this.ID}' AND Status='Batched'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
       user,
     );
     if (!res.Success) throw new Error(`Could not release the batch's entries: loading them failed: ${res.ErrorMessage ?? 'unknown error'}`);
@@ -1068,7 +1092,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     const rv = this.ProviderToUse as unknown as IRunViewProvider;
     const md = this.ProviderToUse as unknown as IMetadataProvider;
     const lineRes = await rv.RunView<mjBizAppsAccountingJournalEntryLineEntity>(
-      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${summaryId}'`, ResultType: 'entity_object', BypassCache: true },
+      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${summaryId}'`, ResultType: 'entity_object', BypassCache: true, IgnoreMaxRows: true },
       user,
     );
     if (!lineRes.Success) throw new Error(`Could not delete the batch's summary entry: loading its lines failed: ${lineRes.ErrorMessage ?? 'unknown error'}`);

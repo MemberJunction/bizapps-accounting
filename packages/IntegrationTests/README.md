@@ -15,6 +15,7 @@ come from the committed world of the bizapps-orders integration suite (ORD-WORLD
 | `acct-world` | AW1–AW3 | AW1: shipped currencies and GL roles are visible. AW2: JE types and Accounting Company Profiles are visible, and the GL account read succeeds. AW3: stamps `ApprovalCFOUserID` on every active company (writes). |
 | `acct-ledger` | AL1 | RunView of Journal Entries over GraphQL. |
 | `acct-batch` | AB1 | Previews batch candidates for the world's `BCP` company. |
+| `acct-isa` | I1–I8 | MJ's IS-A machinery on `AccountingCompanyProfile` IS-A `MJ: Companies`. |
 
 `acct-world.AW3` stamps `AccountingCompanyProfile.ApprovalCFOUserID` to the current user on every
 active company — or, when the run authenticates as MJ's system user, to an MJ user whose email is
@@ -50,10 +51,18 @@ The runner sets `MJ_INTEGRATION_TEST=1` and defaults `RUN_MUTATION_TESTS` to `1`
 
 From the repo root:
 
+`acct-isa` needs no world data, only a shipped currency. Each check creates its own Company and inactive
+profile (named `ISA fixture <check> <run>`, coded `ISA-<check>-<run>`) and deletes them when it ends.
+It covers promotion (`AttachToParent`), the whole-chain create, child discovery, the joined view, a
+Company edit through the profile, the rollback of a failed profile write, and both deletes. I7
+records MJ's current rule that deleting a profile deletes its Company. A delete that runs past 30
+seconds fails its check instead of hanging the run (MJ#4850).
+
 ```bash
 pnpm run build                                       # or: pnpm --filter @mj-biz-apps/accounting-integration-tests build, once its dependencies are built
-pnpm run test:integration                            # node packages/IntegrationTests/integration.mjs — acct-world, acct-ledger, acct-batch
+pnpm run test:integration                            # node packages/IntegrationTests/integration.mjs — every bundle
 node packages/IntegrationTests/integration.mjs acct-world acct-batch   # chosen bundles
+node packages/IntegrationTests/integration.mjs acct-isa         # one bundle; acct-isa.I3 runs one check
 node packages/IntegrationTests/integration.mjs acct-world.AW3          # one check
 RUN_MUTATION_TESTS=0 pnpm run test:integration       # skip mutating checks
 GRAPHQL_PORT=<port> pnpm run test:integration        # MJAPI on another port

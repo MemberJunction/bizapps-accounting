@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: V202611021900__v0.25.x__Post_GoLive_Schema_and_Metadata_Sync.sql
+-- Migration: V202611091400__v0.26.x__Post_GoLive_Schema_and_Metadata_Sync.sql
 -- Description: Post-go-live schema hardening, lookup tables, and metadata sync:
 --   1. AccountingCompanyProfile.ERPJournalCode (nullable per-company ERP journal
 --      batch/template code).

@@ -3,7 +3,9 @@
   "compilerOptions": {
     "noEmit": true,
     "allowImportingTsExtensions": true,
-    "types": ["node"]
+    "types": ["node"],
+    // ../harness-paths.mts sits outside this package, so its `dotenv` import resolves from here.
+    "paths": { "dotenv": ["./node_modules/dotenv"] }
   },
   "include": ["./**/*.ts", "../harness-paths.mts"],
   "exclude": ["node_modules"]

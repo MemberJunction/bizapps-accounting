@@ -32,7 +32,7 @@ import {
   ValidationErrorInfo,
   ValidationResult,
 } from '@memberjunction/core';
-import { RegisterClass, UUIDsEqual } from '@memberjunction/global';
+import { EscapeSQLString, RegisterClass, UUIDsEqual } from '@memberjunction/global';
 import {
   mjBizAppsAccountingJournalEntryEntity,
   JournalEntryEntity,
@@ -40,7 +40,7 @@ import {
 } from '@mj-biz-apps/accounting-entities';
 
 import { AccountingEngineBase, FiscalYearOf } from '@mj-biz-apps/accounting-engine-base';
-import { ToCalendarDay } from '@mj-biz-apps/common-entities';
+import { FromCalendarDay, ToCalendarDay, type CalendarDay } from '@mj-biz-apps/common-entities';
 
 import { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
 import { laterBusinessDate, loadTodayBusiness } from './BusinessDay.js';
@@ -116,6 +116,23 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
    * routing and `SaveApprovalStamp`, so a client save that types into them is refused by Validate.
    */
   private writableApprovalFields: ReadonlySet<ApprovalField> = NO_APPROVAL_FIELDS;
+
+  /**
+   * True only while `SaveRedatedEffectiveDate` saves: the one save that may move a saved entry's
+   * EffectiveDate (golive #448). Server-only, like `writableApprovalFields`: no client save sets it.
+   */
+  private effectiveDateRedateInProgress = false;
+
+  /**
+   * Whether the save in progress may change this saved entry's EffectiveDate: only the re-date
+   * operation's own save, and only while the entry was and stays Pending in no batch. A rule that
+   * makes EffectiveDate immutable on saved entries (#391) must let the change through when this is
+   * true, so a payment's date can still be corrected before its entries are batched.
+   */
+  protected get EffectiveDateChangeAllowed(): boolean {
+    const oldStatus = this.GetFieldByName('Status')?.OldValue as string | undefined;
+    return this.effectiveDateRedateInProgress && this.Status === 'Pending' && (oldStatus ?? 'Pending') === 'Pending' && !this.JournalEntryBatchID;
+  }
 
   // ─── Line Collection ─────────────────────────────────────────────────────────
 
@@ -588,6 +605,27 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     }
   }
 
+  /**
+   * Move this saved, Pending, unbatched entry to `day` (golive #448): the ONLY save that may change
+   * a saved entry's EffectiveDate. Called by `Accounting.RedatePendingJournalEntries` after it has
+   * checked the caller, the closed books and the posting start date. A manual entry's approval is
+   * re-routed by the save itself, as for any date change.
+   */
+  public async SaveRedatedEffectiveDate(day: CalendarDay): Promise<boolean> {
+    if (!this.IsSaved) throw new Error('Only a saved journal entry is re-dated; a new entry takes its date before its first save.');
+    if (this.Status !== 'Pending' || this.JournalEntryBatchID) {
+      throw new Error(`Journal entry ${this.EntryNumber} is ${this.JournalEntryBatchID ? 'in a batch' : this.Status}, so its date can no longer change.`);
+    }
+    this.EffectiveDate = FromCalendarDay(day);
+    const previous = this.effectiveDateRedateInProgress;
+    this.effectiveDateRedateInProgress = true;
+    try {
+      return await this.Save();
+    } finally {
+      this.effectiveDateRedateInProgress = previous;
+    }
+  }
+
   /** The lines are deleted with the entry, so the standalone-line approval guard lets them go. */
   public override async Delete(options?: EntityDeleteOptions): Promise<boolean> {
     return this.withLinesSavedThroughEntry(() => super.Delete(options));
@@ -767,7 +805,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       if (key.Type.toLowerCase() === 'uniqueidentifier' && !isSqlGuid(recordId)) {
         return `LinkedRecordID '${recordId}' is not a valid ${entity.Name} ID.`;
       }
-      literal = `'${recordId.replace(/'/g, "''")}'`;
+      literal = `'${EscapeSQLString(recordId)}'`;
     } else {
       if (!/^-?\d+$/.test(recordId)) return `LinkedRecordID '${recordId}' is not a valid ${entity.Name} ID.`;
       literal = recordId;

@@ -8,6 +8,13 @@ import {
   mjBizAppsAccountingJournalEntryEntity,
 } from '@mj-biz-apps/accounting-entities';
 import { openBizDetail } from '../../shared/biz-detail-form';
+import { LoadJournalEntrySources, SourceLabel, type JournalEntrySource } from '../../shared/je-source';
+
+/**
+ * Ids this panel receives are interpolated into ExtraFilter strings below, so anything that is not
+ * a plain UUID is refused outright — validate-don't-escape, the same posture as the server's SqlGuards.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
@@ -54,6 +61,9 @@ type BatchMemberRow = Pick<
 > & {
   EffectiveDate: string | Date | null;
   EntryType: string | null;
+  /** D25 origin pair: the source record's entity name (from the JE view) and key. Null on a manual entry. */
+  LinkedEntity: string | null;
+  LinkedRecordID: string | null;
 };
 
 /**
@@ -97,6 +107,8 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
   public Members: BatchMemberRow[] = [];
   /** TRUE member total — the honest header count, not just the rows fetched. */
   public MemberCount = 0;
+  /** Source record per member entry ID (bc-aidp-next-golive#452); a manual entry has none. */
+  public Sources = new Map<string, JournalEntrySource>();
 
   public IsLoading = false;
   public LoadError: string | null = null;
@@ -154,15 +166,41 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
     this.Closed.emit();
   }
 
+  public SourceOf(entryId: string): JournalEntrySource | undefined {
+    return this.Sources.get(entryId);
+  }
+
+  public SourceText(source: JournalEntrySource): string {
+    return SourceLabel(source);
+  }
+
+  /** Open the entry's source record (the payment line, order line, …); closes this panel as it hands over. */
+  public OpenSource(source: JournalEntrySource): void {
+    openBizDetail(this.forms, {
+      entityName: source.EntityName,
+      primaryKey: CompositeKey.FromID(source.RecordID),
+      title: SourceLabel(source),
+      mode: 'slide-in',
+    });
+    this.Closed.emit();
+  }
+
   private reset(): void {
     this.Header = null;
     this.Members = [];
+    this.Sources = new Map();
     this.MemberCount = 0;
     this.LoadError = null;
   }
 
   /** ONE batched round-trip: the header and the member list are independent, keyed on the same id. */
   private async load(id: string): Promise<void> {
+    if (!UUID_RE.test(id)) {
+      // The id is embedded in the filters below; a malformed one never reaches a query.
+      this.LoadError = 'This journal entry batch could not be found. It may have been deleted, or you may not have access to it.';
+      this.cdr.markForCheck();
+      return;
+    }
     this.IsLoading = true;
     this.LoadError = null;
     this.cdr.markForCheck();
@@ -185,7 +223,7 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
           {
             EntityName: JE_ENTITY,
             ExtraFilter: `JournalEntryBatchID='${id}'`,
-            Fields: ['ID', 'EntryNumber', 'EntryType', 'Status', 'EffectiveDate', 'Description'],
+            Fields: ['ID', 'EntryNumber', 'EntryType', 'Status', 'EffectiveDate', 'Description', 'LinkedEntity', 'LinkedRecordID'],
             OrderBy: 'EntryNumber ASC',
             MaxRows: BatchDetailPanelComponent.MEMBER_ROWS,
             ResultType: 'simple',
@@ -206,6 +244,8 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
       this.Header = header;
       this.Members = memberRes.Success ? ((memberRes.Results ?? []) as BatchMemberRow[]) : [];
       this.MemberCount = memberRes.Success ? (memberRes.TotalRowCount ?? this.Members.length) : this.Members.length;
+      // Source names: one more batched read, one query per linked entity that has a name field.
+      this.Sources = await LoadJournalEntrySources(this.ProviderToUse, this.Members);
     } catch (e) {
       this.LoadError = e instanceof Error ? e.message : String(e);
     } finally {

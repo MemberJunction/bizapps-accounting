@@ -9,7 +9,7 @@ if (existsSync(repoEnv)) dotenv.config({ path: repoEnv, quiet: true });
 if (existsSync(siblingMjEnv)) dotenv.config({ path: siblingMjEnv, quiet: true });
 process.env.MJ_INTEGRATION_TEST = '1';
 process.env.RUN_MUTATION_TESTS = process.env.RUN_MUTATION_TESTS ?? '1';
-const ALL = ['acct-world', 'acct-ledger', 'acct-batch'];
+const ALL = ['acct-world', 'acct-ledger', 'acct-batch', 'acct-isa'];
 const only = process.argv.slice(2).filter((a) => !a.startsWith('-'));
 const { bootstrapIntegrationClient } = await import('@memberjunction/testing-integration/client');
 const { Metadata } = await import('@memberjunction/core');

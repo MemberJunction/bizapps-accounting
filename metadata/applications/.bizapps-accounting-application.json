@@ -20,6 +20,13 @@
         "ResourceType": "Custom",
         "DriverClass": "BatchesResource",
         "isDefault": false
+      },
+      {
+        "Label": "Periods",
+        "Icon": "fa-solid fa-calendar-check",
+        "ResourceType": "Custom",
+        "DriverClass": "PeriodsResource",
+        "isDefault": false
       }
     ]
   },
