@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { IMetadataProvider, Metadata, RunView, RunViewParams, UserInfo } from '@memberjunction/core';
+import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { BatchOperatorCatalog } from '../../../__tests__/support/batch-operator';
 import { AccountingBatchesPageComponent, BatchItem } from './accounting-batches.component';
 import {
@@ -639,6 +640,46 @@ describe('AccountingBatchesPageComponent — Build Batch selection after Clear A
 
     await click(fixture, revRecFilter);
     expect(screen(fixture)).toMatchObject({ Including: '5 of 5 JEs', EntryTotals: 'Dr $670.00 Cr $670.00', Build: 'Build Batch (5)' });
+  });
+
+  it('bounds the preview pool by the posting date and sends only the ticked entries on Build (#402)', async () => {
+    const futureEntry: PreviewEntryWire = entry(6, 'Invoice', '2026-09-05', 999);
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockImplementation(async (options) => {
+      previewCalls.push(options ?? {});
+      const end = options?.PostingDate ?? BUSINESS_DAY;
+      const excludedTypes = new Set(options?.ExcludeEntryTypeCodes ?? []);
+      const rows = [...POOL, futureEntry].filter(
+        e => !excludedTypes.has(e.EntryTypeCode) && e.EffectiveDate.slice(0, 10) <= end,
+      );
+      const included = new Set(options?.IncludedJournalEntryIDs ?? rows.map(r => r.ID));
+      const total = rows.filter(r => included.has(r.ID)).reduce((sum, r) => sum + r.Amount, 0);
+      return {
+        Success: true,
+        Candidates: rows,
+        TotalDebits: total,
+        TotalCredits: total,
+        GrossDebits: total,
+        GrossCredits: total,
+        OutOfOrderSkipCount: outOfOrderSkipCount(rows, included),
+        BeforePostingStartCount: 0,
+        AfterPostingDateCount: 0,
+        AfterPostingDateEntries: [],
+      };
+    });
+
+    const fixture = await openModal();
+    expect(previewCalls.at(-1)?.PostingDate).toBe(BUSINESS_DAY);
+    // JE-6 (2026-09-05) is dated after the posting date (2026-08-31) and is not offered in the pool.
+    expect(fixture.componentInstance.PreviewEntries.map(c => c.ID)).toEqual(['je-1', 'je-3', 'je-5']);
+
+    // Untick JE-3 so only JE-1 and JE-5 remain ticked, then build.
+    await click(fixture, row(3));
+    await fixture.componentInstance.ExecuteBuildBatch();
+    expect(buildCalls).toHaveLength(1);
+    expect(buildCalls[0]).toMatchObject({
+      PostingDate: BUSINESS_DAY,
+      JournalEntryIDs: ['je-1', 'je-5'],
+    });
   });
 });
 
@@ -1362,5 +1403,61 @@ describe('AccountingBatchesPageComponent — Send approved batches (golive #451,
     confirm.click();
 
     await vi.waitFor(() => expect(batchReads).toBe(readsBefore + 1));
+  });
+});
+
+/**
+ * The Source column (bc-aidp-next-golive#452): each Build Batch candidate names the record that
+ * created it and opens it. The preview carries the origin pair; names come from the linked
+ * entity's name field.
+ */
+describe('AccountingBatchesPageComponent — Build Batch candidate source links (DOM)', () => {
+  useBusinessClock(AUGUST_CLOSE_IN_CHICAGO);
+  const NAMED = 'Test: Invoices';
+  const ENTITIES: Record<string, { Name: string; DisplayNameOrName: string; NameField: { Name: string } | null; PrimaryKeys: Array<{ Name: string }> }> = {
+    [NAMED]: { Name: NAMED, DisplayNameOrName: 'Invoices', NameField: { Name: 'InvoiceNumber' }, PrimaryKeys: [{ Name: 'ID' }] },
+  };
+  const LINKED: PreviewEntryWire = {
+    ID: 'aaaaaaaa-0000-4000-8000-000000000452', EntryNumber: 'JE-2026-0452', EffectiveDate: '2026-08-30T00:00:00.000Z', EntryTypeCode: 'PaymentCapture',
+    CompanyID: COMPANY_ID, Description: 'Payment PAY-074', Amount: 100, LinkedEntity: NAMED, LinkedRecordID: 'inv-1',
+  };
+  const MANUAL: PreviewEntryWire = { ...LINKED, ID: 'aaaaaaaa-0000-4000-8000-000000000453', EntryNumber: 'JE-2026-0453', LinkedEntity: null, LinkedRecordID: null };
+  const open = vi.fn();
+
+  beforeEach(async () => {
+    open.mockReset();
+    const user = new UserInfo();
+    user.ID = APPROVER_USER_ID;
+    const provider = { CurrentUser: user, Authorizations: BatchOperatorCatalog(), EntityByName: (name: string) => ENTITIES[name] };
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue(provider as unknown as IMetadataProvider);
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async () => viewResult([], 0));
+    vi.spyOn(RunView.prototype, 'RunViews').mockImplementation(async (ps: RunViewParams[]) =>
+      ps.map((p) => (p.EntityName === NAMED ? viewResult([{ ID: 'inv-1', InvoiceNumber: 'INV-0001' }]) : viewResult([], 0))));
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockResolvedValue({
+      Success: true, Candidates: [LINKED, MANUAL], TotalDebits: 200, TotalCredits: 200, GrossDebits: 200, GrossCredits: 200, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0,
+      AfterPostingDateCount: 0, AfterPostingDateEntries: [],
+    });
+    await TestBed.configureTestingModule({
+      imports: [AccountingBatchesPageComponent],
+      providers: [{ provide: MJFormPresenterService, useValue: { Open: open } }],
+    }).compileComponents();
+  });
+
+  it('shows each candidate source and opens the record', async () => {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const page = fixture.componentInstance;
+    await page.OpenBuildBatchModal();
+    await vi.waitFor(() => expect(page.SourceOf(LINKED.ID)?.RecordName).toBe('INV-0001'));
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(Array.from(el.querySelectorAll('.mja-modal-table th')).map((th) => th.textContent?.trim())).toContain('Source');
+    expect(Array.from(el.querySelectorAll('.mja-source-cell')).map((c) => c.textContent?.trim())).toEqual(['INV-0001', 'Manual']);
+
+    el.querySelector<HTMLButtonElement>('.mja-source-link')!.click();
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open.mock.calls[0][0].EntityName).toBe(NAMED);
   });
 });

@@ -13,6 +13,7 @@ import {
   mjBizAppsAccountingFinanceExceptionSchema,
   mjBizAppsAccountingGLAccountSchema,
   mjBizAppsAccountingJournalEntryBatchSchema,
+  mjBizAppsAccountingJournalEntrySchema,
 } from '@mj-biz-apps/accounting-entities';
 import { AccountingCompanyProfileEntityServer } from '../AccountingCompanyProfileEntityServer.js';
 
@@ -60,5 +61,22 @@ describe('field descriptions match the code they describe (#352)', () => {
     expect(description).not.toContain('spSeedDefaultChartOfAccounts');
     expect(description).toContain('AccountingCompanyProfileEntityServer.SeedDefaultChartOfAccounts()');
     expect(typeof AccountingCompanyProfileEntityServer.prototype.SeedDefaultChartOfAccounts).toBe('function');
+  });
+
+  it('all 8 vwJournalEntries view-only anomaly feature fields carry non-empty EntityField descriptions', () => {
+    const viewFields = [
+      'AnomalyOutcome',
+      'TotalDebitAmount',
+      'LineCount',
+      'EffectiveMonth',
+      'EffectiveDayOfWeek',
+      'IsWeekend',
+      'HasLinkedRecord',
+      'HasFile',
+    ] as const;
+    for (const field of viewFields) {
+      const description = descriptionOf(mjBizAppsAccountingJournalEntrySchema.shape[field].description);
+      expect(description.length, `${field} description should be non-empty`).toBeGreaterThan(20);
+    }
   });
 });

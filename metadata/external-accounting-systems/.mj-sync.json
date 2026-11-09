@@ -1,0 +1,12 @@
+{
+  "entity": "MJ_BizApps_Accounting: External Accounting Systems",
+  "filePattern": "**/.*.json",
+  "pull": {
+    "createNewFileIfNotFound": true,
+    "newFileName": ".external-accounting-systems.json",
+    "appendRecordsToExistingFile": true,
+    "updateExistingRecords": true,
+    "ignoreNullFields": true,
+    "ignoreVirtualFields": true
+  }
+}

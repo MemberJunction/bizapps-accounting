@@ -241,6 +241,58 @@ export class JournalEntryBatchPostingDateError extends Error {
   }
 }
 
+/**
+ * Thrown when a journal entry's lines touch GL accounts mapped to more than one external accounting
+ * system (#68). A journal entry is the double-entry balance atom, so it cannot be split across systems.
+ */
+export class MixedExternalSystemError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = 'MixedExternalSystemError';
+  }
+}
+
+/**
+ * Pure helper (#68): resolve each journal entry's external accounting system from its lines'
+ * `GLAccount.ExternalSystem` values, refusing any single entry whose lines mix different explicit
+ * systems, and grouping entries with unmapped accounts (`ExternalSystem = null`) under `defaultSystem`.
+ */
+export function partitionEntriesByExternalSystem(
+  entryIds: string[],
+  lines: ReadonlyArray<{ JournalEntryID: string; GLAccountID: string }>,
+  externalSystemByAccountId: ReadonlyMap<string, string | null | undefined>,
+  defaultSystem: JournalEntryBatchTargetSystem,
+): Map<JournalEntryBatchTargetSystem, string[]> {
+  const linesByEntry = new Map<string, Array<{ JournalEntryID: string; GLAccountID: string }>>();
+  for (const line of lines) {
+    const key = line.JournalEntryID.toLowerCase();
+    const arr = linesByEntry.get(key) ?? [];
+    arr.push(line);
+    linesByEntry.set(key, arr);
+  }
+
+  const grouped = new Map<JournalEntryBatchTargetSystem, string[]>();
+  for (const entryId of entryIds) {
+    const entryLines = linesByEntry.get(entryId.toLowerCase()) ?? [];
+    const explicitSystems = new Set<string>();
+    for (const line of entryLines) {
+      const sys = externalSystemByAccountId.get(line.GLAccountID.toLowerCase())?.trim();
+      if (sys) explicitSystems.add(sys);
+    }
+    if (explicitSystems.size > 1) {
+      const sorted = [...explicitSystems].sort();
+      throw new MixedExternalSystemError(
+        `The batch was not built: journal entry ${entryId} mixes external accounting systems across its lines (${sorted.join(', ')}); every line of a journal entry must belong to a single external system.`,
+      );
+    }
+    const resolved = (explicitSystems.size === 1 ? [...explicitSystems][0] : defaultSystem) as JournalEntryBatchTargetSystem;
+    const list = grouped.get(resolved) ?? [];
+    list.push(entryId);
+    grouped.set(resolved, list);
+  }
+  return grouped;
+}
+
 export const IN_CLAUSE_CHUNK_SIZE = 500;
 
 /** Split `items` into chunks of at most `size` so SQL `IN (...)` clauses and `RunView` row caps stay bounded (#488). */
@@ -713,7 +765,13 @@ export async function buildJournalEntryBatchFromExplicitIds(
   }
   const results: BuildJournalEntryBatchResult[] = [];
   for (const [companyId, ids] of byCompany) {
-    results.push(await buildJournalEntryBatchCore(companyId, ids, targetSystem, batchedByUserId, contextUser, provider, gate, postingDate));
+    const postingDay = await loadPostingDay(postingDate, contextUser, p.md, companyId);
+    await assertPostingDayOpen(companyId, postingDay, contextUser, p);
+    await assertPostingDayCoversMembers(ids, postingDay, contextUser, p);
+    const bySystem = await groupCompanyEntriesByExternalSystem(ids, targetSystem, contextUser, p);
+    for (const [resolvedSystem, systemIds] of bySystem) {
+      results.push(await buildJournalEntryBatchCore(companyId, systemIds, resolvedSystem, batchedByUserId, contextUser, provider, gate, postingDate));
+    }
   }
   return results;
 }
@@ -867,15 +925,66 @@ async function loadPendingJEIds(companyId: string, contextUser: UserInfo, p: Pro
   return (res.Results ?? []).map(r => r.ID);
 }
 
-async function loadNettableLines(companyId: string, jeIds: string[], contextUser: UserInfo, p: Providers): Promise<NettableLine[]> {
-  const lines: Array<{ ID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }> = [];
+async function groupCompanyEntriesByExternalSystem(
+  jeIds: string[],
+  defaultSystem: JournalEntryBatchTargetSystem,
+  contextUser: UserInfo,
+  p: Providers,
+): Promise<Map<JournalEntryBatchTargetSystem, string[]>> {
+  if (jeIds.length === 0) return new Map([[defaultSystem, []]]);
+  const lines: Array<{ ID: string; JournalEntryID: string; GLAccountID: string }> = [];
   for (const chunk of chunkArray(jeIds)) {
     const inList = chunk.map(id => `'${id}'`).join(',');
-    const lineRes = await p.rv.RunView<{ ID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>(
-      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${inList})`, Fields: ['ID', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+    const lineRes = await p.rv.RunView<{ ID: string; JournalEntryID: string; GLAccountID: string }>(
+      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${inList})`, Fields: ['ID', 'JournalEntryID', 'GLAccountID'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
       contextUser,
     );
     lines.push(...(lineRes.Results ?? []));
+  }
+  if (lines.length === 0 || lines.some(l => !l.JournalEntryID)) {
+    return new Map([[defaultSystem, jeIds]]);
+  }
+  const externalSystemByAccountId = await loadExternalSystemByAccountId(lines.map(l => l.GLAccountID), contextUser, p);
+  return partitionEntriesByExternalSystem(jeIds, lines, externalSystemByAccountId, defaultSystem);
+}
+
+/** Each GL account's `ExternalSystem`, keyed by lower-cased account ID (#68). */
+async function loadExternalSystemByAccountId(accountIds: string[], contextUser: UserInfo, p: Providers): Promise<Map<string, string | null>> {
+  const externalSystemByAccountId = new Map<string, string | null>();
+  const glIds = [...new Set(accountIds.filter(Boolean))];
+  for (const chunk of chunkArray(glIds)) {
+    const glRes = await p.rv.RunView<{ ID: string; ExternalSystem: string | null }>(
+      { EntityName: GL_ENTITY, ExtraFilter: `ID IN (${chunk.map(id => `'${id}'`).join(',')})`, Fields: ['ID', 'ExternalSystem'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+      contextUser,
+    );
+    for (const acc of glRes.Results ?? []) {
+      externalSystemByAccountId.set(acc.ID.toLowerCase(), acc.ExternalSystem ?? null);
+    }
+  }
+  return externalSystemByAccountId;
+}
+
+async function loadNettableLines(companyId: string, jeIds: string[], contextUser: UserInfo, p: Providers): Promise<NettableLine[]> {
+  const lines: Array<{ ID: string; JournalEntryID?: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }> = [];
+  for (const chunk of chunkArray(jeIds)) {
+    const inList = chunk.map(id => `'${id}'`).join(',');
+    const lineRes = await p.rv.RunView<{ ID: string; JournalEntryID?: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>(
+      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${inList})`, Fields: ['ID', 'JournalEntryID', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+      contextUser,
+    );
+    lines.push(...(lineRes.Results ?? []));
+  }
+  if (lines.length > 0 && lines.every(l => !!l.JournalEntryID)) {
+    // Refuses an entry whose lines mix external systems (#68); the grouping itself is not needed here.
+    const externalSystemByAccountId = await loadExternalSystemByAccountId(lines.map(l => l.GLAccountID), contextUser, p);
+    if (externalSystemByAccountId.size > 0) {
+      partitionEntriesByExternalSystem(
+        jeIds,
+        lines as Array<{ JournalEntryID: string; GLAccountID: string }>,
+        externalSystemByAccountId,
+        'BusinessCentral',
+      );
+    }
   }
   const dimsByLine = await loadDimensionsByLine(lines.map(l => l.ID), contextUser, p);
   // The line's company IS the parent JE's header company (single-company JE, D3; trigger 50019
@@ -1095,8 +1204,9 @@ function unique(ids: string[]): string[] {
 /** Lock the member JEs: Status → Batched with JournalEntryBatchID (CK_JournalEntry_BatchedHasJournalEntryBatch + the immutability triggers). */
 async function lockJournalEntries(jeIds: string[], batchId: string, contextUser: UserInfo, p: Providers): Promise<void> {
   for (const jeId of jeIds) {
-    const je = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
-    await je.Load(jeId);
+    const je = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity & { LoadHeader?: (id: string) => Promise<boolean> }>(JE_ENTITY, contextUser);
+    if (typeof je.LoadHeader === 'function') await je.LoadHeader(jeId);
+    else await je.Load(jeId);
     je.JournalEntryBatchID = batchId;
     je.Status = 'Batched';
     if (!(await je.Save())) throw new Error(`The batch was not built: journal entry ${jeId} could not be locked into it: ${je.LatestResult?.CompleteMessage ?? 'unknown error'}`);
@@ -1864,8 +1974,9 @@ async function markJournalEntriesGLPosted(batch: mjBizAppsAccountingJournalEntry
   if (!res.Success) throw new Error(`Could not load the journal entries of batch ${batch.ID} to mark them posted: ${res.ErrorMessage ?? 'unknown error'}`);
   const rows = res.Results ?? [];
   for (const row of rows) {
-    const je = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
-    if (!(await je.Load(row.ID))) throw new Error(`Journal entry ${row.ID} was not found while marking the batch's entries posted.`);
+    const je = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity & { LoadHeader?: (id: string) => Promise<boolean> }>(JE_ENTITY, contextUser);
+    const loaded = typeof je.LoadHeader === 'function' ? await je.LoadHeader(row.ID) : await je.Load(row.ID);
+    if (!loaded) throw new Error(`Journal entry ${row.ID} was not found while marking the batch's entries posted.`);
     je.Status = 'GLPosted';
     je.GLPostedAt = batch.PostedAt ?? new Date();
     if (batch.ExternalJournalEntryBatchRef) je.GLReferenceID = batch.ExternalJournalEntryBatchRef;

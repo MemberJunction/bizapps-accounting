@@ -684,8 +684,11 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     if (this._summary !== undefined && !forceRefresh) return this._summary;
     if (!this.SummaryJournalEntryID) { this._summary = null; return null; }
     const md = this.ProviderToUse as unknown as IMetadataProvider;
-    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser ?? this.ContextCurrentUser);
-    this._summary = (await je.Load(this.SummaryJournalEntryID)) ? je : null;
+    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity & { LoadHeader?: (id: string) => Promise<boolean> }>(JE_ENTITY, contextUser ?? this.ContextCurrentUser);
+    const loaded = typeof je.LoadHeader === 'function'
+      ? await je.LoadHeader(this.SummaryJournalEntryID)
+      : await je.Load(this.SummaryJournalEntryID);
+    this._summary = loaded ? je : null;
     return this._summary;
   }
 
@@ -1076,8 +1079,9 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     );
     if (!res.Success) throw new Error(`Could not release the batch's entries: loading them failed: ${res.ErrorMessage ?? 'unknown error'}`);
     for (const row of res.Results ?? []) {
-      const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
-      await je.Load(row.ID);
+      const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity & { LoadHeader?: (id: string) => Promise<boolean> }>(JE_ENTITY, user);
+      if (typeof je.LoadHeader === 'function') await je.LoadHeader(row.ID);
+      else await je.Load(row.ID);
       je.Status = 'Pending';
       je.JournalEntryBatchID = null;
       if (!(await je.Save())) throw new Error(`Could not release the batch's entries: journal entry ${row.ID} could not be set back to Pending: ${je.LatestResult?.CompleteMessage ?? 'unknown error'}`);
@@ -1095,8 +1099,9 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     for (const line of lineRes.Results ?? []) {
       if (!(await line.Delete())) throw new Error(`Could not delete the batch's summary entry: deleting line ${line.ID} failed: ${line.LatestResult?.CompleteMessage ?? 'unknown error'}`);
     }
-    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
-    if (!(await je.Load(summaryId))) throw new Error(`Could not delete the batch's summary entry: entry ${summaryId} was not found.`);
+    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity & { LoadHeader?: (id: string) => Promise<boolean> }>(JE_ENTITY, user);
+    const loaded = typeof je.LoadHeader === 'function' ? await je.LoadHeader(summaryId) : await je.Load(summaryId);
+    if (!loaded) throw new Error(`Could not delete the batch's summary entry: entry ${summaryId} was not found.`);
     if (!(await je.Delete())) throw new Error(`Could not delete the batch's summary entry: ${je.LatestResult?.CompleteMessage ?? 'unknown error'}`);
   }
 

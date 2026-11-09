@@ -25,7 +25,12 @@ import { CheckExternalFieldLength, ExternalFieldLimitEngine, type ExternalFieldT
 import { AccountingEngine } from '../AccountingEngine.js';
 import { AccountingERPEngine, ERP_POSTING_NOT_READ_BACK, namesMatch } from '../AccountingERPEngine.js';
 import { FINANCE_EXCEPTION_TYPE_ENTITY } from '../FinanceExceptions.js';
-import { BaseAccountingERPProvider } from '../BaseAccountingERPProvider.js';
+import {
+  BaseAccountingERPProvider,
+  BUSINESS_CENTRAL_ERP_PROVIDER_NAME,
+  QUICKBOOKS_ONLINE_ERP_PROVIDER_NAME,
+  ERP_PROVIDER_KEYS,
+} from '../BaseAccountingERPProvider.js';
 import type { AccountingVerbResult } from '../AccountingVerbRunner.js';
 import type { ErpPostResult } from '../JournalEntryBatchEngine.js';
 
@@ -513,19 +518,41 @@ describe('AccountingERPEngine.PostJournalBatch', () => {
 });
 
 describe('BaseAccountingERPProvider plugins', () => {
-  it('resolves QuickBooks Online and Business Central keys', () => {
+  it('resolves QuickBooks Online and Business Central keys from the exported constants (#420)', () => {
+    expect(ERP_PROVIDER_KEYS).toEqual([BUSINESS_CENTRAL_ERP_PROVIDER_NAME, QUICKBOOKS_ONLINE_ERP_PROVIDER_NAME]);
     const qbo = MJGlobal.Instance.ClassFactory.TryCreateInstance<BaseAccountingERPProvider>(
       BaseAccountingERPProvider,
-      'QuickBooks Online',
+      QUICKBOOKS_ONLINE_ERP_PROVIDER_NAME,
       async () => ({ Success: true, ResultCode: 'SUCCESS' }),
     );
     const bc = MJGlobal.Instance.ClassFactory.TryCreateInstance<BaseAccountingERPProvider>(
       BaseAccountingERPProvider,
-      'Microsoft Dynamics 365 Business Central',
+      BUSINESS_CENTRAL_ERP_PROVIDER_NAME,
       async () => ({ Success: true, ResultCode: 'SUCCESS' }),
     );
     expect(qbo.Resolved).toBe(true);
     expect(bc.Resolved).toBe(true);
+  });
+
+  it('passes ERPJournalCode from the company profile to CreateJournalEntry as JournalCode (#399)', async () => {
+    const runVerb = vi.fn(async (_call: { Verb: string; Params: Record<string, unknown> }) => ({
+      Success: true,
+      ResultCode: 'SUCCESS',
+      Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }],
+    }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+    const p = providerWith({
+      ...taggedViewsWithCodes(),
+      'MJ_BizApps_Accounting: Accounting Company Profiles': [{ ID: COMPANY, ERPJournalCode: 'GENJNL-AUTO' }],
+    });
+
+    const result = await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, p);
+
+    expect(result.success).toBe(true);
+    const createCall = runVerb.mock.calls.find(
+      (c) => c[0].Verb === 'CreateJournalEntry',
+    )?.[0];
+    expect(createCall?.Params.JournalCode).toBe('GENJNL-AUTO');
   });
 });
 
@@ -1340,6 +1367,26 @@ describe('Business Central renumbering a posting', () => {
 
       expect(result).toEqual({ status: 'NotFound' });
     });
+
+    it('stamps ERPPostUnconfirmedAt on the batch before raising, and refuses an automatic retry while that flag is set even after a restart (#414)', async () => {
+      const batch = taggedBatch() as Record<string, unknown>;
+      const raise = vi.fn(async () => { throw new Error('connection lost'); });
+      AccountingERPEngine.Instance.UseSeams({ runVerb: readbackFailingVerb(), raiseFinanceExceptions: raise as never });
+      await AccountingERPEngine.Instance.PostJournalBatch(batch as never, taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+      expect(batch.ERPPostUnconfirmedAt).toBeInstanceOf(Date);
+
+      // Simulate a process restart (UseSeams clears in-memory unraisedUnreadPostings) while the batch flag remains set.
+      AccountingERPEngine.Instance.UseSeams({
+        runVerb: vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'GLEntries', Value: [], Type: 'Output' }] })),
+      });
+      const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(batch as never, taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+      expect(result).toEqual({
+        status: 'Unavailable',
+        reason: expect.stringMatching(/has ERPPostUnconfirmedAt set \(#414\)/),
+      });
+    });
   });
 });
 
@@ -1384,7 +1431,7 @@ describe('AccountingERPEngine against the real entity-map schema', () => {
     vi.spyOn(AccountingEngine.Instance, 'Config').mockResolvedValue();
   });
 
-  it('finds entity maps by Status and SyncEnabled, so a configured sync actually runs', async () => {
+  it('loads entity maps by CompanyIntegrationID without IsActive, and fails when all maps for the requested objects are disabled (#425)', async () => {
     const syncCalls: string[][] = [];
     AccountingERPEngine.Instance.UseSeams({ runSync: async (_id, _u, mapIds) => { syncCalls.push(mapIds); return { Success: true }; } });
     const filters: string[] = [];
@@ -1401,11 +1448,23 @@ describe('AccountingERPEngine against the real entity-map schema', () => {
     const out = await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['accounts'] }, user, p);
 
     expect(filters).toHaveLength(1);
-    expect(filters[0]).toContain("Status = 'Active'");
-    expect(filters[0]).toContain('SyncEnabled = 1');
     expect(filters[0]).not.toMatch(/IsActive/);
     expect(syncCalls).toEqual([['map-1']]);
     expect(out.Results[0]?.Message ?? '').not.toMatch(/No entity maps/);
+
+    const disabledProvider = providerWithMapSchema({
+      'MJ: Company Integrations': [
+        { ID: CI, CompanyID: COMPANY, IntegrationID: 'int-1', Integration: 'business-central', IsActive: true },
+      ],
+      'MJ: Company Integration Entity Maps': [
+        { ID: 'map-disabled', CompanyIntegrationID: CI, Entity: 'MJ_BizApps_Accounting: GL Accounts', Status: 'Active', SyncEnabled: false },
+      ],
+      'MJ_BizApps_Accounting: Accounting Engine Extensions': [],
+    }, filters);
+    const disabledOut = await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['accounts'] }, user, disabledProvider);
+    expect(disabledOut.Success).toBe(false);
+    expect(disabledOut.Results[0]?.Skipped).toBeUndefined();
+    expect(disabledOut.Results[0]?.Message).toMatch(/map-disabled.*Status=Active, SyncEnabled=false/);
   });
 
   it('posts through the Business Central provider when the Integration is named business-central', async () => {
@@ -1780,7 +1839,7 @@ describe('AccountingERPEngine.SyncMasterData — shared master data merges on Co
     expect(synced).toEqual([['map-gl', 'map-dim', 'map-val']]);
   });
 
-  it('fails the connection before pulling anything when the Dimensions map has no Code key', async () => {
+  it('still syncs valid maps (GL accounts and Dimension Values) while failing the connection when the Dimensions map has no Code key (#424)', async () => {
     const synced: string[][] = [];
     AccountingERPEngine.Instance.UseSeams({ runSync: async (_id, _u, mapIds) => { synced.push(mapIds); return { Success: true }; } });
     const p = providerWith(viewsWith([
@@ -1790,7 +1849,7 @@ describe('AccountingERPEngine.SyncMasterData — shared master data merges on Co
 
     const out = await AccountingERPEngine.Instance.SyncMasterData({}, user, p);
 
-    expect(synced).toEqual([]);
+    expect(synced).toEqual([['map-gl', 'map-val']]);
     expect(out.Success).toBe(false);
     expect(out.Results[0].Success).toBe(false);
     expect(out.Results[0].Message).toMatch(/Entity map map-dim for MJ_BizApps_Accounting: Dimensions must match on key fields Code/);

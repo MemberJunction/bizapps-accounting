@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MJGlobal } from '@memberjunction/global';
+import { IMetadataProvider, Metadata } from '@memberjunction/core';
 import { BaseAction } from '@memberjunction/actions';
 import { ActionResultSimple, RunActionParams } from '@memberjunction/actions-base';
 import { ACCOUNTING_VERBS, ERP_INTEGRATION, erpPluginKey } from '@memberjunction/actions-bizapps-accounting';
@@ -90,6 +91,7 @@ describe('CreateBusinessCentralJournalEntryWithDimensionsAction', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue({} as IMetadataProvider);
     action = new CreateBusinessCentralJournalEntryWithDimensionsAction();
   });
 
@@ -231,6 +233,7 @@ describe('CreateBusinessCentralJournalEntryWithDimensionsAction — posting date
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue({} as IMetadataProvider);
     engine._configurations = [
       { FeatureKey: 'BizApps.BusinessTimeZone', Value: '{"iana":"America/Chicago","sql":"Central Standard Time"}', DefaultValue: '{"iana":"UTC","sql":"UTC"}' },
     ];
@@ -265,5 +268,16 @@ describe('CreateBusinessCentralJournalEntryWithDimensionsAction — posting date
     await run(action, inputs({ CompanyID: 'comp-1', EntryDate: '2026-10-01', Lines: TAGGED_LINES }));
 
     expect(postingDates(spy)).toEqual(['2026-10-01', '2026-10-01']);
+  });
+
+  it('refuses to resolve today\'s business day when the server has no metadata provider loaded (#428)', async () => {
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue(null as unknown as IMetadataProvider);
+    const action = new CreateBusinessCentralJournalEntryWithDimensionsAction();
+    stubBC(action);
+
+    const result = await run(action, inputs({ CompanyID: 'comp-1', Lines: TAGGED_LINES }));
+
+    expect(result.Success).toBe(false);
+    expect(result.Message).toBe('The Business Central journal entry could not be created: the server has no metadata provider loaded.');
   });
 });

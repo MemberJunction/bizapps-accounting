@@ -157,6 +157,11 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Display Name: Books Closed Through Date
         * * SQL Data Type: date
         * * Description: The last day of the latest month finance has closed for this company. A journal entry batch, progress measurement or correction dated on or before it is in a closed month. NULL means nothing is closed. Set by finance when a close finishes; moving it back reopens a month.`),
+    ERPJournalCode: z.string().nullable().describe(`
+        * * Field Name: ERPJournalCode
+        * * Display Name: ERP Journal Code
+        * * SQL Data Type: nvarchar(50)
+        * * Description: General journal batch / section code in the external ERP (e.g. Business Central journal code such as DEFAULT or GENERAL) into which this company posts journal entry batches. NULL uses the ERP provider default (DEFAULT).`),
     Name: z.string().describe(`
         * * Field Name: Name
         * * Display Name: Company Name
@@ -1491,35 +1496,43 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
     AnomalyOutcome: z.string().describe(`
         * * Field Name: AnomalyOutcome
         * * Display Name: Anomaly Outcome
-        * * SQL Data Type: varchar(9)`),
+        * * SQL Data Type: varchar(9)
+        * * Description: Label derived from Status for anomaly models: Voided for Voided entries, Reversed when another entry points at this one as ReversedFromJournalEntryID, Normal for Posted entries with no reversal, NULL while Draft/Submitted/PendingApproval/Approved/Rejected.`),
     TotalDebitAmount: z.number().describe(`
         * * Field Name: TotalDebitAmount
         * * Display Name: Total Debit Amount
-        * * SQL Data Type: decimal(38, 2)`),
+        * * SQL Data Type: decimal(38, 2)
+        * * Description: Sum of FunctionalDebitAmount across all JournalEntryLine rows on this entry, in the company functional currency. Zero when the entry has no lines.`),
     LineCount: z.number().describe(`
         * * Field Name: LineCount
         * * Display Name: Line Count
-        * * SQL Data Type: int`),
+        * * SQL Data Type: int
+        * * Description: Total number of JournalEntryLine rows attached to this entry.`),
     EffectiveMonth: z.number().nullable().describe(`
         * * Field Name: EffectiveMonth
         * * Display Name: Effective Month
-        * * SQL Data Type: int`),
+        * * SQL Data Type: int
+        * * Description: Calendar month of EffectiveDate (1 = January through 12 = December), exposed for seasonal anomaly features.`),
     EffectiveDayOfWeek: z.number().nullable().describe(`
         * * Field Name: EffectiveDayOfWeek
         * * Display Name: Effective Day Of Week
-        * * SQL Data Type: int`),
+        * * SQL Data Type: int
+        * * Description: ISO day-of-week of EffectiveDate (1 = Monday through 7 = Sunday), independent of session DATEFIRST.`),
     IsWeekend: z.number().describe(`
         * * Field Name: IsWeekend
         * * Display Name: Is Weekend
-        * * SQL Data Type: int`),
+        * * SQL Data Type: int
+        * * Description: True when EffectiveDate falls on Saturday or Sunday (ISO day-of-week 6 or 7).`),
     HasLinkedRecord: z.number().describe(`
         * * Field Name: HasLinkedRecord
         * * Display Name: Has Linked Record
-        * * SQL Data Type: int`),
+        * * SQL Data Type: int
+        * * Description: True when LinkedEntityID and LinkedRecordID are both populated, indicating the entry originated from a source business document rather than a standalone manual journal.`),
     HasFile: z.number().describe(`
         * * Field Name: HasFile
         * * Display Name: Has File
-        * * SQL Data Type: int`),
+        * * SQL Data Type: int
+        * * Description: True when FileID is populated (supporting attachment present on the entry header).`),
 });
 
 export type mjBizAppsAccountingJournalEntryEntityType = z.infer<typeof mjBizAppsAccountingJournalEntrySchema>;
@@ -1768,6 +1781,11 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Display Name: Seal Mismatch Detected At
         * * SQL Data Type: datetimeoffset
         * * Description: When a retry of this Failed batch found its journal already in the ERP and recorded it Posted, with no second post, although the batch no longer matched its approved-content seal (a summary line's dimension tags changed after approval). The local tags then differ from what the ERP holds; review them. NULL when the seal matched or the batch was never adopted this way.`),
+    ERPPostUnconfirmedAt: z.date().nullable().describe(`
+        * * Field Name: ERPPostUnconfirmedAt
+        * * Display Name: ERP Post Unconfirmed At
+        * * SQL Data Type: datetimeoffset
+        * * Description: Set when the batch was dispatched to the external ERP and the post call failed or became indeterminate AFTER journal lines were created in the ERP. Blocks automated retry until finance reconciles the ERP journal and either marks the batch Posted or clears the unconfirmed lines and cancels.`),
     Company: z.string().describe(`
         * * Field Name: Company
         * * Display Name: Company
@@ -2321,18 +2339,12 @@ export const mjBizAppsAccountingTaxRateSchema = z.object({
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Jurisdictions (vwTaxJurisdictions.ID)
         * * Description: Jurisdiction this rate applies to.`),
-    TaxCategory: z.union([z.literal('Custom'), z.literal('Exempt'), z.literal('Reduced'), z.literal('Standard'), z.literal('Zero')]).describe(`
+    TaxCategory: z.string().describe(`
         * * Field Name: TaxCategory
         * * Display Name: Tax Category
         * * SQL Data Type: nvarchar(50)
-    * * Value List Type: List
-    * * Possible Values 
-    *   * Custom
-    *   * Exempt
-    *   * Reduced
-    *   * Standard
-    *   * Zero
-        * * Description: Tax category: Standard | Reduced | Zero | Exempt | Custom.`),
+        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Categories (vwTaxCategories.Code)
+        * * Description: Tax category code referencing TaxCategory.Code (e.g. Standard, Reduced, Zero, Exempt, OutOfScope, Publications, Groceries, DigitalGoods).`),
     Rate: z.number().describe(`
         * * Field Name: Rate
         * * Display Name: Rate
@@ -2371,6 +2383,90 @@ export const mjBizAppsAccountingTaxRateSchema = z.object({
 });
 
 export type mjBizAppsAccountingTaxRateEntityType = z.infer<typeof mjBizAppsAccountingTaxRateSchema>;
+
+/**
+ * zod schema definition for the entity MJ_BizApps_Accounting: Tax Categories
+ */
+export const mjBizAppsAccountingTaxCategorySchema = z.object({
+    Code: z.string().describe(`
+        * * Field Name: Code
+        * * Display Name: Code
+        * * SQL Data Type: nvarchar(50)
+        * * Description: Stable machine code (primary key) for the tax category.`),
+    Name: z.string().describe(`
+        * * Field Name: Name
+        * * Display Name: Name
+        * * SQL Data Type: nvarchar(100)
+        * * Description: Human-readable display name for the tax category.`),
+    Description: z.string().nullable().describe(`
+        * * Field Name: Description
+        * * Display Name: Description
+        * * SQL Data Type: nvarchar(500)
+        * * Description: Guidance on which goods or services qualify for this tax category.`),
+    IsActive: z.boolean().describe(`
+        * * Field Name: IsActive
+        * * Display Name: Is Active
+        * * SQL Data Type: bit
+        * * Default Value: 1
+        * * Description: Whether this tax category is active for new tax rate definitions.`),
+    __mj_CreatedAt: z.date().describe(`
+        * * Field Name: __mj_CreatedAt
+        * * Display Name: Created At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+    __mj_UpdatedAt: z.date().describe(`
+        * * Field Name: __mj_UpdatedAt
+        * * Display Name: Updated At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+});
+
+export type mjBizAppsAccountingTaxCategoryEntityType = z.infer<typeof mjBizAppsAccountingTaxCategorySchema>;
+
+/**
+ * zod schema definition for the entity MJ_BizApps_Accounting: External Accounting Systems
+ */
+export const mjBizAppsAccountingExternalAccountingSystemSchema = z.object({
+    Code: z.string().describe(`
+        * * Field Name: Code
+        * * Display Name: Code
+        * * SQL Data Type: nvarchar(50)
+        * * Description: Stable machine code (primary key) for the external accounting system.`),
+    Name: z.string().describe(`
+        * * Field Name: Name
+        * * Display Name: Name
+        * * SQL Data Type: nvarchar(100)
+        * * Description: Human-readable display name for the external accounting system.`),
+    Description: z.string().nullable().describe(`
+        * * Field Name: Description
+        * * Display Name: Description
+        * * SQL Data Type: nvarchar(500)
+        * * Description: Details about the external accounting system integration.`),
+    IsDefault: z.boolean().describe(`
+        * * Field Name: IsDefault
+        * * Display Name: Is Default
+        * * SQL Data Type: bit
+        * * Default Value: 0
+        * * Description: Whether this system is the default target when an account has no explicit ExternalSystem set. At most one row may have IsDefault = 1.`),
+    IsActive: z.boolean().describe(`
+        * * Field Name: IsActive
+        * * Display Name: Is Active
+        * * SQL Data Type: bit
+        * * Default Value: 1
+        * * Description: Whether this external accounting system is active.`),
+    __mj_CreatedAt: z.date().describe(`
+        * * Field Name: __mj_CreatedAt
+        * * Display Name: Created At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+    __mj_UpdatedAt: z.date().describe(`
+        * * Field Name: __mj_UpdatedAt
+        * * Display Name: Updated At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+});
+
+export type mjBizAppsAccountingExternalAccountingSystemEntityType = z.infer<typeof mjBizAppsAccountingExternalAccountingSystemSchema>;
  
  
 
@@ -2813,6 +2909,19 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     }
     set BooksClosedThroughDate(value: Date | null) {
         this.Set('BooksClosedThroughDate', value);
+    }
+
+    /**
+    * * Field Name: ERPJournalCode
+    * * Display Name: ERP Journal Code
+    * * SQL Data Type: nvarchar(50)
+    * * Description: General journal batch / section code in the external ERP (e.g. Business Central journal code such as DEFAULT or GENERAL) into which this company posts journal entry batches. NULL uses the ERP provider default (DEFAULT).
+    */
+    get ERPJournalCode(): string | null {
+        return this.Get('ERPJournalCode');
+    }
+    set ERPJournalCode(value: string | null) {
+        this.Set('ERPJournalCode', value);
     }
 
     /**
@@ -6748,6 +6857,7 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Field Name: AnomalyOutcome
     * * Display Name: Anomaly Outcome
     * * SQL Data Type: varchar(9)
+    * * Description: Label derived from Status for anomaly models: Voided for Voided entries, Reversed when another entry points at this one as ReversedFromJournalEntryID, Normal for Posted entries with no reversal, NULL while Draft/Submitted/PendingApproval/Approved/Rejected.
     */
     get AnomalyOutcome(): string {
         return this.Get('AnomalyOutcome');
@@ -6757,6 +6867,7 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Field Name: TotalDebitAmount
     * * Display Name: Total Debit Amount
     * * SQL Data Type: decimal(38, 2)
+    * * Description: Sum of FunctionalDebitAmount across all JournalEntryLine rows on this entry, in the company functional currency. Zero when the entry has no lines.
     */
     get TotalDebitAmount(): number {
         return this.Get('TotalDebitAmount');
@@ -6766,6 +6877,7 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Field Name: LineCount
     * * Display Name: Line Count
     * * SQL Data Type: int
+    * * Description: Total number of JournalEntryLine rows attached to this entry.
     */
     get LineCount(): number {
         return this.Get('LineCount');
@@ -6775,6 +6887,7 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Field Name: EffectiveMonth
     * * Display Name: Effective Month
     * * SQL Data Type: int
+    * * Description: Calendar month of EffectiveDate (1 = January through 12 = December), exposed for seasonal anomaly features.
     */
     get EffectiveMonth(): number | null {
         return this.Get('EffectiveMonth');
@@ -6784,6 +6897,7 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Field Name: EffectiveDayOfWeek
     * * Display Name: Effective Day Of Week
     * * SQL Data Type: int
+    * * Description: ISO day-of-week of EffectiveDate (1 = Monday through 7 = Sunday), independent of session DATEFIRST.
     */
     get EffectiveDayOfWeek(): number | null {
         return this.Get('EffectiveDayOfWeek');
@@ -6793,6 +6907,7 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Field Name: IsWeekend
     * * Display Name: Is Weekend
     * * SQL Data Type: int
+    * * Description: True when EffectiveDate falls on Saturday or Sunday (ISO day-of-week 6 or 7).
     */
     get IsWeekend(): number {
         return this.Get('IsWeekend');
@@ -6802,6 +6917,7 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Field Name: HasLinkedRecord
     * * Display Name: Has Linked Record
     * * SQL Data Type: int
+    * * Description: True when LinkedEntityID and LinkedRecordID are both populated, indicating the entry originated from a source business document rather than a standalone manual journal.
     */
     get HasLinkedRecord(): number {
         return this.Get('HasLinkedRecord');
@@ -6811,6 +6927,7 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Field Name: HasFile
     * * Display Name: Has File
     * * SQL Data Type: int
+    * * Description: True when FileID is populated (supporting attachment present on the entry header).
     */
     get HasFile(): number {
         return this.Get('HasFile');
@@ -7654,6 +7771,19 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     }
     set SealMismatchDetectedAt(value: Date | null) {
         this.Set('SealMismatchDetectedAt', value);
+    }
+
+    /**
+    * * Field Name: ERPPostUnconfirmedAt
+    * * Display Name: ERP Post Unconfirmed At
+    * * SQL Data Type: datetimeoffset
+    * * Description: Set when the batch was dispatched to the external ERP and the post call failed or became indeterminate AFTER journal lines were created in the ERP. Blocks automated retry until finance reconciles the ERP journal and either marks the batch Posted or clears the unconfirmed lines and cancels.
+    */
+    get ERPPostUnconfirmedAt(): Date | null {
+        return this.Get('ERPPostUnconfirmedAt');
+    }
+    set ERPPostUnconfirmedAt(value: Date | null) {
+        this.Set('ERPPostUnconfirmedAt', value);
     }
 
     /**
@@ -9332,19 +9462,13 @@ export class mjBizAppsAccountingTaxRateEntity extends BaseEntity<mjBizAppsAccoun
     * * Field Name: TaxCategory
     * * Display Name: Tax Category
     * * SQL Data Type: nvarchar(50)
-    * * Value List Type: List
-    * * Possible Values 
-    *   * Custom
-    *   * Exempt
-    *   * Reduced
-    *   * Standard
-    *   * Zero
-    * * Description: Tax category: Standard | Reduced | Zero | Exempt | Custom.
+    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Categories (vwTaxCategories.Code)
+    * * Description: Tax category code referencing TaxCategory.Code (e.g. Standard, Reduced, Zero, Exempt, OutOfScope, Publications, Groceries, DigitalGoods).
     */
-    get TaxCategory(): 'Custom' | 'Exempt' | 'Reduced' | 'Standard' | 'Zero' {
+    get TaxCategory(): string {
         return this.Get('TaxCategory');
     }
-    set TaxCategory(value: 'Custom' | 'Exempt' | 'Reduced' | 'Standard' | 'Zero') {
+    set TaxCategory(value: string) {
         this.Set('TaxCategory', value);
     }
 
@@ -9428,5 +9552,229 @@ export class mjBizAppsAccountingTaxRateEntity extends BaseEntity<mjBizAppsAccoun
     */
     get TaxJurisdiction(): string {
         return this.Get('TaxJurisdiction');
+    }
+}
+
+
+/**
+ * MJ_BizApps_Accounting: Tax Categories - strongly typed entity sub-class
+ * * Schema: __mj_BizAppsAccounting
+ * * Base Table: TaxCategory
+ * * Base View: vwTaxCategories
+ * * @description Lookup table of tax rate categories referenced by TaxRate.TaxCategory.
+ * * Primary Key: Code
+ * @extends {BaseEntity}
+ * @class
+ * @public
+ */
+@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Tax Categories')
+export class mjBizAppsAccountingTaxCategoryEntity extends BaseEntity<mjBizAppsAccountingTaxCategoryEntityType> {
+    /**
+    * Loads the MJ_BizApps_Accounting: Tax Categories record from the database
+    * @param Code: string - primary key value to load the MJ_BizApps_Accounting: Tax Categories record.
+    * @param EntityRelationshipsToLoad - (optional) the relationships to load
+    * @returns {Promise<boolean>} - true if successful, false otherwise
+    * @public
+    * @async
+    * @memberof mjBizAppsAccountingTaxCategoryEntity
+    * @method
+    * @override
+    */
+    public async Load(Code: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
+        const compositeKey: CompositeKey = new CompositeKey();
+        compositeKey.KeyValuePairs.push({ FieldName: 'Code', Value: Code });
+        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
+    }
+
+    /**
+    * * Field Name: Code
+    * * Display Name: Code
+    * * SQL Data Type: nvarchar(50)
+    * * Description: Stable machine code (primary key) for the tax category.
+    */
+    get Code(): string {
+        return this.Get('Code');
+    }
+    set Code(value: string) {
+        this.Set('Code', value);
+    }
+
+    /**
+    * * Field Name: Name
+    * * Display Name: Name
+    * * SQL Data Type: nvarchar(100)
+    * * Description: Human-readable display name for the tax category.
+    */
+    get Name(): string {
+        return this.Get('Name');
+    }
+    set Name(value: string) {
+        this.Set('Name', value);
+    }
+
+    /**
+    * * Field Name: Description
+    * * Display Name: Description
+    * * SQL Data Type: nvarchar(500)
+    * * Description: Guidance on which goods or services qualify for this tax category.
+    */
+    get Description(): string | null {
+        return this.Get('Description');
+    }
+    set Description(value: string | null) {
+        this.Set('Description', value);
+    }
+
+    /**
+    * * Field Name: IsActive
+    * * Display Name: Is Active
+    * * SQL Data Type: bit
+    * * Default Value: 1
+    * * Description: Whether this tax category is active for new tax rate definitions.
+    */
+    get IsActive(): boolean {
+        return this.Get('IsActive');
+    }
+    set IsActive(value: boolean) {
+        this.Set('IsActive', value);
+    }
+
+    /**
+    * * Field Name: __mj_CreatedAt
+    * * Display Name: Created At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_CreatedAt(): Date {
+        return this.Get('__mj_CreatedAt');
+    }
+
+    /**
+    * * Field Name: __mj_UpdatedAt
+    * * Display Name: Updated At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_UpdatedAt(): Date {
+        return this.Get('__mj_UpdatedAt');
+    }
+}
+
+
+/**
+ * MJ_BizApps_Accounting: External Accounting Systems - strongly typed entity sub-class
+ * * Schema: __mj_BizAppsAccounting
+ * * Base Table: ExternalAccountingSystem
+ * * Base View: vwExternalAccountingSystems
+ * * @description Lookup table of external ERP / accounting systems referenced by GLAccount.ExternalSystem and JournalEntryBatch.TargetSystem. At most one row may have IsDefault = 1.
+ * * Primary Key: Code
+ * @extends {BaseEntity}
+ * @class
+ * @public
+ */
+@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: External Accounting Systems')
+export class mjBizAppsAccountingExternalAccountingSystemEntity extends BaseEntity<mjBizAppsAccountingExternalAccountingSystemEntityType> {
+    /**
+    * Loads the MJ_BizApps_Accounting: External Accounting Systems record from the database
+    * @param Code: string - primary key value to load the MJ_BizApps_Accounting: External Accounting Systems record.
+    * @param EntityRelationshipsToLoad - (optional) the relationships to load
+    * @returns {Promise<boolean>} - true if successful, false otherwise
+    * @public
+    * @async
+    * @memberof mjBizAppsAccountingExternalAccountingSystemEntity
+    * @method
+    * @override
+    */
+    public async Load(Code: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
+        const compositeKey: CompositeKey = new CompositeKey();
+        compositeKey.KeyValuePairs.push({ FieldName: 'Code', Value: Code });
+        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
+    }
+
+    /**
+    * * Field Name: Code
+    * * Display Name: Code
+    * * SQL Data Type: nvarchar(50)
+    * * Description: Stable machine code (primary key) for the external accounting system.
+    */
+    get Code(): string {
+        return this.Get('Code');
+    }
+    set Code(value: string) {
+        this.Set('Code', value);
+    }
+
+    /**
+    * * Field Name: Name
+    * * Display Name: Name
+    * * SQL Data Type: nvarchar(100)
+    * * Description: Human-readable display name for the external accounting system.
+    */
+    get Name(): string {
+        return this.Get('Name');
+    }
+    set Name(value: string) {
+        this.Set('Name', value);
+    }
+
+    /**
+    * * Field Name: Description
+    * * Display Name: Description
+    * * SQL Data Type: nvarchar(500)
+    * * Description: Details about the external accounting system integration.
+    */
+    get Description(): string | null {
+        return this.Get('Description');
+    }
+    set Description(value: string | null) {
+        this.Set('Description', value);
+    }
+
+    /**
+    * * Field Name: IsDefault
+    * * Display Name: Is Default
+    * * SQL Data Type: bit
+    * * Default Value: 0
+    * * Description: Whether this system is the default target when an account has no explicit ExternalSystem set. At most one row may have IsDefault = 1.
+    */
+    get IsDefault(): boolean {
+        return this.Get('IsDefault');
+    }
+    set IsDefault(value: boolean) {
+        this.Set('IsDefault', value);
+    }
+
+    /**
+    * * Field Name: IsActive
+    * * Display Name: Is Active
+    * * SQL Data Type: bit
+    * * Default Value: 1
+    * * Description: Whether this external accounting system is active.
+    */
+    get IsActive(): boolean {
+        return this.Get('IsActive');
+    }
+    set IsActive(value: boolean) {
+        this.Set('IsActive', value);
+    }
+
+    /**
+    * * Field Name: __mj_CreatedAt
+    * * Display Name: Created At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_CreatedAt(): Date {
+        return this.Get('__mj_CreatedAt');
+    }
+
+    /**
+    * * Field Name: __mj_UpdatedAt
+    * * Display Name: Updated At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_UpdatedAt(): Date {
+        return this.Get('__mj_UpdatedAt');
     }
 }

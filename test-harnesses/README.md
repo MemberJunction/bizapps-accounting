@@ -82,7 +82,7 @@ MJAPI or a browser, so they run locally.
 | 1 and DOM | Node (CI uses 24; `engines` asks for 18 or later) and pnpm 10 (`packageManager`); `pnpm install` at the repo root. No database, no MJAPI. |
 | 2 | an mjdev instance (below) whose database was built from migrations (MJ core, the apps this one depends on, then this app); DB credentials in the instance `.env`; packages built (the harnesses import their `dist/`) |
 | 3, `api/` | an mjdev instance; MJAPI running; a user API key |
-| 3, IntegrationTests | MJAPI running; MJAPI's system API key; the package built; the bizapps-orders integration world loaded; `dotenv`, `@memberjunction/core` and `@memberjunction/testing-integration` resolvable from `test-harnesses/` (details in [`packages/IntegrationTests/README.md`](../packages/IntegrationTests/README.md)) |
+| 3, IntegrationTests | MJAPI running; MJAPI's system API key; the package built; the bizapps-orders integration world loaded (details in [`packages/IntegrationTests/README.md`](../packages/IntegrationTests/README.md)) |
 | 4 | an mjdev instance; MJAPI running |
 | 5 | an mjdev instance; MJAPI and MJExplorer running; Google Chrome at `/Applications/Google Chrome.app` (the macOS path `playwright/lib/global-setup.ts` checks); the demo seed (`server/seed-demo.ts`) for the accounts spec |
 
@@ -170,8 +170,8 @@ npx tsx test-harnesses/api/batch-ops-api.ts   # likewise engine-op-api.ts, full-
 `packages/IntegrationTests`, from the repo root with MJAPI running:
 
 ```bash
-pnpm run build                  # integration.mjs imports packages/IntegrationTests/dist
-pnpm run test:integration       # node test-harnesses/integration.mjs: bundles acct-world, acct-ledger, acct-batch
+pnpm run build                  # integration.mjs imports ./dist/index.js
+pnpm run test:integration       # node packages/IntegrationTests/integration.mjs: bundles acct-world, acct-ledger, acct-batch
 ```
 
 MJAPI's address comes from `MJAPI_URL`, else `GRAPHQL_PORT` (default `4000`) and

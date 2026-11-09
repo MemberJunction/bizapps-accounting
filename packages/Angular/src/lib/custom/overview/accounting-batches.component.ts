@@ -1,16 +1,19 @@
 import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { CompositeKey, Metadata, RunView } from '@memberjunction/core';
+import { CompositeKey, LogError, Metadata, RunView } from '@memberjunction/core';
 import { NormalizeUUID } from '@memberjunction/global';
 import { UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { NavigationService } from '@memberjunction/ng-shared';
+import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import { BusinessTimeZoneEngine, IsCalendarDay } from '@mj-biz-apps/common-entities';
 import { calendarDaySpan, formatJournalDate } from '../form-panels/journal-entry-panel.helpers';
 import { ClosedBooksProblem, PostingDateMonthWarning, PostingMonthLabel } from '../shared/posting-date-warning';
+import { openBizDetail } from '../shared/biz-detail-form';
+import { LoadJournalEntrySources, SourceLabel, type JournalEntrySource } from '../shared/je-source';
 import {
     ALL_ENTRIES,
     NO_ENTRIES,
@@ -352,17 +355,6 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                         </div>
 
                         <div class="mja-modal-field">
-                            <label class="mja-modal-label">Target ERP</label>
-                            <mj-dropdown
-                                [Data]="TargetOptions"
-                                [ValuePrimitive]="true"
-                                [(ngModel)]="BuildTarget"
-                                (ngModelChange)="OnBuildPreviewFilterChange()"
-                                aria-label="Target ERP">
-                            </mj-dropdown>
-                        </div>
-
-                        <div class="mja-modal-field">
                             <label class="mja-modal-label">Effective Date Cutoff</label>
                             <input
                                 type="date"
@@ -512,6 +504,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                         <th>Entry №</th>
                                         <th>Date</th>
                                         <th>Type</th>
+                                        <th>Source</th>
                                         <th>Description</th>
                                         <th class="mja-th-right">Amount</th>
                                     </tr>
@@ -530,6 +523,13 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                             <td><strong>{{ e.EntryNumber }}</strong></td>
                                             <td>{{ e.EffectiveDate | date:'mediumDate':'UTC' }}</td>
                                             <td><span class="mja-type-tag">{{ e.EntryTypeCode }}</span></td>
+                                            <td class="mja-source-cell">
+                                                @if (SourceOf(e.ID); as src) {
+                                                    <button type="button" class="mja-source-link" (click)="OpenSource(src)" [title]="'Open the ' + src.EntityLabel + ' record that created this entry'">{{ SourceText(src) }}</button>
+                                                } @else if (!e.LinkedEntity) {
+                                                    <span class="mja-source-none" title="Manual entry — no source record">Manual</span>
+                                                }
+                                            </td>
                                             <td class="mja-desc-cell">{{ e.Description || '—' }}</td>
                                             <td class="mja-td-right">{{ e.Amount | currency }}</td>
                                         </tr>
@@ -1177,6 +1177,28 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             color: var(--mj-text-secondary);
             border: 1px solid var(--mj-border-subtle);
         }
+        /* Source column (bc-aidp-next-golive#452): the entry's source record, as a link. */
+        .mja-source-cell {
+            max-width: 160px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .mja-source-link {
+            background: none;
+            border: 0;
+            padding: 0;
+            color: var(--mj-text-link);
+            cursor: pointer;
+            font: inherit;
+        }
+        .mja-source-link:hover {
+            text-decoration: underline;
+        }
+        .mja-source-none {
+            color: var(--mj-text-muted);
+        }
+
         .mja-desc-cell {
             max-width: 220px;
             overflow: hidden;
@@ -1199,6 +1221,13 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 export class AccountingBatchesPageComponent implements OnInit {
     private cdr = inject(ChangeDetectorRef);
     private navService = inject(NavigationService, { optional: true });
+    private forms = inject(MJFormPresenterService, { optional: true });
+
+    /**
+     * Source record per candidate entry ID (bc-aidp-next-golive#452). An entry's source never
+     * changes, so a name read once stays good. Filled after each preview, off its path.
+     */
+    private sources = new Map<string, JournalEntrySource>();
 
     public IsLoading = false;
     public Batches: BatchItem[] = [];
@@ -1848,6 +1877,7 @@ export class AccountingBatchesPageComponent implements OnInit {
                 this.PreviewAfterPostingDateCount = previewRes.AfterPostingDateCount;
                 this.PreviewAfterPostingDateEntries = previewRes.AfterPostingDateEntries;
                 this.setCoveredDateRange(this.PreviewEntries);
+                void this.loadSources(this.PreviewEntries);
             } else {
                 this.ModalErrorMessage = previewRes.ErrorMessage ?? 'Could not load the entries that match these criteria. Try again.';
                 this.clearPreview();
@@ -1861,6 +1891,38 @@ export class AccountingBatchesPageComponent implements OnInit {
                 this.cdr.markForCheck();
             }
         }
+    }
+
+    public SourceOf(entryId: string): JournalEntrySource | undefined {
+        return this.sources.get(entryId);
+    }
+
+    public SourceText(source: JournalEntrySource): string {
+        return SourceLabel(source);
+    }
+
+    /** Open a candidate's source record (the payment line, order line, …) in a slide-in. */
+    public OpenSource(source: JournalEntrySource): void {
+        if (!this.forms) return;
+        openBizDetail(this.forms, {
+            entityName: source.EntityName,
+            primaryKey: CompositeKey.FromID(source.RecordID),
+            title: SourceLabel(source),
+            mode: 'slide-in',
+        });
+    }
+
+    /** Resolve the sources of candidates not seen before; a failed read leaves those cells empty. */
+    private async loadSources(entries: PreviewEntryWire[]): Promise<void> {
+        const unseen = entries.filter(e => !this.sources.has(e.ID));
+        if (unseen.length === 0 || !Metadata.Provider) return;
+        try {
+            const found = await LoadJournalEntrySources(Metadata.Provider, unseen);
+            for (const [id, source] of found) this.sources.set(id, source);
+        } catch (e) {
+            LogError(`Batches: could not load the source records: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        this.cdr.markForCheck();
     }
 
     /** The effective-date span the ticked entries cover — the modal's fourth fact. */

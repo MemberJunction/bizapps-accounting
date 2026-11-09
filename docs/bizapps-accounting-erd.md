@@ -7,13 +7,18 @@
 > (≤5 entity boxes) so it renders full-size on a 13" laptop — open in VS Code
 > Markdown preview, or paste a block into https://mermaid.live to zoom.
 >
-> **Current as of 2026-10-18** — read forward from every migration through
-> `V202610181300__v0.23.x__Manual_Journal_Entry_Approval.sql`: 26 tables, none dropped. The
+> **Current as of 2026-11-02** — read forward from every migration through
+> `V202611091400__v0.26.x__Post_GoLive_Schema_and_Metadata_Sync.sql`: 28 tables, none dropped. The
 > last diff against a live `__mj_BizAppsAccounting` schema (every column) was on 2026-08-29;
 > `test-harnesses/server/_maint-erd-drift.ts` reproduces it. Its live table count also includes
 > Skyway's `flyway_schema_history`, which `mj migrate --schema` keeps in this schema.
 >
 > **Since 2026-08-29:**
+> - **NEW `ExternalAccountingSystem`** (#68): catalog table (`Code` PK, `Name`, `Description`, `IsDefault`, `IsActive`, filtered unique index `UX_ExternalAccountingSystem_SingleDefault`) replacing `CK_JournalEntryBatch_TargetSystem` with `FK_JournalEntryBatch_TargetSystem`.
+> - **NEW `TaxCategory`** (#445): lookup table (`Code` PK, `Name`, `Description`, `IsActive`) replacing `CK_TaxRate_Category` with `FK_TaxRate_TaxCategory`.
+> - **`AccountingCompanyProfile.ERPJournalCode`** (#399): nullable `NVARCHAR(50)` per-company Business Central journal batch code.
+> - **`JournalEntryBatch.ERPPostUnconfirmedAt`** (#414): nullable `DATETIMEOFFSET(7)` set once (50040) when an ERP post returns an unconfirmed outcome, holding the batch in `Sent` until retry verification.
+> - **`UX_IntercompanyAccountMatch_Active_Pair_Start`** (#393): filtered unique index on `(SourceCompanyID, TargetCompanyID, StartedAt) WHERE Status = 'Active'`.
 > - **`GLAccountRole.Cardinality`** (`One` | `Many`, BA-D34) and the `BankAccount` role, the only
 >   `Many` role. Its migration is dated 2026-08-27; the column was first drawn here on 2026-10-11.
 > - **`Archived` batch status** (golive #214) with its audit triple `ArchiveReason` / `ArchivedAt` /
@@ -120,6 +125,7 @@ flowchart TD
             IAMD[IntercompanyAccountMatchDimension]
         end
         subgraph Batching["Batching & numbering"]
+            EAS[ExternalAccountingSystem]
             Batch[JournalEntryBatch]
             JESeq[JournalEntrySequence]
             BatchSeq[JournalEntryBatchSequence]
@@ -127,6 +133,7 @@ flowchart TD
         subgraph Tax["Tax (engine-recorded)"]
             TaxAuthority[TaxAuthority]
             TaxJurisdiction[TaxJurisdiction]
+            TaxCategory[TaxCategory]
             TaxRate[TaxRate]
             TaxLiability[TaxLiability]
             CTN[CompanyTaxNexus]
@@ -170,6 +177,7 @@ flowchart TD
     IAM --> IAMD
     Dimension --> IAMD
     Company -->|single-company D7| Batch
+    EAS -->|TargetSystem| Batch
     Batch -->|JournalEntryBatchID: members + summary| JournalEntry
     Batch -.->|SummaryJournalEntryID| JournalEntry
     User -->|batched / approved by| Batch
@@ -180,6 +188,7 @@ flowchart TD
     Company -->|optional scope| AEE
     TaxAuthority --> TaxJurisdiction
     TaxJurisdiction --> TaxRate
+    TaxCategory --> TaxRate
     Company --> TaxLiability
     TaxAuthority --> TaxLiability
     TaxJurisdiction --> TaxLiability
@@ -257,7 +266,7 @@ erDiagram
         uuid DueToGLAccountID FK "Source's LIABILITY (trg 50024/50026)"
         uuid DueFromGLAccountID FK "Target's ASSET (trg 50025/50026)"
         string Status "Pending | Active | Disabled (default Pending)"
-        datetimeoffset StartedAt "latest wins; Active tie refused (entity server)"
+        datetimeoffset StartedAt "latest wins; Active tie refused (entity server + UX_IntercompanyAccountMatch_Active_Pair_Start)"
         datetimeoffset EndedAt "nullable - open window"
         string Comments "nullable"
     }
@@ -271,6 +280,7 @@ erDiagram
     }
     %% ---- batching ----
     Company ||--o{ JournalEntryBatch : "single-company (D7)"
+    ExternalAccountingSystem ||--o{ JournalEntryBatch : "TargetSystem"
     JournalEntryBatch ||--o{ JournalEntry : "JournalEntryBatchID (members + summary, by IsJournalEntryBatchSummary type)"
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID"
     User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy / ArchivedBy / CancelledBy / ERPNotPostedConfirmedBy / SentBy"
@@ -282,6 +292,7 @@ erDiagram
     TaxAuthority ||--o{ TaxJurisdiction : ""
     TaxJurisdiction |o--o{ TaxJurisdiction : "nesting"
     TaxJurisdiction ||--o{ TaxRate : "engine snapshots"
+    TaxCategory ||--o{ TaxRate : "TaxCategory"
     Company ||--o{ TaxLiability : ""
     TaxAuthority ||--o{ TaxLiability : ""
     TaxJurisdiction ||--o{ TaxLiability : ""
@@ -317,6 +328,7 @@ erDiagram
         uuid ApprovalCFOUserID FK
         decimal ManualJournalEntryApprovalThreshold "nullable - empty = manual-entry approval off"
         uuid ManualJournalEntryApproverRoleID FK "nullable - __mj.Role"
+        string ERPJournalCode "nullable - BC journal batch code"
         bool IsActive
     }
     Currency {
@@ -447,13 +459,20 @@ erDiagram
         uuid DimensionID FK
         uuid DimensionValueID FK
     }
+    ExternalAccountingSystem {
+        string Code PK "BusinessCentral | QuickBooks | NetSuite | Sage | Xero | Other"
+        string Name
+        string Description "nullable"
+        bool IsDefault "at most one default (UX_ExternalAccountingSystem_SingleDefault)"
+        bool IsActive
+    }
     JournalEntryBatch {
         uuid ID PK
         string JournalEntryBatchNumber UK "global sequence"
         uuid CompanyID FK
         date PostingDate "must match the GL (D8)"
         uuid SummaryJournalEntryID FK "summary JE (type flagged IsJournalEntryBatchSummary)"
-        string TargetSystem
+        string TargetSystem FK "ExternalAccountingSystem.Code"
         string Status "Pending | Approved | Sent | Posted | Failed | Cancelled | Archived"
         datetimeoffset BatchedAt
         uuid BatchedByUserID FK
@@ -480,6 +499,7 @@ erDiagram
         int SendAttemptCount
         datetimeoffset PostedAt
         datetimeoffset SealMismatchDetectedAt
+        datetimeoffset ERPPostUnconfirmedAt "nullable - set once (50040) when ERP outcome is unconfirmed"
         string ErrorMessage
     }
     JournalEntrySequence {
@@ -512,10 +532,16 @@ erDiagram
         uuid ParentTaxJurisdictionID FK
         bool IsActive
     }
+    TaxCategory {
+        string Code PK "Standard | Reduced | Zero | Exempt | Custom | ..."
+        string Name
+        string Description "nullable"
+        bool IsActive
+    }
     TaxRate {
         uuid ID PK
         uuid TaxJurisdictionID FK
-        string TaxCategory "Standard | Reduced | Zero | Exempt | Custom"
+        string TaxCategory FK "TaxCategory.Code"
         decimal Rate "0..1"
         date EffectiveFrom
         date EffectiveTo
@@ -612,6 +638,7 @@ erDiagram
         uuid ApprovalCFOUserID FK "batch approver - a security identity"
         decimal ManualJournalEntryApprovalThreshold "nullable - at or below: approver role; above: CFO; empty = off"
         uuid ManualJournalEntryApproverRoleID FK "nullable - __mj.Role; empty sends every manual entry to the CFO"
+        string ERPJournalCode "nullable - BC journal batch code (#399)"
         bool IsActive
     }
     Currency {
@@ -706,7 +733,7 @@ erDiagram
         uuid DueToGLAccountID FK "Source's LIABILITY (trg 50024/50026)"
         uuid DueFromGLAccountID FK "Target's ASSET (trg 50025/50026)"
         string Status "Pending | Active | Disabled (default Pending)"
-        datetimeoffset StartedAt "latest-StartedAt wins; ties rejected (entity server)"
+        datetimeoffset StartedAt "latest-StartedAt wins; ties rejected (entity server + UX_IntercompanyAccountMatch_Active_Pair_Start)"
         datetimeoffset EndedAt "nullable"
         string Comments "nullable"
     }
@@ -843,17 +870,25 @@ Writeoff. Domain types (OrderBooking, PaymentReceipt, ...) are seeded by their o
 ```mermaid
 erDiagram
     Company ||--o{ JournalEntryBatch : "CompanyID NOT NULL - single-company (D7)"
+    ExternalAccountingSystem ||--o{ JournalEntryBatch : "TargetSystem (#68)"
     JournalEntryBatch ||--o{ JournalEntry : "JournalEntryBatchID - members AND the summary (discriminated by the type IsJournalEntryBatchSummary flag)"
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID - coherence trigger 50023"
     User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy / ArchivedBy / CancelledBy / ERPNotPostedConfirmedBy / SentBy"
 
+    ExternalAccountingSystem {
+        string Code PK "BusinessCentral | QuickBooks | NetSuite | Sage | Xero | Other"
+        string Name
+        string Description "nullable"
+        bool IsDefault "at most one default (UX_ExternalAccountingSystem_SingleDefault)"
+        bool IsActive
+    }
     JournalEntryBatch {
         uuid ID PK
         string JournalEntryBatchNumber UK "global sequence"
         uuid CompanyID FK
         date PostingDate "singular, accountant-set - must match the GL (D8)"
         uuid SummaryJournalEntryID FK "type IsJournalEntryBatchSummary, EffectiveDate=PostingDate, same JournalEntryBatchID"
-        string TargetSystem "BusinessCentral | QuickBooks | NetSuite | Sage | Xero | Other"
+        string TargetSystem FK "ExternalAccountingSystem.Code (#68)"
         string Status "Pending | Approved | Sent | Posted | Failed | Cancelled | Archived"
         datetimeoffset BatchedAt
         uuid BatchedByUserID FK
@@ -880,6 +915,7 @@ erDiagram
         int SendAttemptCount "dispatch attempts that entered Sent; each send must advance it by one (trg_JournalEntryBatch_SendOnce, 50030)"
         datetimeoffset PostedAt "nullable"
         datetimeoffset SealMismatchDetectedAt "nullable - a retry recorded it Posted from the ERP over a broken seal; set only then, frozen after (50034, #216)"
+        datetimeoffset ERPPostUnconfirmedAt "nullable - set once (50040, #414) when an ERP post returns an unconfirmed outcome"
         string ErrorMessage "nullable"
     }
 ```
@@ -937,6 +973,7 @@ erDiagram
     TaxAuthority ||--o{ TaxJurisdiction : "TaxAuthorityID"
     TaxJurisdiction |o--o{ TaxJurisdiction : "ParentTaxJurisdictionID - nesting"
     TaxJurisdiction ||--o{ TaxRate : "snapshot of engine-returned rates"
+    TaxCategory ||--o{ TaxRate : "TaxCategory (#445)"
     Company ||--o{ TaxLiability : "CompanyID"
 
     TaxAuthority {
@@ -960,10 +997,16 @@ erDiagram
         uuid ParentTaxJurisdictionID FK "nullable - state > county > city nesting"
         bool IsActive
     }
+    TaxCategory {
+        string Code PK "Standard | Reduced | Zero | Exempt | Custom | OutOfScope | Publications | Groceries | DigitalGoods"
+        string Name
+        string Description "nullable"
+        bool IsActive
+    }
     TaxRate {
         uuid ID PK
         uuid TaxJurisdictionID FK
-        string TaxCategory "Standard | Reduced | Zero | Exempt | Custom"
+        string TaxCategory FK "TaxCategory.Code (#445)"
         decimal Rate "DECIMAL(9,6), 0..1 - NOT (7,4); 4dp cannot hold e.g. San Mateo 9.375%"
         date EffectiveFrom
         date EffectiveTo "nullable, >= From"

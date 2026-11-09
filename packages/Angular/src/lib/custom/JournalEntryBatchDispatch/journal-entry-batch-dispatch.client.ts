@@ -201,6 +201,10 @@ export interface PreviewEntryWire {
   CompanyID: string;
   Description: string | null;
   Amount: number;
+  /** D25 origin pair (bc-aidp-next-golive#452): the source record's entity name and key. Null on a
+   *  manual entry; absent from a server that predates it. */
+  LinkedEntity?: string | null;
+  LinkedRecordID?: string | null;
 }
 
 export interface PreviewJournalEntryBatchOutputWire {

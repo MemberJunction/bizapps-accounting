@@ -24,7 +24,7 @@
             "ValueType": "Scalar",
             "IsArray": false,
             "IsRequired": false,
-            "Description": "The ERP target system to stamp on built batches (e.g. 'BusinessCentral', 'QuickBooks', 'NetSuite', 'Sage', 'Xero', 'Other'). Defaults to 'BusinessCentral'."
+            "Description": "Optional ERP target system filter (e.g. 'BusinessCentral', 'QuickBooks', 'NetSuite', 'Sage', 'Xero', 'Other'). When omitted, each candidate's target system is resolved from its EntryType's ExternalAccountingSystem (falling back to the company profile's ExternalSystem or 'BusinessCentral'), and one batch is built per (CompanyID, TargetSystem) pair."
           },
           "primaryKey": {
             "ID": "8A52D539-7431-4F29-873D-88229F5CDA01"
@@ -207,7 +207,7 @@
     "fields": {
       "Name": "Run ERP Sync",
       "CategoryID": "@lookup:MJ: Action Categories.ID=074DF299-8D1F-438B-B855-8DFF17AE565E",
-      "Description": "Pulls chart of accounts, dimensions, and dimension values from every credentialed Company Integration via AccountingERPEngine.SyncMasterData. One job, all companies. Hosts disable the scheduled job rather than deleting this action.",
+      "Description": "Pulls chart of accounts, dimensions, and dimension values from every credentialed Company Integration via AccountingERPEngine.SyncMasterData. When all three objects are requested for a connector-wired integration with active entity maps, delegates to MJ IntegrationEngine.RunSync; otherwise (subset Objects filter or custom provider) falls back to the direct BaseAccountingERPProvider pull. One job, all companies. Hosts disable the scheduled job rather than deleting this action.",
       "Type": "Custom",
       "DriverClass": "Accounting.RunERPSync",
       "IconClass": "fa-solid fa-cloud-arrow-down",

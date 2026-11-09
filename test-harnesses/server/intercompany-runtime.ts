@@ -220,12 +220,13 @@ async function main(): Promise<void> {
     });
 
     await test('I3 DueFrom belonging to the SOURCE company is refused (50025)', async () => {
-      const num = await expectRefused(pool, pair(companyA, companyB, aDueTo, aAsset), 'I3');
+      // Inactive avoids colliding with I1 on UX_IntercompanyAccountMatch_Active_Pair_Start before trigger 50025 fires.
+      const num = await expectRefused(pool, pair(companyA, companyB, aDueTo, aAsset, 'Inactive'), 'I3');
       assert(num === 50025, `expected error 50025, got ${num}`);
     });
 
     await test('I4 a Revenue account as the Due To leg is refused (50026)', async () => {
-      const num = await expectRefused(pool, pair(companyA, companyB, aRevenue, bDueFrom), 'I4');
+      const num = await expectRefused(pool, pair(companyA, companyB, aRevenue, bDueFrom, 'Inactive'), 'I4');
       assert(num === 50026, `expected error 50026, got ${num}`);
     });
 

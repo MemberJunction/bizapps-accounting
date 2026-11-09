@@ -26,14 +26,17 @@ import {
   LogError,
   UserInfo,
   ValidationErrorInfo,
+  ValidationErrorType,
   ValidationResult,
 } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import {
+  JournalEntryEntity,
   JournalEntryLineEntity,
   mjBizAppsAccountingJournalEntryLineDimensionEntity,
 } from '@mj-biz-apps/accounting-entities';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 
 import { WithDimensionsSavedThroughLine } from './JournalEntryLineDimensionEntityServer.js';
 import { ManualJournalEntryApprovalService } from './ManualJournalEntryApproval.js';
@@ -41,10 +44,15 @@ import { ManualJournalEntryApprovalService } from './ManualJournalEntryApproval.
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
 
+/** Maximum allowed discrepancy between `OriginalAmount × ExchangeRateUsed` and functional amount. */
+export const FX_AMOUNT_TOLERANCE = 0.01;
+/** Relative band around the entry date's `CurrencySpotRate` outside which a warning is raised. */
+export const FX_SPOT_RATE_WARNING_BAND = 0.05;
+
 @RegisterClass(BaseEntity, JEL_ENTITY)
 export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
   /** Optional reference to the parent JournalEntryEntityServer object in memory. */
-  public ParentJournalEntry?: any;
+  public ParentJournalEntry?: JournalEntryEntity;
 
   /**
    * Set by JournalEntryEntityServer while it saves or deletes this line as part of the entry, so the
@@ -183,6 +191,7 @@ export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
   public override Validate() {
     const result = super.Validate();
 
+    this.ValidateOriginalCurrency(result);
     this.ValidateDimensions(result);
 
     // Validation via AccountingEngineBase cache: verify GL Account active status & company alignment
@@ -263,6 +272,136 @@ export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
           );
         }
       }
+    }
+  }
+
+  /**
+   * Multi-currency line invariants:
+   *   1. All four FX columns (`OriginalCurrencyCode`, `OriginalDebitAmount`, `OriginalCreditAmount`,
+   *      `ExchangeRateUsed`) are either all absent, or together form a complete single-sided FX tuple
+   *      matching the line's functional side (Debit vs Credit).
+   *   2. `ExchangeRateUsed` and the populated original amount must be strictly positive (`> 0`).
+   *   3. `|OriginalAmount × ExchangeRateUsed − FunctionalAmount|` must not exceed `FX_AMOUNT_TOLERANCE`
+   *      (0.01 functional units per line).
+   *   4. When `CurrencySpotRate` for the entry's date and currency pair is loaded in cache and
+   *      `ExchangeRateUsed` deviates by more than `FX_SPOT_RATE_WARNING_BAND` (5%), record a warning.
+   */
+  private ValidateOriginalCurrency(result: ValidationResult): void {
+    const code = this.OriginalCurrencyCode?.trim() || null;
+    const origDr = this.OriginalDebitAmount;
+    const origCr = this.OriginalCreditAmount;
+    const rate = this.ExchangeRateUsed;
+
+    const anyFxSet = code !== null || origDr !== null || origCr !== null || rate !== null;
+    if (!anyFxSet) return;
+
+    const fail = (source: string, message: string, value: unknown = null) => {
+      result.Success = false;
+      result.Errors.push(new ValidationErrorInfo(source, message, value, ValidationErrorType.Failure));
+    };
+
+    if (!code) {
+      fail(
+        'OriginalCurrencyCode',
+        `Line ${this.LineNumber || ''}: OriginalCurrencyCode is required when original-currency amounts or an exchange rate are set.`,
+        this.OriginalCurrencyCode,
+      );
+    }
+
+    if (origDr === null && origCr === null) {
+      fail(
+        'OriginalDebitAmount',
+        `Line ${this.LineNumber || ''}: an original debit or credit amount is required when OriginalCurrencyCode or ExchangeRateUsed is set.`,
+        null,
+      );
+      return;
+    }
+
+    if (origDr !== null && origDr <= 0) {
+      fail(
+        'OriginalDebitAmount',
+        `Line ${this.LineNumber || ''}: OriginalDebitAmount must be greater than zero (${origDr}).`,
+        origDr,
+      );
+    }
+
+    if (origCr !== null && origCr <= 0) {
+      fail(
+        'OriginalCreditAmount',
+        `Line ${this.LineNumber || ''}: OriginalCreditAmount must be greater than zero (${origCr}).`,
+        origCr,
+      );
+    }
+
+    if (rate === null || rate <= 0) {
+      fail(
+        'ExchangeRateUsed',
+        `Line ${this.LineNumber || ''}: ExchangeRateUsed must be greater than zero when original-currency amounts are set.`,
+        rate,
+      );
+      return;
+    }
+
+    if (origDr !== null && origDr > 0 && this.DebitAmount !== null && this.DebitAmount > 0) {
+      const converted = origDr * rate;
+      if (Math.abs(converted - this.DebitAmount) > FX_AMOUNT_TOLERANCE + 1e-9) {
+        fail(
+          'DebitAmount',
+          `Line ${this.LineNumber || ''}: DebitAmount (${this.DebitAmount.toFixed(2)}) differs from OriginalDebitAmount (${origDr.toFixed(2)}) × ExchangeRateUsed (${rate}) = ${converted.toFixed(2)} by more than ${FX_AMOUNT_TOLERANCE.toFixed(2)}.`,
+          this.DebitAmount,
+        );
+      }
+    }
+
+    if (origCr !== null && origCr > 0 && this.CreditAmount !== null && this.CreditAmount > 0) {
+      const converted = origCr * rate;
+      if (Math.abs(converted - this.CreditAmount) > FX_AMOUNT_TOLERANCE + 1e-9) {
+        fail(
+          'CreditAmount',
+          `Line ${this.LineNumber || ''}: CreditAmount (${this.CreditAmount.toFixed(2)}) differs from OriginalCreditAmount (${origCr.toFixed(2)}) × ExchangeRateUsed (${rate}) = ${converted.toFixed(2)} by more than ${FX_AMOUNT_TOLERANCE.toFixed(2)}.`,
+          this.CreditAmount,
+        );
+      }
+    }
+
+    if (code) {
+      this.warnIfOutsideSpotRateBand(result, code, rate);
+    }
+  }
+
+  private warnIfOutsideSpotRateBand(result: ValidationResult, fromCurrencyCode: string, rate: number): void {
+    const effectiveDay = ToCalendarDay(this.ParentJournalEntry?.EffectiveDate ?? null);
+    if (!effectiveDay) return;
+    const companyId = this.ParentJournalEntry?.CompanyID?.toLowerCase();
+    const profile = companyId
+      ? AccountingEngineBase.Instance.CompanyProfiles.find(p => p.ID?.toLowerCase() === companyId)
+      : undefined;
+    const toCurrencyCode = (
+      profile?.FunctionalCurrencyCode ??
+      (this.GLAccountID ? AccountingEngineBase.Instance.GLAccountByID(this.GLAccountID)?.CurrencyCode : null)
+    )?.trim().toUpperCase();
+    if (!toCurrencyCode) return;
+
+    const fromKey = fromCurrencyCode.toUpperCase();
+    const spot = AccountingEngineBase.Instance.CurrencySpotRates.find(
+      s =>
+        s.IsActive !== false &&
+        s.FromCurrencyCode?.trim().toUpperCase() === fromKey &&
+        s.ToCurrencyCode?.trim().toUpperCase() === toCurrencyCode &&
+        ToCalendarDay(s.RateDate) === effectiveDay,
+    );
+    if (!spot || !spot.Rate || spot.Rate <= 0) return;
+
+    const deviation = Math.abs(rate - spot.Rate) / spot.Rate;
+    if (deviation > FX_SPOT_RATE_WARNING_BAND) {
+      result.Errors.push(
+        new ValidationErrorInfo(
+          'ExchangeRateUsed',
+          `Line ${this.LineNumber || ''}: ExchangeRateUsed (${rate}) differs from the ${effectiveDay} ${fromKey}→${toCurrencyCode} spot rate (${spot.Rate}) by ${(deviation * 100).toFixed(1)}% (more than ${(FX_SPOT_RATE_WARNING_BAND * 100).toFixed(0)}%).`,
+          rate,
+          ValidationErrorType.Warning,
+        ),
+      );
     }
   }
 }
