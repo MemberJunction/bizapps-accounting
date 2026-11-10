@@ -1,5 +1,13 @@
 # @mj-biz-apps/accounting-ng
 
+## 0.27.1
+
+### Patch Changes
+
+- a3fbb25: The Accounting dashboard and the Accounting batches page now scroll. Both sized themselves to the shell's content pane and declared no scroll container, so with no window scrollbar behind them anything past the first screen could not be reached: on the dashboard, the content below the journal entry volume chart, and on the batches page, Sent batches further down the list. Each page now hides overflow on its host and scrolls the layout inside it, which is how the orders dashboard does it (bc-aidp-next-golive#367).
+  - @mj-biz-apps/accounting-engine-base@0.27.1
+  - @mj-biz-apps/accounting-entities@0.27.1
+
 ## 0.27.0
 
 ### Patch Changes
