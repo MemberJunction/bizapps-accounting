@@ -1,5 +1,7 @@
 # @mj-biz-apps/accounting-entities
 
+## 0.27.1
+
 ## 0.27.0
 
 ### Minor Changes
