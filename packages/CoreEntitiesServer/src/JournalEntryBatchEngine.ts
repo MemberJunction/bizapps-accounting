@@ -1094,9 +1094,33 @@ function unique(ids: string[]): string[] {
 
 /** Lock the member JEs: Status → Batched with JournalEntryBatchID (CK_JournalEntry_BatchedHasJournalEntryBatch + the immutability triggers). */
 async function lockJournalEntries(jeIds: string[], batchId: string, contextUser: UserInfo, p: Providers): Promise<void> {
+  const preloaded = new Map<string, mjBizAppsAccountingJournalEntryEntity>();
+  for (const chunk of chunkArray(jeIds)) {
+    const res = await p.rv.RunView<mjBizAppsAccountingJournalEntryEntity>(
+      {
+        EntityName: JE_ENTITY,
+        ExtraFilter: `ID IN (${chunk.map(sqlGuid).join(',')})`,
+        ResultType: 'entity_object',
+        BypassCache: true,
+        IgnoreMaxRows: true,
+      },
+      contextUser,
+    );
+    if (res.Success && res.Results) {
+      for (const item of res.Results) {
+        if ('Save' in item && typeof item.Save === 'function') {
+          preloaded.set(item.ID.toLowerCase(), item);
+        }
+      }
+    }
+  }
+
   for (const jeId of jeIds) {
-    const je = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
-    await je.Load(jeId);
+    let je = preloaded.get(jeId.toLowerCase());
+    if (!je) {
+      je = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
+      await je.Load(jeId);
+    }
     je.JournalEntryBatchID = batchId;
     je.Status = 'Batched';
     if (!(await je.Save())) throw new Error(`The batch was not built: journal entry ${jeId} could not be locked into it: ${je.LatestResult?.CompleteMessage ?? 'unknown error'}`);
@@ -1848,6 +1872,12 @@ async function failAcceptedBatch(batch: JournalEntryBatchEntityServer, saveError
   );
 }
 
+const POST_FLIP_CONCURRENCY = 10;
+
+function isHydratedEntity(item: mjBizAppsAccountingJournalEntryEntity | { ID: string }): item is mjBizAppsAccountingJournalEntryEntity {
+  return 'Save' in item && typeof item.Save === 'function';
+}
+
 /**
  * Every Batched JE in the batch's orbit (members + summary) → GLPosted (only GL-roundtrip fields may
  * change on a locked JE). Stamps the BATCH's PostedAt and ERP reference, so an entry finished later
@@ -1856,20 +1886,29 @@ async function failAcceptedBatch(batch: JournalEntryBatchEntityServer, saveError
  * Returns how many entries it flipped.
  */
 async function markJournalEntriesGLPosted(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo, p: Providers): Promise<number> {
-  const res = await p.rv.RunView<{ ID: string }>(
-    { EntityName: JE_ENTITY, ExtraFilter: `JournalEntryBatchID=${sqlGuid(batch.ID)} AND Status='Batched'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+  const res = await p.rv.RunView<mjBizAppsAccountingJournalEntryEntity | { ID: string }>(
+    { EntityName: JE_ENTITY, ExtraFilter: `JournalEntryBatchID=${sqlGuid(batch.ID)} AND Status='Batched'`, ResultType: 'entity_object', BypassCache: true, IgnoreMaxRows: true },
     contextUser,
   );
   // Loud on failure: an empty result here would report the flip complete with every entry still Batched.
   if (!res.Success) throw new Error(`Could not load the journal entries of batch ${batch.ID} to mark them posted: ${res.ErrorMessage ?? 'unknown error'}`);
   const rows = res.Results ?? [];
-  for (const row of rows) {
-    const je = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
-    if (!(await je.Load(row.ID))) throw new Error(`Journal entry ${row.ID} was not found while marking the batch's entries posted.`);
-    je.Status = 'GLPosted';
-    je.GLPostedAt = batch.PostedAt ?? new Date();
-    if (batch.ExternalJournalEntryBatchRef) je.GLReferenceID = batch.ExternalJournalEntryBatchRef;
-    if (!(await je.Save())) throw new Error(`Journal entry ${row.ID} could not be marked posted to the GL: ${je.LatestResult?.CompleteMessage ?? 'unknown error'}`);
+  for (const chunk of chunkArray(rows, POST_FLIP_CONCURRENCY)) {
+    await Promise.all(
+      chunk.map(async (row) => {
+        let je: mjBizAppsAccountingJournalEntryEntity;
+        if (isHydratedEntity(row)) {
+          je = row;
+        } else {
+          je = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
+          if (!(await je.Load(row.ID))) throw new Error(`Journal entry ${row.ID} was not found while marking the batch's entries posted.`);
+        }
+        je.Status = 'GLPosted';
+        je.GLPostedAt = batch.PostedAt ?? new Date();
+        if (batch.ExternalJournalEntryBatchRef) je.GLReferenceID = batch.ExternalJournalEntryBatchRef;
+        if (!(await je.Save())) throw new Error(`Journal entry ${row.ID} could not be marked posted to the GL: ${je.LatestResult?.CompleteMessage ?? 'unknown error'}`);
+      }),
+    );
   }
   return rows.length;
 }

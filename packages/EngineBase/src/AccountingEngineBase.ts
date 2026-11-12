@@ -31,7 +31,7 @@
  *   PIPELINE: ./pipeline.ts consumes CreatePipelineLookups()
  *   DOC:     plans/accounting-engine-plan.md §2.1
  */
-import { BaseEngine, BaseEnginePropertyConfig, IMetadataProvider, UserInfo } from '@memberjunction/core';
+import { BaseEngine, BaseEnginePropertyConfig, BaseEntity, IMetadataProvider, UserInfo } from '@memberjunction/core';
 import { RegisterForStartup } from '@memberjunction/core';
 import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
@@ -255,7 +255,7 @@ export function coveringActiveLinkIndexes(candidates: LinkCandidate[], asOf: Dat
   return out;
 }
 
-@RegisterForStartup()
+@RegisterForStartup({ deferred: typeof window !== 'undefined' })
 export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
   private _glAccounts: mjBizAppsAccountingGLAccountEntity[] = [];
   private _glAccountRoles: mjBizAppsAccountingGLAccountRoleEntity[] = [];
@@ -269,6 +269,314 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
   private _intercompanyMatchDimensions: mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity[] = [];
   private _linkMissRefresh: Promise<void> | null = null;
   private _lastLinkMissRefreshAt = 0;
+
+  private _indexGeneration = 0;
+
+  protected override NotifyDataChange(
+    config: BaseEnginePropertyConfig,
+    data: unknown[],
+    changeType: 'refresh' | 'add' | 'update' | 'delete' = 'refresh',
+    affectedEntity?: BaseEntity,
+  ): void {
+    super.NotifyDataChange(config, data, changeType, affectedEntity);
+    this._indexGeneration++;
+  }
+
+  // ─── index caches ──────────────────────────────────────────────────────────
+  private _glAccountsGen = -1;
+  private _glAccountsArray: mjBizAppsAccountingGLAccountEntity[] | null = null;
+  private _glAccountsLength = -1;
+  private _glAccountById: Map<string, mjBizAppsAccountingGLAccountEntity> | null = null;
+  private _glAccountByCompanyAndCode: Map<string, mjBizAppsAccountingGLAccountEntity> | null = null;
+
+  private _glAccountRolesGen = -1;
+  private _glAccountRolesArray: mjBizAppsAccountingGLAccountRoleEntity[] | null = null;
+  private _glAccountRolesLength = -1;
+  private _glAccountRoleByName: Map<string, mjBizAppsAccountingGLAccountRoleEntity> | null = null;
+  private _glAccountRoleById: Map<string, mjBizAppsAccountingGLAccountRoleEntity> | null = null;
+
+  private _companyProfilesGen = -1;
+  private _companyProfilesArray: mjBizAppsAccountingAccountingCompanyProfileEntity[] | null = null;
+  private _companyProfilesLength = -1;
+  private _companyProfileById: Map<string, mjBizAppsAccountingAccountingCompanyProfileEntity> | null = null;
+
+  private _glAccountLinksGen = -1;
+  private _glAccountLinksArray: mjBizAppsAccountingGLAccountLinkEntity[] | null = null;
+  private _glAccountLinksLength = -1;
+  private _glAccountLinksByEntityRecordRole: Map<string, mjBizAppsAccountingGLAccountLinkEntity[]> | null = null;
+
+  private _glAccountLinkDimensionsGen = -1;
+  private _glAccountLinkDimensionsArray: mjBizAppsAccountingGLAccountLinkDimensionEntity[] | null = null;
+  private _glAccountLinkDimensionsLength = -1;
+  private _glAccountLinkDimensionsByLinkId: Map<string, mjBizAppsAccountingGLAccountLinkDimensionEntity[]> | null = null;
+
+  private _intercompanyMatchesGen = -1;
+  private _intercompanyMatchesArray: mjBizAppsAccountingIntercompanyAccountMatchEntity[] | null = null;
+  private _intercompanyMatchesLength = -1;
+  private _intercompanyMatchesBySourceTarget: Map<string, mjBizAppsAccountingIntercompanyAccountMatchEntity[]> | null = null;
+
+  private _intercompanyMatchDimensionsGen = -1;
+  private _intercompanyMatchDimensionsArray: mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity[] | null = null;
+  private _intercompanyMatchDimensionsLength = -1;
+  private _intercompanyMatchDimensionsByMatchAndSide: Map<string, IntercompanyDimensionRequirement[]> | null = null;
+
+  private _journalEntryTypesGen = -1;
+  private _journalEntryTypesArray: mjBizAppsAccountingJournalEntryTypeEntity[] | null = null;
+  private _journalEntryTypesLength = -1;
+  private _journalEntryTypeByCode: Map<string, mjBizAppsAccountingJournalEntryTypeEntity> | null = null;
+  private _journalEntryBatchSummaryEntryType: mjBizAppsAccountingJournalEntryTypeEntity | undefined = undefined;
+
+  private ensureGLAccountsIndexes(): {
+    byId: Map<string, mjBizAppsAccountingGLAccountEntity>;
+    byCompanyAndCode: Map<string, mjBizAppsAccountingGLAccountEntity>;
+  } {
+    const current = this.GLAccounts;
+    if (
+      this._glAccountsGen !== this._indexGeneration ||
+      this._glAccountsArray !== current ||
+      this._glAccountsLength !== current.length ||
+      !this._glAccountById ||
+      !this._glAccountByCompanyAndCode
+    ) {
+      const byId = new Map<string, mjBizAppsAccountingGLAccountEntity>();
+      const byCompanyAndCode = new Map<string, mjBizAppsAccountingGLAccountEntity>();
+      for (const a of current) {
+        const idKey = uuidKey(a.ID);
+        if (!byId.has(idKey)) {
+          byId.set(idKey, a);
+        }
+        const compCodeKey = `${uuidKey(a.CompanyID)}|${a.Code ?? ''}`;
+        if (!byCompanyAndCode.has(compCodeKey)) {
+          byCompanyAndCode.set(compCodeKey, a);
+        }
+      }
+      this._glAccountById = byId;
+      this._glAccountByCompanyAndCode = byCompanyAndCode;
+      this._glAccountsGen = this._indexGeneration;
+      this._glAccountsArray = current;
+      this._glAccountsLength = current.length;
+    }
+    return {
+      byId: this._glAccountById,
+      byCompanyAndCode: this._glAccountByCompanyAndCode,
+    };
+  }
+
+  private ensureGLAccountRolesIndexes(): {
+    byName: Map<string, mjBizAppsAccountingGLAccountRoleEntity>;
+    byId: Map<string, mjBizAppsAccountingGLAccountRoleEntity>;
+  } {
+    const current = this.GLAccountRoles;
+    if (
+      this._glAccountRolesGen !== this._indexGeneration ||
+      this._glAccountRolesArray !== current ||
+      this._glAccountRolesLength !== current.length ||
+      !this._glAccountRoleByName ||
+      !this._glAccountRoleById
+    ) {
+      const byName = new Map<string, mjBizAppsAccountingGLAccountRoleEntity>();
+      const byId = new Map<string, mjBizAppsAccountingGLAccountRoleEntity>();
+      for (const r of current) {
+        byName.set((r.Name ?? '').trim().toLowerCase(), r);
+        byId.set(uuidKey(r.ID), r);
+      }
+      this._glAccountRoleByName = byName;
+      this._glAccountRoleById = byId;
+      this._glAccountRolesGen = this._indexGeneration;
+      this._glAccountRolesArray = current;
+      this._glAccountRolesLength = current.length;
+    }
+    return {
+      byName: this._glAccountRoleByName,
+      byId: this._glAccountRoleById,
+    };
+  }
+
+  private ensureCompanyProfilesIndex(): {
+    byId: Map<string, mjBizAppsAccountingAccountingCompanyProfileEntity>;
+  } {
+    const current = this.CompanyProfiles;
+    if (
+      this._companyProfilesGen !== this._indexGeneration ||
+      this._companyProfilesArray !== current ||
+      this._companyProfilesLength !== current.length ||
+      !this._companyProfileById
+    ) {
+      const byId = new Map<string, mjBizAppsAccountingAccountingCompanyProfileEntity>();
+      for (const p of current) {
+        byId.set(uuidKey(p.ID), p);
+      }
+      this._companyProfileById = byId;
+      this._companyProfilesGen = this._indexGeneration;
+      this._companyProfilesArray = current;
+      this._companyProfilesLength = current.length;
+    }
+    return {
+      byId: this._companyProfileById,
+    };
+  }
+
+  private ensureGLAccountLinksIndex(): {
+    byEntityRecordRole: Map<string, mjBizAppsAccountingGLAccountLinkEntity[]>;
+  } {
+    const current = this.GLAccountLinks;
+    if (
+      this._glAccountLinksGen !== this._indexGeneration ||
+      this._glAccountLinksArray !== current ||
+      this._glAccountLinksLength !== current.length ||
+      !this._glAccountLinksByEntityRecordRole
+    ) {
+      const byEntityRecordRole = new Map<string, mjBizAppsAccountingGLAccountLinkEntity[]>();
+      for (const l of current) {
+        const key = `${uuidKey(l.EntityID)}|${(l.RecordID ?? '').trim().toLowerCase()}|${uuidKey(l.GLAccountRoleID)}`;
+        const bucket = byEntityRecordRole.get(key);
+        if (bucket) {
+          bucket.push(l);
+        } else {
+          byEntityRecordRole.set(key, [l]);
+        }
+      }
+      this._glAccountLinksByEntityRecordRole = byEntityRecordRole;
+      this._glAccountLinksGen = this._indexGeneration;
+      this._glAccountLinksArray = current;
+      this._glAccountLinksLength = current.length;
+    }
+    return {
+      byEntityRecordRole: this._glAccountLinksByEntityRecordRole,
+    };
+  }
+
+  private ensureGLAccountLinkDimensionsIndex(): {
+    byLinkId: Map<string, mjBizAppsAccountingGLAccountLinkDimensionEntity[]>;
+  } {
+    const current = this.GLAccountLinkDimensions;
+    if (
+      this._glAccountLinkDimensionsGen !== this._indexGeneration ||
+      this._glAccountLinkDimensionsArray !== current ||
+      this._glAccountLinkDimensionsLength !== current.length ||
+      !this._glAccountLinkDimensionsByLinkId
+    ) {
+      const byLinkId = new Map<string, mjBizAppsAccountingGLAccountLinkDimensionEntity[]>();
+      for (const d of current) {
+        const key = uuidKey(d.GLAccountLinkID);
+        const bucket = byLinkId.get(key);
+        if (bucket) {
+          bucket.push(d);
+        } else {
+          byLinkId.set(key, [d]);
+        }
+      }
+      for (const bucket of byLinkId.values()) {
+        bucket.sort((a, b) => a.Sequence - b.Sequence);
+      }
+      this._glAccountLinkDimensionsByLinkId = byLinkId;
+      this._glAccountLinkDimensionsGen = this._indexGeneration;
+      this._glAccountLinkDimensionsArray = current;
+      this._glAccountLinkDimensionsLength = current.length;
+    }
+    return {
+      byLinkId: this._glAccountLinkDimensionsByLinkId,
+    };
+  }
+
+  private ensureIntercompanyMatchesIndex(): {
+    bySourceTarget: Map<string, mjBizAppsAccountingIntercompanyAccountMatchEntity[]>;
+  } {
+    const current = this.IntercompanyAccountMatches;
+    if (
+      this._intercompanyMatchesGen !== this._indexGeneration ||
+      this._intercompanyMatchesArray !== current ||
+      this._intercompanyMatchesLength !== current.length ||
+      !this._intercompanyMatchesBySourceTarget
+    ) {
+      const bySourceTarget = new Map<string, mjBizAppsAccountingIntercompanyAccountMatchEntity[]>();
+      for (const m of current) {
+        const key = `${uuidKey(m.SourceCompanyID)}|${uuidKey(m.TargetCompanyID)}`;
+        const bucket = bySourceTarget.get(key);
+        if (bucket) {
+          bucket.push(m);
+        } else {
+          bySourceTarget.set(key, [m]);
+        }
+      }
+      this._intercompanyMatchesBySourceTarget = bySourceTarget;
+      this._intercompanyMatchesGen = this._indexGeneration;
+      this._intercompanyMatchesArray = current;
+      this._intercompanyMatchesLength = current.length;
+    }
+    return {
+      bySourceTarget: this._intercompanyMatchesBySourceTarget,
+    };
+  }
+
+  private ensureIntercompanyMatchDimensionsIndex(): {
+    byMatchAndSide: Map<string, IntercompanyDimensionRequirement[]>;
+  } {
+    const current = this.IntercompanyAccountMatchDimensions;
+    if (
+      this._intercompanyMatchDimensionsGen !== this._indexGeneration ||
+      this._intercompanyMatchDimensionsArray !== current ||
+      this._intercompanyMatchDimensionsLength !== current.length ||
+      !this._intercompanyMatchDimensionsByMatchAndSide
+    ) {
+      const byMatchAndSide = new Map<string, IntercompanyDimensionRequirement[]>();
+      for (const d of current) {
+        const key = `${uuidKey(d.IntercompanyAccountMatchID)}|${d.Side}`;
+        const req: IntercompanyDimensionRequirement = {
+          DimensionID: d.DimensionID,
+          DimensionValueID: d.DimensionValueID,
+          Sequence: d.Sequence,
+        };
+        const bucket = byMatchAndSide.get(key);
+        if (bucket) {
+          bucket.push(req);
+        } else {
+          byMatchAndSide.set(key, [req]);
+        }
+      }
+      for (const bucket of byMatchAndSide.values()) {
+        bucket.sort((a, b) => a.Sequence - b.Sequence);
+      }
+      this._intercompanyMatchDimensionsByMatchAndSide = byMatchAndSide;
+      this._intercompanyMatchDimensionsGen = this._indexGeneration;
+      this._intercompanyMatchDimensionsArray = current;
+      this._intercompanyMatchDimensionsLength = current.length;
+    }
+    return {
+      byMatchAndSide: this._intercompanyMatchDimensionsByMatchAndSide,
+    };
+  }
+
+  private ensureJournalEntryTypesIndex(): {
+    byCode: Map<string, mjBizAppsAccountingJournalEntryTypeEntity>;
+    summaryEntryType: mjBizAppsAccountingJournalEntryTypeEntity | undefined;
+  } {
+    const current = this.JournalEntryTypes;
+    if (
+      this._journalEntryTypesGen !== this._indexGeneration ||
+      this._journalEntryTypesArray !== current ||
+      this._journalEntryTypesLength !== current.length ||
+      !this._journalEntryTypeByCode
+    ) {
+      const byCode = new Map<string, mjBizAppsAccountingJournalEntryTypeEntity>();
+      let summaryEntryType: mjBizAppsAccountingJournalEntryTypeEntity | undefined = undefined;
+      for (const t of current) {
+        byCode.set((t.Code ?? '').trim().toLowerCase(), t);
+        if (t.IsJournalEntryBatchSummary && !summaryEntryType) {
+          summaryEntryType = t;
+        }
+      }
+      this._journalEntryTypeByCode = byCode;
+      this._journalEntryBatchSummaryEntryType = summaryEntryType;
+      this._journalEntryTypesGen = this._indexGeneration;
+      this._journalEntryTypesArray = current;
+      this._journalEntryTypesLength = current.length;
+    }
+    return {
+      byCode: this._journalEntryTypeByCode,
+      summaryEntryType: this._journalEntryBatchSummaryEntryType,
+    };
+  }
 
   public static get Instance(): AccountingEngineBase {
     return super.getInstance<AccountingEngineBase>();
@@ -338,18 +646,18 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
 
   public GLAccountByID(glAccountId: string): mjBizAppsAccountingGLAccountEntity | undefined {
     const key = uuidKey(glAccountId);
-    return this.GLAccounts.find(a => uuidKey(a.ID) === key);
+    return this.ensureGLAccountsIndexes().byId.get(key);
   }
 
   public GLAccountByCompanyAndCode(companyId: string, code: string): mjBizAppsAccountingGLAccountEntity | undefined {
     const companyKey = uuidKey(companyId);
     const codeKey = (code ?? '').trim();
-    return this.GLAccounts.find(a => uuidKey(a.CompanyID) === companyKey && a.Code === codeKey);
+    return this.ensureGLAccountsIndexes().byCompanyAndCode.get(`${companyKey}|${codeKey}`);
   }
 
   public GLAccountRoleByName(name: string): mjBizAppsAccountingGLAccountRoleEntity | undefined {
     const key = (name ?? '').trim().toLowerCase();
-    return this.GLAccountRoles.find(r => r.Name.trim().toLowerCase() === key);
+    return this.ensureGLAccountRolesIndexes().byName.get(key);
   }
 
   /**
@@ -358,7 +666,7 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
    */
   public FiscalYearStartFor(companyId: string | null | undefined): FiscalYearStart {
     const key = uuidKey(companyId);
-    const profile = key ? this.CompanyProfiles.find(p => uuidKey(p.ID) === key) : undefined;
+    const profile = key ? this.ensureCompanyProfilesIndex().byId.get(key) : undefined;
     return {
       Month: profile?.FiscalYearStartMonth ?? DEFAULT_FISCAL_YEAR_START.Month,
       Day: profile?.FiscalYearStartDay ?? DEFAULT_FISCAL_YEAR_START.Day,
@@ -372,7 +680,7 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
    */
   public BooksClosedThroughFor(companyId: string | null | undefined): Date | null {
     const key = uuidKey(companyId);
-    const profile = key ? this.CompanyProfiles.find(p => uuidKey(p.ID) === key) : undefined;
+    const profile = key ? this.ensureCompanyProfilesIndex().byId.get(key) : undefined;
     return profile?.BooksClosedThroughDate ?? null;
   }
 
@@ -385,9 +693,10 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
    * GL account must belong to.
    */
   public LegalEntityFor(companyId: string): string {
+    const index = this.ensureCompanyProfilesIndex();
     return ResolveLegalEntity(companyId, id => {
       const key = uuidKey(id);
-      return key ? this.CompanyProfiles.find(p => uuidKey(p.ID) === key) : undefined;
+      return key ? index.byId.get(key) : undefined;
     });
   }
 
@@ -517,7 +826,8 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
 
   private resolveRole(role: string): mjBizAppsAccountingGLAccountRoleEntity | undefined {
     const key = uuidKey(role);
-    return this.GLAccountRoles.find(r => uuidKey(r.ID) === key) ?? this.GLAccountRoleByName(role);
+    const indexes = this.ensureGLAccountRolesIndexes();
+    return indexes.byId.get(key) ?? indexes.byName.get((role ?? '').trim().toLowerCase());
   }
 
   private linkCandidates(
@@ -530,19 +840,15 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
     const recordKey = (recordId ?? '').trim().toLowerCase();
     const roleKey = uuidKey(roleId);
     const companyKey = uuidKey(forCompanyID ?? '');
-    return this.GLAccountLinks.filter(l =>
-      uuidKey(l.EntityID) === entityKey &&
-      (l.RecordID ?? '').trim().toLowerCase() === recordKey &&
-      uuidKey(l.GLAccountRoleID) === roleKey &&
-      (!companyKey || uuidKey(this.GLAccountByID(l.GLAccountID)?.CompanyID ?? '') === companyKey),
-    );
+    const bucket = this.ensureGLAccountLinksIndex().byEntityRecordRole.get(`${entityKey}|${recordKey}|${roleKey}`) ?? [];
+    if (!companyKey) return [...bucket];
+    return bucket.filter(l => uuidKey(this.GLAccountByID(l.GLAccountID)?.CompanyID ?? '') === companyKey);
   }
 
   private decorateLink(link: mjBizAppsAccountingGLAccountLinkEntity): ResolvedLinkedAccount {
     const linkKey = uuidKey(link.ID);
-    const dimensions = this.GLAccountLinkDimensions
-      .filter(d => uuidKey(d.GLAccountLinkID) === linkKey)
-      .sort((a, b) => a.Sequence - b.Sequence);
+    const bucket = this.ensureGLAccountLinkDimensionsIndex().byLinkId.get(linkKey);
+    const dimensions = bucket ? [...bucket] : [];
     return { Link: link, Dimensions: dimensions };
   }
 
@@ -575,9 +881,9 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
     // does not need a special case, and the DB CHECK already makes such a row unstorable.
     if (!sourceKey || !targetKey || sourceKey === targetKey) return null;
 
-    const candidates = this.IntercompanyAccountMatches.filter(
-      (m) => uuidKey(m.SourceCompanyID) === sourceKey && uuidKey(m.TargetCompanyID) === targetKey,
-    );
+    const candidates = this.ensureIntercompanyMatchesIndex().bySourceTarget.get(`${sourceKey}|${targetKey}`) ?? [];
+    if (candidates.length === 0) return null;
+
     const winner = pickActiveLinkIndex(
       candidates.map((m) => ({ Status: m.Status, StartedAt: m.StartedAt, EndedAt: m.EndedAt })),
       asOfDate,
@@ -603,11 +909,8 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
   /** The ordered dimension requirements for one side of a match. */
   private intercompanyDimensions(matchId: string, side: 'DueTo' | 'DueFrom'): IntercompanyDimensionRequirement[] {
     const matchKey = uuidKey(matchId);
-    return this.IntercompanyAccountMatchDimensions.filter(
-      (d) => uuidKey(d.IntercompanyAccountMatchID) === matchKey && d.Side === side,
-    )
-      .sort((a, b) => a.Sequence - b.Sequence)
-      .map((d) => ({ DimensionID: d.DimensionID, DimensionValueID: d.DimensionValueID, Sequence: d.Sequence }));
+    const bucket = this.ensureIntercompanyMatchDimensionsIndex().byMatchAndSide.get(`${matchKey}|${side}`);
+    return bucket ? [...bucket] : [];
   }
 
   // ─── pipeline adapter ──────────────────────────────────────────────────────
@@ -615,18 +918,18 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
   /** Point lookup: the JournalEntryType with this Code (case-insensitive), or undefined. */
   public JournalEntryTypeByCode(code: string): mjBizAppsAccountingJournalEntryTypeEntity | undefined {
     const key = (code ?? '').trim().toLowerCase();
-    return this.JournalEntryTypes.find(t => t.Code.trim().toLowerCase() === key);
+    return this.ensureJournalEntryTypesIndex().byCode.get(key);
   }
 
   /** The single IsJournalEntryBatchSummary=1 type row (filtered unique index guarantees at most one). */
   public get JournalEntryBatchSummaryEntryType(): mjBizAppsAccountingJournalEntryTypeEntity | undefined {
-    return this.JournalEntryTypes.find(t => t.IsJournalEntryBatchSummary);
+    return this.ensureJournalEntryTypesIndex().summaryEntryType;
   }
 
   /** Cache-backed lookups for the pure draft pipeline (./pipeline.ts). */
   public CreatePipelineLookups(): PipelineLookups {
-    const accounts = new Map(this.GLAccounts.map(a => [uuidKey(a.ID), a]));
-    const entryTypes = new Map(this.JournalEntryTypes.map(t => [t.Code.trim().toLowerCase(), t]));
+    const accounts = this.ensureGLAccountsIndexes().byId;
+    const entryTypes = this.ensureJournalEntryTypesIndex().byCode;
     const dimensions = new Set(this.Dimensions.map(d => uuidKey(d.ID)));
     const valuesByDimension = new Map<string, Set<string>>();
     for (const v of this.DimensionValues) {
