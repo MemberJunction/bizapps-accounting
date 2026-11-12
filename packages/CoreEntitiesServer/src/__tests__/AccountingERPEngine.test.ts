@@ -143,6 +143,10 @@ const DIM_VENTURE = 'dddddddd-0000-0000-0000-000000000001';
 const DIM_PRODUCT = 'dddddddd-0000-0000-0000-000000000002';
 const VAL_ACME = 'eeeeeeee-0000-0000-0000-000000000001';
 const VAL_WIDGET = 'eeeeeeee-0000-0000-0000-000000000002';
+// Real UUIDs: resolveExternalAccount validates the GL account id (sqlGuidLiteral) before it queries.
+const GL_1 = 'a1a1a1a1-0000-0000-0000-000000000001';
+const GL_2 = 'a1a1a1a1-0000-0000-0000-000000000002';
+const GL_3 = 'a1a1a1a1-0000-0000-0000-000000000003';
 
 /** The views a tagged Business Central post reads, minus the Dimensions view each case varies. */
 function dimensionTaggedViews(): Record<string, unknown[]> {
@@ -182,8 +186,8 @@ function taggedBatch() {
 
 function taggedLines() {
   return [
-    { ID: LINE_1, GLAccountID: 'gl-1', DebitAmount: 100, CreditAmount: null, Description: 'Debit side' },
-    { ID: LINE_2, GLAccountID: 'gl-2', DebitAmount: null, CreditAmount: 100, Description: 'Credit side' },
+    { ID: LINE_1, GLAccountID: GL_1, DebitAmount: 100, CreditAmount: null, Description: 'Debit side' },
+    { ID: LINE_2, GLAccountID: GL_2, DebitAmount: null, CreditAmount: 100, Description: 'Credit side' },
   ] as never;
 }
 
@@ -361,7 +365,7 @@ describe('AccountingERPEngine.PostJournalBatch', () => {
       JournalEntryBatchNumber: 'BATCH-1',
       PostingDate: new Date('2026-08-01'),
     } as never;
-    const lines = [{ GLAccountID: 'gl-1', DebitAmount: 10, CreditAmount: null, Description: 'x' }] as never;
+    const lines = [{ GLAccountID: GL_1, DebitAmount: 10, CreditAmount: null, Description: 'x' }] as never;
     // resolveExternalAccount hits GL Accounts view with ExtraFilter — our stub ignores filter
     const result: ErpPostResult = await AccountingERPEngine.Instance.PostJournalBatch(batch, lines, user, p);
     expect(result.success).toBe(false);
@@ -496,8 +500,8 @@ describe('AccountingERPEngine.PostJournalBatch', () => {
     const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS' }));
     AccountingERPEngine.Instance.UseSeams({ runVerb });
     const lines = [
-      { ID: LINE_1, GLAccountID: 'gl-1', DebitAmount: 100, CreditAmount: null, Description: fitsWithToken },
-      { ID: LINE_2, GLAccountID: 'gl-2', DebitAmount: null, CreditAmount: 100, Description: overWithToken },
+      { ID: LINE_1, GLAccountID: GL_1, DebitAmount: 100, CreditAmount: null, Description: fitsWithToken },
+      { ID: LINE_2, GLAccountID: GL_2, DebitAmount: null, CreditAmount: 100, Description: overWithToken },
     ] as never;
 
     const result: ErpPostResult = await AccountingERPEngine.Instance.PostJournalBatch(
@@ -586,7 +590,7 @@ describe('AccountingERPEngine.PostJournalBatch — after the ERP accepts', () =>
   it('stamps the batch token on every line it sends, after the line\'s own description', async () => {
     const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }] }));
     AccountingERPEngine.Instance.UseSeams({ runVerb });
-    const lines = [...(taggedLines() as unknown as object[]), { ID: 'line-3', GLAccountID: 'gl-3', DebitAmount: 0, CreditAmount: null, Description: null }] as never;
+    const lines = [...(taggedLines() as unknown as object[]), { ID: 'line-3', GLAccountID: GL_3, DebitAmount: 0, CreditAmount: null, Description: null }] as never;
 
     await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), lines, user, providerWith(taggedViewsWithCodes()));
 

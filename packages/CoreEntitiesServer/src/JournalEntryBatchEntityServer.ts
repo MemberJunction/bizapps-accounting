@@ -1071,7 +1071,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     const rv = this.ProviderToUse as unknown as IRunViewProvider;
     const md = this.ProviderToUse as unknown as IMetadataProvider;
     const res = await rv.RunView<{ ID: string }>(
-      { EntityName: JE_ENTITY, ExtraFilter: `JournalEntryBatchID='${this.ID}' AND Status='Batched'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
+      { EntityName: JE_ENTITY, ExtraFilter: `JournalEntryBatchID=${sqlGuidLiteral(this.ID, 'batch ID')} AND Status='Batched'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true, IgnoreMaxRows: true },
       user,
     );
     if (!res.Success) throw new Error(`Could not release the batch's entries: loading them failed: ${res.ErrorMessage ?? 'unknown error'}`);
@@ -1088,7 +1088,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     const rv = this.ProviderToUse as unknown as IRunViewProvider;
     const md = this.ProviderToUse as unknown as IMetadataProvider;
     const lineRes = await rv.RunView<mjBizAppsAccountingJournalEntryLineEntity>(
-      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${summaryId}'`, ResultType: 'entity_object', BypassCache: true, IgnoreMaxRows: true },
+      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID=${sqlGuidLiteral(summaryId, 'summary journal entry')}`, ResultType: 'entity_object', BypassCache: true, IgnoreMaxRows: true },
       user,
     );
     if (!lineRes.Success) throw new Error(`Could not delete the batch's summary entry: loading its lines failed: ${lineRes.ErrorMessage ?? 'unknown error'}`);
