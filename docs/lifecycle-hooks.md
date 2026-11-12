@@ -170,7 +170,7 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   `approvedByUserId` other than the context user. So the generic form or the GraphQL update cannot
   record an approval no configured approver made, under an approver of the caller's choosing.
 - **`JournalEntryBatchEntityServer.Validate` — the audit fields are the server's (#451).** On a saved
-  batch, `BatchedAt`, `BatchedByUserID`, the approval, archive, cancel and send who/when pairs and
+  batch, `BatchedAt`, `BatchedByUserID`, the approval, archive, cancel and send who/when pairs, `ArchiveReason` and
   `ERPNotPostedConfirmedAt` / `ERPNotPostedConfirmedByUserID` change only while a verb is saving
   (`Approve`, `Archive`, `Cancel`/`CancelAfterTeardown`, `SaveDispatchTransition`); a plain save that
   changes one is refused. Values are compared as instants and case-insensitive IDs, so a form that sends

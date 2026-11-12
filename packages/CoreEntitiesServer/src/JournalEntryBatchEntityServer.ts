@@ -114,7 +114,8 @@ const DISPATCH_TARGETS: ReadonlyArray<string> = ['Sent', 'Posted'];
 
 /**
  * The batch's audit fields: who built, approved, archived, cancelled or sent it, when, and who
- * attested that a sent batch had not posted before it was cancelled (#451). The server writes them,
+ * attested that a sent batch had not posted before it was cancelled (#451), and why an archived batch
+ * will never post: its ArchiveReason is the only record of that. The server writes them,
  * through the build and this class's verbs; a plain save that changes one is refused, so a caller
  * cannot choose who is recorded. They stay API-writable in metadata on purpose: MJ leaves a field
  * with AllowUpdateAPI off out of its create and update procedures, so the server's own stamps
@@ -124,7 +125,7 @@ const DISPATCH_TARGETS: ReadonlyArray<string> = ['Sent', 'Posted'];
 const AUDIT_FIELDS: ReadonlyArray<string> = [
   'BatchedAt', 'BatchedByUserID',
   'ApprovedAt', 'ApprovedByUserID',
-  'ArchivedAt', 'ArchivedByUserID',
+  'ArchiveReason', 'ArchivedAt', 'ArchivedByUserID',
   'CancelledAt', 'CancelledByUserID',
   'SentAt', 'SentByUserID',
   'ERPNotPostedConfirmedAt', 'ERPNotPostedConfirmedByUserID',
