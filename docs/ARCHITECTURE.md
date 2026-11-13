@@ -173,7 +173,8 @@ refuses a draft that spans companies, checks balance, and writes atomically. Hoo
     `Pending`, only a `Sent` batch becomes `Posted` or `Failed`, a `Sent` batch is neither cancelled
     nor archived, and a batch is cancelled only with its summary pointer cleared.
   - **50032** the cancel audit and the ERP check are written only by the update that cancels the
-    batch, and `SentAt` is never cleared once set.
+    batch, the archive audit (`ArchiveReason`, `ArchivedAt`, `ArchivedByUserID`) only by the update
+    that archives it, and `SentAt` is never cleared once set.
   - **50034** `SealMismatchDetectedAt` is set only on a retry's `Sent` → `Posted` (`SendAttemptCount`
     above 1), and never changed or cleared after.
 
