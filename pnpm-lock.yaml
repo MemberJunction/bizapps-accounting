@@ -59,7 +59,7 @@ importers:
   packages/Actions:
     dependencies:
       '@mj-biz-apps/accounting-core-entities-server':
-        specifier: ^0.27.1
+        specifier: ^0.28.0
         version: link:../CoreEntitiesServer
       zod:
         specifier: ^3.25.28
@@ -114,10 +114,10 @@ importers:
   packages/Angular:
     dependencies:
       '@mj-biz-apps/accounting-engine-base':
-        specifier: ^0.27.1
+        specifier: ^0.28.0
         version: link:../EngineBase
       '@mj-biz-apps/accounting-entities':
-        specifier: ^0.27.1
+        specifier: ^0.28.0
         version: link:../Entities
       ag-grid-angular:
         specifier: ^35.0.1
@@ -223,10 +223,10 @@ importers:
   packages/CoreEntitiesServer:
     dependencies:
       '@mj-biz-apps/accounting-engine-base':
-        specifier: ^0.27.1
+        specifier: ^0.28.0
         version: link:../EngineBase
       '@mj-biz-apps/accounting-entities':
-        specifier: ^0.27.1
+        specifier: ^0.28.0
         version: link:../Entities
     devDependencies:
       '@memberjunction/actions':
@@ -275,7 +275,7 @@ importers:
   packages/EngineBase:
     dependencies:
       '@mj-biz-apps/accounting-entities':
-        specifier: ^0.27.1
+        specifier: ^0.28.0
         version: link:../Entities
     devDependencies:
       '@memberjunction/core':
@@ -328,7 +328,7 @@ importers:
         specifier: ^6.2.1
         version: 6.2.1(@aws-sdk/credential-provider-node@3.972.95)(@modelcontextprotocol/sdk@1.30.0(zod@4.6.7))(@smithy/signature-v4@5.7.5)(@types/node@22.20.1)(axios@1.19.0)(chokidar@3.6.0)(encoding@0.1.13)(typescript@5.9.3)(vitest@4.1.11(@types/node@22.20.1)(jsdom@26.1.0)(vite@7.3.6(@types/node@22.20.1)(sass@1.97.1)))(ws@8.22.2)(zod@4.6.7)
       '@mj-biz-apps/accounting-entities':
-        specifier: '>=0.27.1'
+        specifier: '>=0.28.0'
         version: link:../Entities
     devDependencies:
       '@types/node':
@@ -347,13 +347,13 @@ importers:
   packages/Server:
     dependencies:
       '@mj-biz-apps/accounting-actions':
-        specifier: ^0.27.1
+        specifier: ^0.28.0
         version: link:../Actions
       '@mj-biz-apps/accounting-core-entities-server':
-        specifier: ^0.27.1
+        specifier: ^0.28.0
         version: link:../CoreEntitiesServer
       '@mj-biz-apps/accounting-entities':
-        specifier: ^0.27.1
+        specifier: ^0.28.0
         version: link:../Entities
       class-validator:
         specifier: ^0.14.3
@@ -11545,7 +11545,24 @@ snapshots:
       - canvas
     optional: true
 
-  '@hyperframes/engine@0.8.134':
+  '@hyperframes/core@0.8.134(@types/node@24.10.11)':
+    dependencies:
+      '@chenglou/pretext': 0.0.5
+      '@hyperframes/lint': 0.8.134
+      '@hyperframes/parsers': 0.8.134
+      '@hyperframes/studio-server': 0.8.134(@types/node@24.10.11)
+      bpm-detective: 2.0.5
+      linkedom: 0.18.15
+      postcss: 8.5.26
+      wawoff2: 2.0.1
+    optionalDependencies:
+      esbuild: 0.25.12
+    transitivePeerDependencies:
+      - '@types/node'
+      - canvas
+    optional: true
+
+  '@hyperframes/engine@0.8.134(@types/node@22.20.1)':
     dependencies:
       '@hono/node-server': 2.1.1(hono@4.13.3)
       '@hyperframes/core': 0.8.134(@types/node@22.20.1)
@@ -11555,6 +11572,25 @@ snapshots:
       puppeteer: 25.16.0
       puppeteer-core: 25.16.0
     transitivePeerDependencies:
+      - '@types/node'
+      - bufferutil
+      - canvas
+      - proxy-agent
+      - utf-8-validate
+      - yauzl
+    optional: true
+
+  '@hyperframes/engine@0.8.134(@types/node@24.10.11)':
+    dependencies:
+      '@hono/node-server': 2.1.1(hono@4.13.3)
+      '@hyperframes/core': 0.8.134(@types/node@24.10.11)
+      '@hyperframes/parsers': 0.8.134
+      hono: 4.13.3
+      linkedom: 0.18.15
+      puppeteer: 25.16.0
+      puppeteer-core: 25.16.0
+    transitivePeerDependencies:
+      - '@types/node'
       - bufferutil
       - canvas
       - proxy-agent
@@ -11591,7 +11627,7 @@ snapshots:
     dependencies:
       '@hono/node-server': 2.1.1(hono@4.13.3)
       '@hyperframes/core': 0.8.134(@types/node@22.20.1)
-      '@hyperframes/engine': 0.8.134
+      '@hyperframes/engine': 0.8.134(@types/node@22.20.1)
       '@hyperframes/lint': 0.8.134
       '@hyperframes/parsers': 0.8.134
       '@hyperframes/studio-server': 0.8.134(@types/node@22.20.1)
@@ -11612,8 +11648,8 @@ snapshots:
   '@hyperframes/producer@0.8.134(@types/node@24.10.11)':
     dependencies:
       '@hono/node-server': 2.1.1(hono@4.13.3)
-      '@hyperframes/core': 0.8.134(@types/node@22.20.1)
-      '@hyperframes/engine': 0.8.134
+      '@hyperframes/core': 0.8.134(@types/node@24.10.11)
+      '@hyperframes/engine': 0.8.134(@types/node@24.10.11)
       '@hyperframes/lint': 0.8.134
       '@hyperframes/parsers': 0.8.134
       '@hyperframes/studio-server': 0.8.134(@types/node@24.10.11)
@@ -11634,8 +11670,8 @@ snapshots:
   '@hyperframes/producer@0.8.134(@types/node@25.9.5)':
     dependencies:
       '@hono/node-server': 2.1.1(hono@4.13.3)
-      '@hyperframes/core': 0.8.134(@types/node@22.20.1)
-      '@hyperframes/engine': 0.8.134
+      '@hyperframes/core': 0.8.134(@types/node@24.10.11)
+      '@hyperframes/engine': 0.8.134(@types/node@24.10.11)
       '@hyperframes/lint': 0.8.134
       '@hyperframes/parsers': 0.8.134
       '@hyperframes/studio-server': 0.8.134(@types/node@25.9.5)
@@ -11669,7 +11705,7 @@ snapshots:
 
   '@hyperframes/studio-server@0.8.134(@types/node@24.10.11)':
     dependencies:
-      '@hyperframes/core': 0.8.134(@types/node@22.20.1)
+      '@hyperframes/core': 0.8.134(@types/node@24.10.11)
       '@hyperframes/parsers': 0.8.134
       hono: 4.13.3
       linkedom: 0.18.15
@@ -11683,7 +11719,7 @@ snapshots:
 
   '@hyperframes/studio-server@0.8.134(@types/node@25.9.5)':
     dependencies:
-      '@hyperframes/core': 0.8.134(@types/node@22.20.1)
+      '@hyperframes/core': 0.8.134(@types/node@24.10.11)
       '@hyperframes/parsers': 0.8.134
       hono: 4.13.3
       linkedom: 0.18.15
@@ -25736,7 +25772,7 @@ snapshots:
   '@memberjunction/video-studio-render-worker@6.2.1(@types/node@22.20.1)':
     dependencies:
       '@hyperframes/core': 0.8.134(@types/node@22.20.1)
-      '@hyperframes/engine': 0.8.134
+      '@hyperframes/engine': 0.8.134(@types/node@22.20.1)
       '@hyperframes/lint': 0.8.134
       '@hyperframes/parsers': 0.8.134
       '@hyperframes/producer': 0.8.134(@types/node@22.20.1)
@@ -25755,8 +25791,8 @@ snapshots:
 
   '@memberjunction/video-studio-render-worker@6.2.1(@types/node@24.10.11)':
     dependencies:
-      '@hyperframes/core': 0.8.134(@types/node@22.20.1)
-      '@hyperframes/engine': 0.8.134
+      '@hyperframes/core': 0.8.134(@types/node@24.10.11)
+      '@hyperframes/engine': 0.8.134(@types/node@24.10.11)
       '@hyperframes/lint': 0.8.134
       '@hyperframes/parsers': 0.8.134
       '@hyperframes/producer': 0.8.134(@types/node@24.10.11)
@@ -25775,8 +25811,8 @@ snapshots:
 
   '@memberjunction/video-studio-render-worker@6.2.1(@types/node@25.9.5)':
     dependencies:
-      '@hyperframes/core': 0.8.134(@types/node@22.20.1)
-      '@hyperframes/engine': 0.8.134
+      '@hyperframes/core': 0.8.134(@types/node@24.10.11)
+      '@hyperframes/engine': 0.8.134(@types/node@24.10.11)
       '@hyperframes/lint': 0.8.134
       '@hyperframes/parsers': 0.8.134
       '@hyperframes/producer': 0.8.134(@types/node@25.9.5)
