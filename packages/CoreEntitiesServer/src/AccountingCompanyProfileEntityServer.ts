@@ -47,7 +47,7 @@ import {
   UsesParentBooks,
 } from '@mj-biz-apps/accounting-engine-base';
 import { ParentBooksAccountOwnerError } from './GLAccountEntityServer.js';
-import { sqlGuidLiteral } from './SqlGuards.js';
+import { isSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
 
 import {
   DEFAULT_CHART_OF_ACCOUNTS,
@@ -78,7 +78,8 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
    * under a company with no ERP connection. `GLAccountEntityServer` refuses the same state on the
    * account side. Checked on create, because GL accounts reference __mj.Company and a company can
    * own accounts before its profile exists, and on update only when EntityType changes, so other
-   * edits to such a profile still save.
+   * edits to such a profile still save. A new profile whose company has no ID yet is skipped: that
+   * company is new too and owns nothing.
    */
   public override async ValidateAsync(): Promise<ValidationResult> {
     const result = await super.ValidateAsync();
@@ -94,9 +95,9 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
     return result;
   }
 
-  /** True for a new profile, or a saved one whose EntityType was edited. */
+  /** True for a new profile on an existing company, or a saved one whose EntityType was edited. */
   private entityTypeNeedsOwnerCheck(): boolean {
-    if (!this.IsSaved) return true;
+    if (!this.IsSaved) return isSqlGuid(this.ID);
     return this.GetFieldByName('EntityType')?.Dirty ?? false;
   }
 

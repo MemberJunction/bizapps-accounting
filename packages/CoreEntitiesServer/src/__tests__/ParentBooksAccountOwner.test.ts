@@ -144,10 +144,13 @@ describe('AccountingCompanyProfileEntityServer — a company with active account
     expect((await acp.ValidateAsync()).Success).toBe(true);
   });
 
-  const newProfile = (entityType: AccountingCompanyProfileEntityServer['EntityType']): AccountingCompanyProfileEntityServer => {
+  const newProfile = (
+    entityType: AccountingCompanyProfileEntityServer['EntityType'],
+    id: string | null = COMPANY,
+  ): AccountingCompanyProfileEntityServer => {
     const acp = new AccountingCompanyProfileEntityServer(info);
     acp.NewRecord();
-    acp.ID = COMPANY;
+    if (id !== null) acp.ID = id;
     acp.CompanyCode = 'BRAND';
     acp.EntityType = entityType;
     acp.FunctionalCurrencyCode = 'USD';
@@ -173,6 +176,14 @@ describe('AccountingCompanyProfileEntityServer — a company with active account
 
   it('accepts a new legal-entity profile for a company that owns active accounts, without reading them', async () => {
     const acp = newProfile('Subsidiary');
+    const calls = stubRunView(acp, [{ Code: '1200' }]);
+    expect((await acp.ValidateAsync()).Success).toBe(true);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('does not read accounts for a new Division whose company has no ID yet', async () => {
+    const acp = newProfile('Division', null);
+    acp.ID = '';
     const calls = stubRunView(acp, [{ Code: '1200' }]);
     expect((await acp.ValidateAsync()).Success).toBe(true);
     expect(calls).toHaveLength(0);
