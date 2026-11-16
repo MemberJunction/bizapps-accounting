@@ -42,7 +42,7 @@ import {
   type RenumberedJournalSearch,
 } from './BaseAccountingERPProvider.js';
 import {
-  resolveExternalAccount,
+  resolveERPAccount,
   resolveExternalDimensions,
   type ErpJournalLookupResult,
   type ErpPostResult,
@@ -1056,9 +1056,9 @@ async function erpLinesFor(
   const dimensionsByLine = await resolveExternalDimensions(summaryLines.map((l) => l.ID), user, provider);
   const lines: CreateERPJournalInput['Lines'] = [];
   for (const line of summaryLines) {
-    const accountNumber = await resolveExternalAccount(line.GLAccountID, target, user, provider, requireExternalAccountID);
+    const account = await resolveERPAccount(line.GLAccountID, target, user, provider, requireExternalAccountID);
     lines.push({
-      accountNumber,
+      ...account,
       debit: line.DebitAmount ?? undefined,
       credit: line.CreditAmount ?? undefined,
       description: withBatchToken(line.Description, batch.ID),

@@ -346,6 +346,7 @@ erDiagram
         string CurrencyCode FK
         string ExternalSystem "ERP identity (D13)"
         string ExternalAccountID
+        string ExternalBankAccountNumber "BC bank account the cash account sits behind"
         bool IsActive
         bool IsSystemSeeded
         bool IsControlAccount "manual entries on it always need the CFO"
@@ -651,6 +652,7 @@ erDiagram
         string CurrencyCode FK "nullable"
         string ExternalSystem "nullable - ERP identity lives HERE (D13)"
         string ExternalAccountID "nullable"
+        string ExternalBankAccountNumber "nullable - BC bank account No.; lines post to the bank account"
         bool IsActive
         bool IsSystemSeeded "minimal ~10-12 account seed"
         bool IsControlAccount "default 0 - a manual entry with a line on it always needs the Approval CFO"

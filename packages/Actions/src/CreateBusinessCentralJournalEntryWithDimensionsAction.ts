@@ -57,6 +57,13 @@ interface BCJournalLineResult {
   documentNumber?: string;
 }
 
+/**
+ * A journal line as the accounting engine sends it. `bankAccountNumber` is the Business Central
+ * bank account a cash line posts to (GLAccount.ExternalBankAccountNumber); MJ's line parser passes
+ * it through untouched.
+ */
+type BCJournalEntryLine = JournalEntryLine & { bankAccountNumber?: string };
+
 /** How many staged lines the pre-write check reads: enough to name what is there, not to page it all. */
 const STAGED_LINES_SAMPLE = 20;
 
@@ -198,7 +205,7 @@ export class CreateBusinessCentralJournalEntryWithDimensionsAction extends Creat
 
   /** BC journal line body. Dimensions are NOT line fields — they are a child collection. */
   private mapJournalLine(
-    line: JournalEntryLine,
+    line: BCJournalEntryLine,
     index: number,
     postingDate: string,
     documentNumber: string | undefined,
@@ -206,7 +213,6 @@ export class CreateBusinessCentralJournalEntryWithDimensionsAction extends Creat
   ): Record<string, unknown> {
     const body: Record<string, unknown> = {
       lineNumber: (index + 1) * 10000,
-      accountType: 'G/L Account',
       postingDate,
       amount: line.debit != null ? line.debit : -(line.credit || 0),
       description: line.description || batchDescription || '',
@@ -214,6 +220,20 @@ export class CreateBusinessCentralJournalEntryWithDimensionsAction extends Creat
     if (documentNumber) {
       body.documentNumber = documentNumber;
     }
+    return { ...body, ...this.lineAccount(line) };
+  }
+
+  /**
+   * The account the line posts to. A line with a bank account posts to that Business Central bank
+   * account, which writes a bank ledger entry and reaches its G/L account through the bank's posting
+   * group; that is also the only way to post to a G/L account whose Direct Posting is off.
+   */
+  private lineAccount(line: BCJournalEntryLine): Record<string, unknown> {
+    const bank = line.bankAccountNumber?.trim();
+    if (bank) {
+      return { accountType: 'Bank Account', accountNumber: bank };
+    }
+    const body: Record<string, unknown> = { accountType: 'G/L Account' };
     // AM-4: accountNumber wins. Sending both lets a stale accountId override the number.
     if (line.accountNumber) {
       body.accountNumber = line.accountNumber;
