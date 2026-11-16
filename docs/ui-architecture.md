@@ -15,7 +15,7 @@ existing one.
 
 **Typing.** This is where the real damage is. Generated entity classes are typed from the schema —
 the compiler knows `JournalEntryLine.DebitAmount` is `DECIMAL(18,2)` and that `JournalEntry.Status`
-is `Pending | Batched | GLPosted`. A service that accepts and returns DTOs re-types the same data by
+is `Pending | Batched | GLPosted | Voided`. A service that accepts and returns DTOs re-types the same data by
 hand, and every field is a place the two can drift. In practice the boundary degrades to `any` and
 the strong typing the platform generated for free is thrown away one method signature at a time.
 

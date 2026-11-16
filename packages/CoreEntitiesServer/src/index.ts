@@ -181,6 +181,15 @@ export {
   type CompanyDateRules,
 } from './RedatePendingJournalEntriesOperation.js';
 export {
+  VoidPendingJournalEntriesOperation,
+  LoadVoidPendingJournalEntriesOperation,
+  VoidProblems,
+  type VoidPendingJournalEntriesInput,
+  type VoidPendingJournalEntriesOutput,
+  type VoidedJournalEntry,
+  type VoidCandidate,
+} from './VoidPendingJournalEntriesOperation.js';
+export {
   GetJournalEntryStatesOperation,
   LoadGetJournalEntryStatesOperation,
   MAX_JOURNAL_ENTRY_STATE_IDS,

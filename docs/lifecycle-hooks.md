@@ -142,7 +142,9 @@ identical op over GraphQL `ExecuteRemoteOperation`.
 Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVERY save of the entity):
 
 - **`JournalEntryEntityServer.Validate/ValidateAsync` — JE status graph.** A JE is **born Pending**;
-  the only legal saved-record transitions are `Pending→Batched`, `Batched→GLPosted`, and the
+  the only legal saved-record transitions are `Pending→Batched`, `Pending→Voided` (only through
+  `SaveVoided`, called by `Accounting.VoidPendingJournalEntries`, which writes the void audit; a
+  Voided entry refuses every later change and its delete — golive #378), `Batched→GLPosted`, and the
   reversible `Batched→Pending` unlock (with `JournalEntryBatchID` cleared — the owning-batch-still-
   Pending half stays DB-enforced, 50004/50005). A transition **to GLPosted** additionally requires
   the owning batch to be `Sent`/`Posted` (ValidateAsync, DB read) — so a direct client save can no

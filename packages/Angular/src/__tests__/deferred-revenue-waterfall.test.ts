@@ -15,7 +15,7 @@ beforeEach(() => {
     installStubProvider([
         stubEntityInfo(JE_ENTITY, [
             'ID', 'CompanyID', 'EntryNumber', 'EffectiveDate', 'LinkedRecordID', 'Description', '__mj_CreatedAt',
-            'ReversesJournalEntryID', 'ReversedByJournalEntryID',
+            'ReversesJournalEntryID', 'ReversedByJournalEntryID', 'Status',
         ]),
         stubEntityInfo(JEL_ENTITY, ['ID', 'JournalEntryID', 'DebitAmount', 'CreditAmount']),
     ]);
@@ -69,6 +69,7 @@ async function mockEntry(fields: {
     CompanyID?: string;
     ReversesJournalEntryID?: string;
     ReversedByJournalEntryID?: string;
+    Status?: mjBizAppsAccountingJournalEntryEntity['Status'];
 }): Promise<mjBizAppsAccountingJournalEntryEntity> {
     const entry = await entityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY);
     entry.NewRecord();
@@ -81,6 +82,7 @@ async function mockEntry(fields: {
     entry.Description = fields.Description;
     if (fields.ReversesJournalEntryID) entry.ReversesJournalEntryID = fields.ReversesJournalEntryID;
     if (fields.ReversedByJournalEntryID) entry.ReversedByJournalEntryID = fields.ReversedByJournalEntryID;
+    if (fields.Status) entry.Status = fields.Status;
 
     const line = await entry.Lines.Create();
     line.CreditAmount = fields.CreditAmount;
@@ -368,6 +370,21 @@ describe('DeferredRevenueWaterfallComponent', () => {
             expect(comp.Summary.TotalDeferredBeginning).toBe(100);
             expect(comp.Summary.TotalRecognizedToDate).toBe(100);
             expect(load).not.toHaveBeenCalled();
+        });
+
+        it('leaves out a voided entry on every day, before and after its date (golive #378)', async () => {
+            const voided = async (day: string) => mockEntry({
+                EntryNumber: `V-${day}`,
+                EffectiveDate: FromCalendarDay(day),
+                LinkedRecordID: 'sub-term-1',
+                Description: 'Monthly Subscription Rev Rec',
+                CreditAmount: 400,
+                Status: 'Voided',
+            });
+            const comp = render([await standing(), await voided('2026-01-15'), await voided('2026-03-01')]);
+            expect(comp.Summary.TotalDeferredBeginning).toBe(100);
+            expect(comp.Summary.TotalRecognizedToDate).toBe(100);
+            expect(comp.Summary.TotalRemainingUnearned).toBe(0);
         });
 
         it('leaves out a reversal entry passed in without its original', async () => {

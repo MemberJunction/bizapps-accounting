@@ -3436,7 +3436,7 @@ export class mjBizAppsAccountingJournalEntry_ {
     @MaxLength(36)
     EntryTypeID?: string;
         
-    @Field({nullable: true, description: "Lifecycle state: Pending | Batched | GLPosted (BA-D6). Locked after Batched; only GLPosted transition and GL-roundtrip fields may change."}) 
+    @Field({nullable: true, description: "Lifecycle state: Pending | Batched | GLPosted | Voided (BA-D6). Locked after Batched; only GLPosted transition and GL-roundtrip fields may change. Voided is terminal and reached only from Pending in no batch: the entry never reaches a batch, the ERP or a balance, and it and its lines are frozen."}) 
     @MaxLength(20)
     Status?: string;
         
@@ -3509,6 +3509,17 @@ export class mjBizAppsAccountingJournalEntry_ {
     @MaxLength(36)
     ApprovedByUserID?: string;
         
+    @Field({nullable: true, description: "Why this entry was voided instead of posted. Required when Status = Voided and empty otherwise (CK_JournalEntry_VoidAudit)."}) 
+    @MaxLength(1000)
+    VoidReason?: string;
+        
+    @Field({nullable: true, description: "When the entry was voided. Required when Status = Voided and empty otherwise."}) 
+    VoidedAt?: Date;
+        
+    @Field({nullable: true, description: "User who voided the entry. Required when Status = Voided and empty otherwise."}) 
+    @MaxLength(36)
+    VoidedByUserID?: string;
+        
     @Field({nullable: true}) 
     @MaxLength(50)
     Company?: string;
@@ -3548,6 +3559,42 @@ export class mjBizAppsAccountingJournalEntry_ {
     @Field({nullable: true}) 
     @MaxLength(100)
     ApprovedByUser?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(100)
+    VoidedByUser?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(36)
+    RootReversesJournalEntryID?: string;
+        
+    @Field(() => Int, {nullable: true}) 
+    ReversesJournalEntryIDDepth?: number;
+        
+    @Field({nullable: true}) 
+    ReversesJournalEntryIDPath?: string;
+        
+    @Field(() => Boolean, {nullable: true}) 
+    ReversesJournalEntryIDIsLeaf?: boolean;
+        
+    @Field(() => Int, {nullable: true}) 
+    ReversesJournalEntryIDChildCount?: number;
+        
+    @Field({nullable: true}) 
+    @MaxLength(36)
+    RootReversedByJournalEntryID?: string;
+        
+    @Field(() => Int, {nullable: true}) 
+    ReversedByJournalEntryIDDepth?: number;
+        
+    @Field({nullable: true}) 
+    ReversedByJournalEntryIDPath?: string;
+        
+    @Field(() => Boolean, {nullable: true}) 
+    ReversedByJournalEntryIDIsLeaf?: boolean;
+        
+    @Field(() => Int, {nullable: true}) 
+    ReversedByJournalEntryIDChildCount?: number;
         
     @Field({nullable: true}) 
     @MaxLength(9)
@@ -3653,6 +3700,15 @@ export class CreatemjBizAppsAccountingJournalEntryInput {
     @Field({ nullable: true })
     ApprovedByUserID: string | null;
 
+    @Field({ nullable: true })
+    VoidReason: string | null;
+
+    @Field({ nullable: true })
+    VoidedAt: Date | null;
+
+    @Field({ nullable: true })
+    VoidedByUserID: string | null;
+
     @Field(() => RestoreContextInput, { nullable: true })
     RestoreContext___?: RestoreContextInput;
 }
@@ -3731,6 +3787,15 @@ export class UpdatemjBizAppsAccountingJournalEntryInput {
 
     @Field({ nullable: true })
     ApprovedByUserID?: string | null;
+
+    @Field({ nullable: true })
+    VoidReason?: string | null;
+
+    @Field({ nullable: true })
+    VoidedAt?: Date | null;
+
+    @Field({ nullable: true })
+    VoidedByUserID?: string | null;
 
     @Field(() => [KeyValuePairInput], { nullable: true })
     OldValues___?: KeyValuePairInput[];
