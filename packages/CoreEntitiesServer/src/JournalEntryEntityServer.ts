@@ -888,6 +888,12 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       line.GLAccountID = orig.GLAccountID;
       line.DebitAmount = orig.CreditAmount; // SWAP
       line.CreditAmount = orig.DebitAmount; // SWAP
+      // A line booked from another currency reverses at the rate it was booked at, so the original
+      // amount mirrors the functional one and the pair still agrees.
+      line.OriginalCurrencyCode = orig.OriginalCurrencyCode;
+      line.OriginalDebitAmount = orig.OriginalCreditAmount; // SWAP
+      line.OriginalCreditAmount = orig.OriginalDebitAmount; // SWAP
+      line.ExchangeRateUsed = orig.ExchangeRateUsed;
       line.Description = `Reversal of line ${orig.LineNumber}`;
       for (const origDim of orig.Dimensions) {
         const dim = await line.CreateDimension(user);

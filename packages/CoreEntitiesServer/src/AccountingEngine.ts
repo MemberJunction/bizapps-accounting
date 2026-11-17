@@ -238,6 +238,11 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       l.DebitAmount = line.DebitAmount;
       l.CreditAmount = line.CreditAmount;
       l.Description = line.Description;
+      // Original currency (all null for a functional-currency line); stage 1 checked amount × rate.
+      l.OriginalCurrencyCode = line.OriginalCurrencyCode;
+      l.OriginalDebitAmount = line.OriginalDebitAmount;
+      l.OriginalCreditAmount = line.OriginalCreditAmount;
+      l.ExchangeRateUsed = line.ExchangeRateUsed;
       for (const dim of line.Dimensions) {
         const d = await l.CreateDimension(contextUser);
         d.DimensionID = dim.DimensionID;

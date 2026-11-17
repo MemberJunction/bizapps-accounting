@@ -5,7 +5,9 @@
  * a draft with the same code the server enforces).
  *
  *   1. validateDraftShape   — ≥2 lines, ≥1 debit + ≥1 credit, exactly one side > 0 per line,
- *                             valid EffectiveDate + non-empty EntryType code → MALFORMED_DRAFT
+ *                             valid EffectiveDate + non-empty EntryType code → MALFORMED_DRAFT;
+ *                             original-currency fields that are incomplete or whose amount × rate
+ *                             is not the line's amount → ORIGINAL_AMOUNT_MISMATCH
  *   1b. validateEntryType   — the EntryType CODE resolves to an existing, active
  *                             JournalEntryType row (issue #24) → ENTRY_TYPE_UNKNOWN / _INACTIVE
  *   2. validateAccounts     — every GLAccountID exists → ACCOUNT_UNKNOWN; active → ACCOUNT_INACTIVE
@@ -13,6 +15,8 @@
  *                             to the dimension (validate-only, NEVER auto-create — CH-12)
  *                             → DIMENSION_UNKNOWN / DIMENSION_VALUE_UNKNOWN
  *   4. normalizeLines       — merge same-side lines with identical (GLAccountID, dimension set);
+ *                             a line in another currency is never merged, so it keeps its own
+ *                             original amount and rate;
  *                             debits ordered before credits; LineNumber assigned 1..n
  *   5. checkDraftBalance    — the draft resolves to exactly ONE company (plan D3: single-company
  *                             JEs; company = the line's GLAccount.CompanyID) → MULTI_COMPANY_DRAFT,
@@ -32,6 +36,7 @@ import type {
   JournalEntryLineDraft,
   JEValidationError,
 } from './contract.js';
+import { HasOriginalCurrency, OriginalCurrencyProblem } from './original-currency.js';
 
 /** Matches the DB triggers' rounding tolerance (trg_JournalEntry_BalancedOnLock, 50001/50019). */
 export const BALANCE_TOLERANCE = 0.005;
@@ -73,6 +78,11 @@ export interface NormalizedLine {
   CreditAmount: number | null;
   Description: string | null;
   Dimensions: { DimensionID: string; DimensionValueID: string }[];
+  /** Original-currency fields (./original-currency.ts) — all null for a functional-currency line. */
+  OriginalCurrencyCode: string | null;
+  OriginalDebitAmount: number | null;
+  OriginalCreditAmount: number | null;
+  ExchangeRateUsed: number | null;
   /** 0-based indexes of the draft lines merged into this one (for error/lineage reporting). */
   SourceLineIndexes: number[];
 }
@@ -117,13 +127,30 @@ export function validateDraftShape(draft: JournalEntryDraft): JEValidationError[
       errors.push({ Code: 'MALFORMED_DRAFT', LineIndex: i, Message: 'This line has no GL account.' });
       return;
     }
+    // Counted first: the line has a valid side, so its mismatch is not also reported as a missing side.
     if (hasDebit) debits++;
     else credits++;
+    // Checked on the values as stored (two places), so a draft that passes here also passes the
+    // same rule in JournalEntryLineEntityServer.Validate at save.
+    const fxProblem = OriginalCurrencyProblem(asStored(line));
+    if (fxProblem) errors.push({ Code: 'ORIGINAL_AMOUNT_MISMATCH', LineIndex: i, Message: fxProblem });
   });
   if (draft.Lines.length >= 2 && (debits === 0 || credits === 0)) {
     errors.push({ Code: 'MALFORMED_DRAFT', Message: 'A journal entry needs at least one debit line and one credit line.' });
   }
   return errors;
+}
+
+/** A draft line's amounts rounded to the two places the columns hold. */
+function asStored(line: JournalEntryLineDraft): JournalEntryLineDraft {
+  const r = (n: number | undefined): number | undefined => (typeof n === 'number' ? round2(n) : n);
+  return {
+    ...line,
+    DebitAmount: r(line.DebitAmount),
+    CreditAmount: r(line.CreditAmount),
+    OriginalDebitAmount: r(line.OriginalDebitAmount),
+    OriginalCreditAmount: r(line.OriginalCreditAmount),
+  };
 }
 
 // ─── Stage 1b — entry type (issue #24: validated against the lookup, not a TS union) ─
@@ -194,7 +221,9 @@ export function normalizeLines(draft: JournalEntryDraft, lookups: PipelineLookup
     const side: 'D' | 'C' = line.DebitAmount != null ? 'D' : 'C';
     const amount = round2(side === 'D' ? line.DebitAmount! : line.CreditAmount!);
     const dims = (line.Dimensions ?? []).map(d => ({ DimensionID: d.DimensionID, DimensionValueID: d.DimensionValueID }));
-    const key = mergeKey(side, line.GLAccountID, dims);
+    // A line in another currency gets a key of its own: merging two would sum amounts each rounded
+    // to the cent and could leave the merged pair outside the one-cent tolerance it passed alone.
+    const key = HasOriginalCurrency(line) ? `FX#${i}` : mergeKey(side, line.GLAccountID, dims);
     const existing = buckets.get(key);
     if (existing) {
       if (side === 'D') existing.line.DebitAmount = round2((existing.line.DebitAmount ?? 0) + amount);
@@ -214,6 +243,7 @@ export function normalizeLines(draft: JournalEntryDraft, lookups: PipelineLookup
         CreditAmount: side === 'C' ? amount : null,
         Description: line.Description ?? null,
         Dimensions: dims,
+        ...originalCurrencyFields(line, side),
         SourceLineIndexes: [i],
       },
     });
@@ -227,6 +257,21 @@ export function normalizeLines(draft: JournalEntryDraft, lookups: PipelineLookup
     .map(b => b.line);
   ordered.forEach((l, i) => { l.LineNumber = i + 1; });
   return ordered;
+}
+
+/** The original-currency columns a line writes: its own values on its own side, else all null. */
+function originalCurrencyFields(line: JournalEntryLineDraft, side: 'D' | 'C'): Pick<
+  NormalizedLine, 'OriginalCurrencyCode' | 'OriginalDebitAmount' | 'OriginalCreditAmount' | 'ExchangeRateUsed'
+> {
+  if (!HasOriginalCurrency(line)) {
+    return { OriginalCurrencyCode: null, OriginalDebitAmount: null, OriginalCreditAmount: null, ExchangeRateUsed: null };
+  }
+  return {
+    OriginalCurrencyCode: line.OriginalCurrencyCode ?? null,
+    OriginalDebitAmount: side === 'D' ? round2(line.OriginalDebitAmount!) : null,
+    OriginalCreditAmount: side === 'C' ? round2(line.OriginalCreditAmount!) : null,
+    ExchangeRateUsed: line.ExchangeRateUsed ?? null,
+  };
 }
 
 // ─── Stage 5 — single-company (plan D3) + balance ────────────────────────────

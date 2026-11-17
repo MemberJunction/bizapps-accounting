@@ -10,7 +10,9 @@
  * lines' GLAccount.CompanyID and stamps JournalEntry.CompanyID (plan D3: journal entries are
  * single-company). A draft whose lines resolve to MORE than one company is rejected with
  * MULTI_COMPANY_DRAFT — callers split per company upstream (orders books one JE per order line).
- * NO period fields; NO FX fields in v1 (deferred).
+ * NO period fields. A line booked from another currency carries its original amount and rate
+ * (OriginalCurrencyCode, OriginalDebitAmount / OriginalCreditAmount, ExchangeRateUsed); the line's
+ * DebitAmount / CreditAmount stay in the company's functional currency (./original-currency.ts).
  *
  * CONNECTS TO:
  *   PIPELINE:  ./pipeline.ts (the pure validation/normalization stages over this contract)
@@ -24,6 +26,18 @@ export interface JournalEntryLineDraft {
   DebitAmount?: number;
   CreditAmount?: number;
   Description?: string;
+  /**
+   * ORIGINAL CURRENCY (optional, all-or-none). Set these when the source transaction was in a
+   * currency other than the company's functional currency. The original amount goes on the same
+   * side as the functional amount, and `original × ExchangeRateUsed` must equal the functional
+   * amount within ORIGINAL_AMOUNT_TOLERANCE (one cent), or the draft is refused with
+   * ORIGINAL_AMOUNT_MISMATCH. `ExchangeRateUsed` is functional-currency units per ONE unit of
+   * the original currency — the direction CurrencySpotRate stores From = original, To = functional.
+   */
+  OriginalCurrencyCode?: string;
+  OriginalDebitAmount?: number;
+  OriginalCreditAmount?: number;
+  ExchangeRateUsed?: number;
   /** Pre-existing dimension/value pairs — validate-only, NEVER auto-created (CH-12). */
   Dimensions?: JournalEntryLineDimensionDraft[];
 }
@@ -64,6 +78,7 @@ export type JEErrorCode =
   | 'DIMENSION_UNKNOWN'
   | 'DIMENSION_VALUE_UNKNOWN'
   | 'UNBALANCED'
+  | 'ORIGINAL_AMOUNT_MISMATCH'
   | 'MULTI_COMPANY_DRAFT'
   | 'INTERNAL_ERROR';
 

@@ -33,7 +33,7 @@ import {
   JournalEntryLineEntity,
   mjBizAppsAccountingJournalEntryLineDimensionEntity,
 } from '@mj-biz-apps/accounting-entities';
-import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import { AccountingEngineBase, OriginalCurrencyProblem } from '@mj-biz-apps/accounting-engine-base';
 
 import { WithDimensionsSavedThroughLine } from './JournalEntryLineDimensionEntityServer.js';
 import { ManualJournalEntryApprovalService } from './ManualJournalEntryApproval.js';
@@ -184,6 +184,7 @@ export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
     const result = super.Validate();
 
     this.ValidateDimensions(result);
+    this.ValidateOriginalCurrency(result);
 
     // Validation via AccountingEngineBase cache: verify GL Account active status & company alignment
     if (this.GLAccountID && this.ParentJournalEntry?.CompanyID) {
@@ -214,6 +215,21 @@ export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
     }
 
     return result;
+  }
+
+  /**
+   * Original-currency rule (bizapps-accounting#450): the table's CHECK constraints keep the fields
+   * together and on the line's side, but not their values; this refuses a line whose original amount
+   * × ExchangeRateUsed differs from its debit or credit by more than one cent. Same rule the draft
+   * pipeline runs, so a line written directly is held to what CreateJournalEntry enforces.
+   */
+  private ValidateOriginalCurrency(result: ValidationResult): void {
+    const problem = OriginalCurrencyProblem(this);
+    if (!problem) return;
+    result.Success = false;
+    result.Errors.push(
+      new ValidationErrorInfo('ExchangeRateUsed', `Line ${this.LineNumber || ''}: ${problem}`, this.ExchangeRateUsed),
+    );
   }
 
   /**
