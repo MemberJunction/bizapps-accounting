@@ -4,6 +4,7 @@ import { IMetadataProvider, Metadata, RunView, RunViewParams, UserInfo } from '@
 import { AccountingOverviewPageComponent } from './accounting-overview.component';
 import { AUGUST_CLOSE_IN_CHICAGO, useBusinessClock, viewResult } from '../../../__tests__/support/business-clock';
 import { BatchOperatorCatalog } from '../../../__tests__/support/batch-operator';
+import { ComponentCss, RuleBody } from '../../../__tests__/support/component-styles';
 
 /**
  * The overview reads two DATE columns — `PostingDate` (recent batches) and `EffectiveDate` (the
@@ -105,5 +106,37 @@ describe('AccountingOverviewPageComponent — Build Batch needs the batch-operat
 
   it('shows anyone else none', async () => {
     expect(await buildButtonsFor(false)).toEqual([]);
+  });
+});
+
+/**
+ * THE PAGE CARRIES ITS OWN SCROLLBAR (bc-aidp-next-golive#367).
+ *
+ * The shell sizes this host to its content pane and clips what overflows, and no window scrollbar
+ * sits behind it, so a page that declares no scroller of its own simply hides everything past the
+ * first screen. That is what shipped: the host was height:100% with overflow left at its initial
+ * `visible`, and the layout inside it min-height:100% with no scroller either, so the content grew
+ * past the host exactly as asked and then had nowhere to go.
+ *
+ * Measured in a browser against the shipped rules, ten cards in a 300px pane: the host reported
+ * clientHeight 300 against scrollHeight 704, and setting scrollTop on the host, on the layout and
+ * on the document each left it at 0 -- 404px unreachable. Under the rules below the layout reports
+ * the same 704 against a 300px client and scrolls to 404, the whole overflow.
+ */
+describe('AccountingOverviewPageComponent — the dashboard scrolls (DOM)', () => {
+  const css = ComponentCss(AccountingOverviewPageComponent);
+
+  it('hides overflow on the host, so the scrollbar belongs to the page and not the shell', () => {
+    const host = RuleBody(css, '[_nghost');
+    expect(host).toContain('overflow: hidden');
+    expect(host).toContain('height: 100%');
+  });
+
+  it('scrolls the layout, and does not let it grow past the host instead', () => {
+    const layout = RuleBody(css, '.mja-overview[');
+    expect(layout).toContain('overflow-y: auto');
+    expect(layout).toContain('min-height: 0');
+    // min-height:100% is what made this box taller than the thing meant to scroll it.
+    expect(layout).not.toContain('min-height: 100%');
   });
 });

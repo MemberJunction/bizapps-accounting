@@ -1,11 +1,13 @@
 -- =============================================================================
--- Migration: V202611091400__v0.26.x__Post_GoLive_Schema_and_Metadata_Sync.sql
+-- Migration: V202611171400__v0.29.x__Post_GoLive_Schema_and_Metadata_Sync.sql
 -- Description: Post-go-live schema hardening, lookup tables, and metadata sync:
 --   1. AccountingCompanyProfile.ERPJournalCode (nullable per-company ERP journal
 --      batch/template code).
 --   2. JournalEntryBatch.ERPPostUnconfirmedAt (set when a Sent batch fails after
 --      the ERP call was dispatched or during post-send confirmation; frozen by
---      trg_JournalEntryBatch_Immutability).
+--      trg_JournalEntryBatch_Immutability). The trigger body is
+--      V202611121300's, archive audit rule included, with the
+--      ERPPostUnconfirmedAt rule (50040) added; this file runs after it.
 --   3. UX_IntercompanyAccountMatch_Active_Pair_Start (filtered unique index on
 --      active IntercompanyAccountMatch rows per company pair and StartedAt).
 --   4. TaxCategory lookup table replacing CK_TaxRate_Category.
@@ -87,7 +89,9 @@ BEGIN
     END;
 
     -- AUDIT: the cancel audit and the ERP check are written only by the update that cancels the
-    -- batch, so no other save can stamp a "not posted in the ERP" record on it; and SentAt, once set,
+    -- batch, so no other save can stamp a "not posted in the ERP" record on it; likewise the archive
+    -- audit (ArchiveReason / ArchivedAt / ArchivedByUserID) is written only by the update that
+    -- archives the batch, so the record of why it never posts cannot be rewritten; and SentAt, once set,
     -- is never cleared, because it is the evidence CK_JournalEntryBatch_CancelERPCheck keys on. A
     -- retry re-stamps SentAt with a new time, which is allowed.
     IF EXISTS (
@@ -106,9 +110,17 @@ BEGIN
                    ISNULL(i.ERPNotPostedBasis,             N'')                                    <> ISNULL(d.ERPNotPostedBasis,             N'')
                )
            )
+           OR (
+               NOT (i.Status = 'Archived' AND d.Status <> 'Archived')
+               AND (
+                   ISNULL(i.ArchiveReason,                 N'')                                    <> ISNULL(d.ArchiveReason,                 N'')                                    OR
+                   (CASE WHEN i.ArchivedAt IS NULL AND d.ArchivedAt IS NULL THEN 0 WHEN i.ArchivedAt IS NULL OR d.ArchivedAt IS NULL THEN 1 WHEN ABS(DATEDIFF_BIG(MICROSECOND, i.ArchivedAt, d.ArchivedAt)) >= 1000 THEN 1 ELSE 0 END) = 1 OR
+                   ISNULL(i.ArchivedByUserID,              '00000000-0000-0000-0000-000000000000') <> ISNULL(d.ArchivedByUserID,              '00000000-0000-0000-0000-000000000000')
+               )
+           )
     )
     BEGIN
-        THROW 50032, 'JournalEntryBatch audit refused. CancelReason / CancelledAt / CancelledByUserID and ERPNotPostedConfirmedAt / ERPNotPostedConfirmedByUserID / ERPNotPostedBasis are written only by the update that cancels the batch, and SentAt is never cleared once set.', 1;
+        THROW 50032, 'JournalEntryBatch audit refused. CancelReason / CancelledAt / CancelledByUserID and ERPNotPostedConfirmedAt / ERPNotPostedConfirmedByUserID / ERPNotPostedBasis are written only by the update that cancels the batch, ArchiveReason / ArchivedAt / ArchivedByUserID only by the update that archives it, and SentAt is never cleared once set.', 1;
     END;
 
     -- CONTENT: frozen from approval on, Failed and Cancelled included. The timestamps this migration
@@ -158,11 +170,14 @@ BEGIN
           )
     )
     BEGIN
-        THROW 50009, 'JournalEntryBatch is locked (Status=Approved/Sent/Posted/Failed/Archived/Cancelled). Only Status / PostedAt / the Archive audit triple / ExternalJournalEntryBatchRef / ErrorMessage may evolve; the send stamp (SentAt / SentByUserID / SendAttemptCount) changes only on a send (50030); the Cancel audit and ERP check are written only by the update that cancels the batch (50032). CompanyID, PostingDate, SummaryJournalEntryID, the approval-task pointer, ApprovedAt / ApprovedByUserID and ApprovedContentHash freeze at approval; the summary pointer may clear only as an Approved or Failed batch is Cancelled.', 1;
+        THROW 50009, 'JournalEntryBatch is locked (Status=Approved/Sent/Posted/Failed/Archived/Cancelled). Only Status / PostedAt / ExternalJournalEntryBatchRef / ErrorMessage may evolve; the send stamp (SentAt / SentByUserID / SendAttemptCount) changes only on a send (50030); the Cancel audit and ERP check are written only by the update that cancels the batch, and the Archive audit only by the update that archives it (50032). CompanyID, PostingDate, SummaryJournalEntryID, the approval-task pointer, ApprovedAt / ApprovedByUserID and ApprovedContentHash freeze at approval; the summary pointer may clear only as an Approved or Failed batch is Cancelled.', 1;
     END;
 
-    -- SEAL MISMATCH: SealMismatchDetectedAt is written only by the update that records a
-    -- retried batch Posted from the ERP, and once set it never changes or clears.
+    -- SEAL MISMATCH (#216): SealMismatchDetectedAt is written only by the update that records a
+    -- retried batch Posted from the ERP, and once set it never changes or clears. A retry is a send
+    -- from Failed; a first send from Approved is attempt 1, so Sent -> Posted with SendAttemptCount
+    -- above 1 is the one update that may set it. A new batch carries none. Compared at millisecond
+    -- precision, as above. THROW with no ROLLBACK, so an entity save reports this message, not 3915.
     IF EXISTS (
         SELECT 1
         FROM inserted i

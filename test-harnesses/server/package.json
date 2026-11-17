@@ -16,12 +16,12 @@
     "@mj-biz-apps/accounting-server": "workspace:*"
   },
   "devDependencies": {
-    "@memberjunction/actions": "^6.1.6",
-    "@memberjunction/core": "^6.1.6",
-    "@memberjunction/core-entities": "^6.1.6",
-    "@memberjunction/global": "^6.1.6",
-    "@memberjunction/server-bootstrap-lite": "^6.1.6",
-    "@memberjunction/sqlserver-dataprovider": "^6.1.6",
+    "@memberjunction/actions": "^6.2.1",
+    "@memberjunction/core": "^6.2.1",
+    "@memberjunction/core-entities": "^6.2.1",
+    "@memberjunction/global": "^6.2.1",
+    "@memberjunction/server-bootstrap-lite": "^6.2.1",
+    "@memberjunction/sqlserver-dataprovider": "^6.2.1",
     "@mj-biz-apps/common-entities": "5.50.2",
     "@types/mssql": "^9.1.5",
     "@types/node": "^24.10.11",
