@@ -1,0 +1,144 @@
+-- ============================================================================
+-- MemberJunction PostgreSQL Migration
+-- Converted from SQL Server using TypeScript conversion pipeline
+-- ============================================================================
+
+-- Extensions
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Schema
+--
+-- The schema name is emitted UNQUOTED, so PostgreSQL folds it to lowercase. That is deliberate and
+-- self-consistent: everything downstream in a converted migration refers to it unquoted too, so
+-- both definition and lookup land on the same folded name.
+--
+-- DOWNSTREAM NOTE for the build engineer: a PostgreSQL database that was populated by an EARLIER
+-- converter — one that emitted a quoted, case-preserved name — already holds that mixed-case
+-- schema: for a target named MySchema_Name, the quoted "MySchema_Name". Re-converting against
+-- that database creates a SECOND, empty schema myschema_name rather than reusing the existing
+-- one, because IF NOT EXISTS compares the folded name and finds no match. The repo's own committed
+-- migrations-pg files are unaffected (the only quoted CREATE SCHEMAs there are the four pg_dump
+-- baselines, which this path does not produce), so this is an open-app / downstream concern, not
+-- one for this repo's Flyway history.
+CREATE SCHEMA IF NOT EXISTS "__mj_BizAppsAccounting";
+SET search_path TO "__mj_BizAppsAccounting", public;
+
+-- Ensure backslashes in string literals are treated literally (not as escape sequences)
+SET standard_conforming_strings = on;
+
+-- NOTE: Earlier converter versions made INTEGER to BOOLEAN cast implicit by
+-- modifying the system catalog so SS-style INSERT INTO bool_col VALUES (1)
+-- would work. That modification required pg_catalog write privileges, which
+-- managed PG (RDS, Aurora, Cloud SQL, Azure) does not grant. As of v5.30 all
+-- bulk INSERTs are emitted with native TRUE/FALSE values directly, so the
+-- cast modification is no longer needed. Removed to support managed-PG
+-- installs out of the box.
+
+
+-- ===================== Other =====================
+
+-- =============================================================================
+-- Migration: V202611121300__v0.27.x__ArchiveAuditFreeze.sql
+-- Description: an Archived batch's archive audit (ArchiveReason, ArchivedAt,
+--              ArchivedByUserID) is written only by the update that archives it.
+-- DETERMINISTIC, NOT IDEMPOTENT: runs once, after V202610021230.
+-- =============================================================================
+--
+-- WHY
+--
+-- Archived is terminal: the batch never posts to the ERP and its entries stay
+-- locked to it, so ArchiveReason is the only record of why. The cancel audit is
+-- frozen once a batch is Cancelled (50032 and 50009), but the archive audit was
+-- not: a raw UPDATE could rewrite the reason, who archived the batch, or when,
+-- on a batch that was already Archived.
+--
+-- WHAT CHANGES
+--
+-- trg_JournalEntryBatch_Immutability is the V202610021230 body verbatim, with
+-- one rule added to AUDIT (50032), mirroring the cancel audit's: ArchiveReason,
+-- ArchivedAt and ArchivedByUserID may change only in the update that moves the
+-- batch from another status to Archived (JournalEntryBatchEntityServer.Archive).
+-- That also refuses stamping an archive audit on a batch that is not being
+-- archived. ArchivedAt compares at millisecond precision, like the other
+-- timestamps here, because every entity save writes it back through a
+-- JavaScript Date. The 50032 and 50009 messages say so.
+--
+-- EXISTING DATA
+--
+-- No row changes. The rule applies to updates only, so Archived batches already
+-- in the table keep the audit they carry, and a later save that does not touch
+-- those three columns passes as before.
+--
+-- PostgreSQL: no trg_JournalEntryBatch_Immutability exists there (the converter skipped
+-- V202610021230's), so the .pg.sql counterpart carries this trigger commented out.
+-- =============================================================================
+
+-- SKIPPED: trigger (auto-conversion not supported). The converter does not recognize
+-- CREATE OR ALTER TRIGGER and passed this T-SQL through as-is; it is commented out here as the
+-- converter comments out every other T-SQL trigger. PostgreSQL has no
+-- trg_JournalEntryBatch_Immutability (V202610021230's was skipped the same way), so this
+-- migration changes nothing there.
+-- CREATE OR ALTER TRIGGER __mj_BizAppsAccounting.trg_JournalEntryBatch_Immutability
+-- ON __mj_BizAppsAccounting."JournalEntryBatch"
+-- AFTER INSERT, UPDATE, DELETE
+-- AS
+-- BEGIN
+--     SET NOCOUNT ON;
+--
+--     -- DELETE: an approved batch is never deleted, and neither is the record that one was cancelled.
+--     IF NOT EXISTS (SELECT 1 FROM inserted) AND EXISTS (
+--         SELECT 1 FROM deleted
+--         WHERE Status IN ('Approved','Sent','Posted','Failed','Archived')
+--            OR (Status = 'Cancelled' AND ApprovedAt IS NOT NULL)
+--     )
+--     BEGIN
+--         THROW 50008, 'JournalEntryBatch cannot be deleted once Status is Approved, Sent, Posted, Failed, or Archived, or once it was cancelled after approval. Cancel it instead.', 1;
+--     END;
+--
+--     -- STATUS: Cancelled releases entries, so only Pending / Approved / Failed may reach it, a batch
+--     -- reaches it only with its summary pointer cleared (by the same update, or by regenerate's
+--     -- teardown before it), and the terminal statuses never change again. Nothing moves back to
+--     -- Pending (a Pending batch's members can be released by any journal entry save), only a Pending
+--     -- batch is approved, and a Sent batch is not archived (it may still be posting in the ERP).
+--     -- Posted and Failed are the outcomes of a send, so only a Sent batch reaches them; -> Sent is
+--     -- policed by trg_JournalEntryBatch_SendOnce (50030).
+--     -- SKIPPED: SQL Server IF EXISTS check
+--
+--     -- AUDIT: the cancel audit and the ERP check are written only by the update that cancels the
+--     -- batch, so no other save can stamp a "not posted in the ERP" record on it; likewise the archive
+--     -- audit (ArchiveReason / ArchivedAt / ArchivedByUserID) is written only by the update that
+--     -- archives the batch, so the record of why it never posts cannot be rewritten; and SentAt, once set,
+--     -- is never cleared, because it is the evidence CK_JournalEntryBatch_CancelERPCheck keys on. A
+--     -- retry re-stamps SentAt with a new time, which is allowed.
+--     -- SKIPPED: SQL Server IF EXISTS check
+--
+--     -- CONTENT: frozen from approval on, Failed and Cancelled included. The timestamps this migration
+--     -- freezes compare at millisecond precision: every entity save writes each column back through a
+--     -- JavaScript Date, so a value written by SQL with sub-millisecond digits would otherwise read as
+--     -- changed on the next ordinary save.
+--     -- SKIPPED: SQL Server IF EXISTS check
+--
+--     -- SEAL MISMATCH (#216): SealMismatchDetectedAt is written only by the update that records a
+--     -- retried batch Posted from the ERP, and once set it never changes or clears. A retry is a send
+--     -- from Failed; a first send from Approved is attempt 1, so Sent -> Posted with SendAttemptCount
+--     -- above 1 is the one update that may set it. A new batch carries none. Compared at millisecond
+--     -- precision, as above. THROW with no ROLLBACK, so an entity save reports this message, not 3915.
+--     IF EXISTS (
+--         SELECT 1
+--         FROM inserted i
+--         LEFT JOIN deleted d ON d."ID" = i."ID"
+--         WHERE (d."ID" IS NULL AND i."SealMismatchDetectedAt" IS NOT NULL)
+--            OR (
+--                d."SealMismatchDetectedAt" IS NOT NULL
+--                AND (i."SealMismatchDetectedAt" IS NULL OR ABS(DATEDIFF_BIG(MICROSECOND, i."SealMismatchDetectedAt", d."SealMismatchDetectedAt")) >= 1000)
+--            )
+--            OR (
+--                d."ID" IS NOT NULL
+--                AND d."SealMismatchDetectedAt" IS NULL
+--                AND i."SealMismatchDetectedAt" IS NOT NULL
+--                AND NOT (d."Status" = 'Sent' AND i."Status" = 'Posted' AND i."SendAttemptCount" > 1)
+--            )
+--     )
+--         THROW 50034, 'JournalEntryBatch SealMismatchDetectedAt refused. It is set only by the update that records a retried batch Posted (Sent -> Posted, SendAttemptCount above 1), and once set it is never changed or cleared.', 1;
+-- END;

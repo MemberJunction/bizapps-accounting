@@ -1,5 +1,31 @@
 # @mj-biz-apps/accounting-core-entities-server
 
+## 0.28.0
+
+### Minor Changes
+
+- 83d6f43: An Archived journal entry batch's archive audit (ArchiveReason, ArchivedAt, ArchivedByUserID) can no longer be rewritten. The entity refuses a plain save that changes ArchiveReason, as it already did for ArchivedAt and ArchivedByUserID, and trg_JournalEntryBatch_Immutability (50032) lets the three change only in the update that archives the batch.
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-engine-base@0.28.0
+- @mj-biz-apps/accounting-entities@0.28.0
+
+## 0.27.1
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-engine-base@0.27.1
+- @mj-biz-apps/accounting-entities@0.27.1
+
+## 0.27.0
+
+### Patch Changes
+
+- Updated dependencies [959fd73]
+  - @mj-biz-apps/accounting-entities@0.27.0
+  - @mj-biz-apps/accounting-engine-base@0.27.0
+
 ## 0.26.0
 
 ### Minor Changes
