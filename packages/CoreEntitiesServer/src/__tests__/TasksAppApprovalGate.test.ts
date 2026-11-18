@@ -11,7 +11,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LogError, type AuthorizationInfo, type IMetadataProvider, type UserInfo } from '@memberjunction/core';
 import { JOURNAL_ENTRY_BATCH_OPERATE_AUTH } from '@mj-biz-apps/accounting-engine-base';
-import { TasksAppApprovalGate } from '../TasksAppApprovalGate.js';
+import { IsRefusedSelfApproval, TasksAppApprovalGate } from '../TasksAppApprovalGate.js';
 
 vi.mock('@memberjunction/core', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@memberjunction/core')>();
@@ -66,11 +66,37 @@ function stubProvider(batchedByUserId: string, status = 'Pending', lookups = { c
   } as unknown as IMetadataProvider;
 }
 
+describe('IsRefusedSelfApproval — the builder may not approve, except the company\'s CFO (golive #450)', () => {
+  const BUILDER = 'b0b1b2b3-0000-4000-8000-0000000000b1';
+  it('refuses a builder who is not the CFO', () => {
+    expect(IsRefusedSelfApproval(BUILDER, BUILDER, CFO_USER_ID)).toBe(true);
+  });
+  it('lets the CFO approve a batch the CFO built, matching IDs in either case', () => {
+    expect(IsRefusedSelfApproval(CFO_USER_ID, CFO_USER_ID, CFO_USER_ID)).toBe(false);
+    expect(IsRefusedSelfApproval(CFO_USER_ID.toUpperCase(), CFO_USER_ID, CFO_USER_ID)).toBe(false);
+  });
+  it('refuses a builder approving their own batch when no CFO is configured', () => {
+    expect(IsRefusedSelfApproval(BUILDER, BUILDER, null)).toBe(true);
+  });
+  it('does not refuse someone who did not build the batch', () => {
+    expect(IsRefusedSelfApproval(CFO_USER_ID, BUILDER, CFO_USER_ID)).toBe(false);
+    expect(IsRefusedSelfApproval(OTHER_USER_ID, BUILDER, CFO_USER_ID)).toBe(false);
+  });
+});
+
 describe('TasksAppApprovalGate.recordDecision — separation of duties', () => {
-  it('refuses a decision from the user who built the batch, even when that user is the configured CFO', async () => {
+  it('lets the configured CFO decide on a batch the CFO built (golive #450)', async () => {
     const gate = new TasksAppApprovalGate(stubProvider(CFO_USER_ID));
+    // Past both guards; the stub's batch has no stamped Task, which is where it stops.
     await expect(gate.recordDecision(BATCH_ID, 'Approved', undefined, undefined, cfo)).rejects.toThrow(
-      /the user who built a batch may not approve it/,
+      /has no approval task to record the decision on/,
+    );
+  });
+
+  it('refuses the builder, who is not the configured approver', async () => {
+    const gate = new TasksAppApprovalGate(stubProvider(OTHER_USER_ID));
+    await expect(gate.recordDecision(BATCH_ID, 'Approved', undefined, undefined, { ID: OTHER_USER_ID } as UserInfo)).rejects.toThrow(
+      /only the configured approver/,
     );
   });
 
@@ -119,9 +145,9 @@ describe('TasksAppApprovalGate.recordDecision — only a decision the batch can 
   });
 
   it('tells a user who may not decide only that, even on a batch that is no longer Pending', async () => {
-    const gate = new TasksAppApprovalGate(stubProvider(CFO_USER_ID, 'Cancelled'));
-    await expect(gate.recordDecision(BATCH_ID, 'Approved', undefined, undefined, cfo)).rejects.toThrow(
-      /the user who built a batch may not approve it/,
+    const gate = new TasksAppApprovalGate(stubProvider(OTHER_USER_ID, 'Cancelled'));
+    await expect(gate.recordDecision(BATCH_ID, 'Approved', undefined, undefined, { ID: OTHER_USER_ID } as UserInfo)).rejects.toThrow(
+      /only the configured approver/,
     );
   });
 });
@@ -847,7 +873,7 @@ describe('TasksAppApprovalGate.assertApproved — only an allowed decider\'s app
 
   const NOT_THE_APPROVER = /but not one made by the company's configured approver \(the Approval CFO on its Accounting Company Profile, user 48d60bcc/;
   const BUILDER_IS_DECIDER = /approval came from a Person linked to the company's Approval CFO .* who is also linked to the user who built the batch/;
-  const CFO_BUILT_IT = /the company's Approval CFO \(user 48d60bcc-044b-4cc2-9675-0d3b57bcdcba\) built this batch/;
+  const SELF_APPROVED = /its recorded approver is the user who built it, and only the company's Approval CFO may approve a batch they built/;
   const NO_APPROVER = /company 411df6dc-3652-4151-836f-cda2e46a5038 has no approver configured.*Set the Approval CFO/;
 
   it('refuses an approval saved straight into the tasks app by someone else (the inbox bypass)', async () => {
@@ -883,9 +909,24 @@ describe('TasksAppApprovalGate.assertApproved — only an allowed decider\'s app
     await expect(gate.assertApproved(BATCH_ID, cfo)).resolves.toBeUndefined();
   });
 
-  it('refuses every approval when the CFO built the batch, and says so', async () => {
+  it('accepts the CFO\'s approval of a batch the CFO built (golive #450)', async () => {
     const gate = new TasksAppApprovalGate(allowedDeciderProvider(base({ batchedByUserId: CFO_USER_ID })));
-    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(CFO_BUILT_IT);
+    await expect(gate.assertApproved(BATCH_ID, cfo)).resolves.toBeUndefined();
+  });
+
+  it('accepts a CFO-built batch whose CFO approval names no Person, when the audit names the CFO (golive #450)', async () => {
+    const gate = new TasksAppApprovalGate(allowedDeciderProvider(base({ batchedByUserId: CFO_USER_ID, approvedBy: [null], peopleByUser: {} })));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).resolves.toBeUndefined();
+  });
+
+  it('still refuses someone else\'s approval of a batch the CFO built', async () => {
+    const gate = new TasksAppApprovalGate(allowedDeciderProvider(base({ batchedByUserId: CFO_USER_ID, approvedBy: [OTHER_PERSON_ID] })));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(NOT_THE_APPROVER);
+  });
+
+  it('refuses a batch whose recorded approver is its builder when that builder is not the CFO', async () => {
+    const gate = new TasksAppApprovalGate(allowedDeciderProvider(base({ approvedByUserId: BUILDER_USER_ID })));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(SELF_APPROVED);
   });
 
   it('refuses when the company has no CFO configured, and blames the configuration, not the decider', async () => {
