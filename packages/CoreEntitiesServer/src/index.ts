@@ -125,6 +125,13 @@ export type {
 // S1 — the REAL CFO-approval gate, backed by the bizapps-tasks app (replaces AutoApproveGate in
 // production). See TasksAppApprovalGate.ts.
 export { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
+export type { RecordedTaskDecision } from './TasksAppApprovalGate.js';
+export {
+  applyApprovalTaskDecision,
+  recordJournalEntryBatchDecision,
+  withBatchDecisionLock,
+  type ApprovalTaskDecisionResult,
+} from './JournalEntryBatchTaskDecision.js';
 
 // Where sendJournalEntryBatch and cancelJournalEntryBatch get their gate, ERP poster and lookup (#233). Register a subclass at a higher
 // priority to replace them; callers can no longer pass their own.

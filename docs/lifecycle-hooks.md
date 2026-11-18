@@ -165,8 +165,12 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   A saved batch moves to `Approved` only through `Approve(contextUser)` and to `Archived` only through
   `Archive(reason, contextUser)`, each raising a transient flag for its one save, as `Cancel()` does.
   `Approve()` writes `ApprovedAt` / `ApprovedByUserID` from the user it acts as; it does not decide who
-  may approve. That is `TasksAppApprovalGate.recordDecision`, which `Accounting.RecordJournalEntryBatchDecision`
-  runs first, or the auto-post waiver's system-user check. `approveJournalEntryBatch` refuses an
+  may approve. That is `TasksAppApprovalGate.assertMayDecide`, which `recordDecision` runs before
+  `Accounting.RecordJournalEntryBatchDecision` writes a decision, or the auto-post waiver's system-user check.
+  A decision recorded in the Tasks app reaches the batch through the `Journal Entry Batch Approval` task
+  type's OnComplete / OnReject hook, `Accounting.ApplyJournalEntryBatchTaskDecision` (#468), which runs the
+  same check as the user who decided; a refused decision leaves the batch Pending and reopens the Task.
+  Both paths share `JournalEntryBatchTaskDecision.ts` and its per-batch lock. `approveJournalEntryBatch` refuses an
   `approvedByUserId` other than the context user. So the generic form or the GraphQL update cannot
   record an approval no configured approver made, under an approver of the caller's choosing.
 - **`JournalEntryBatchEntityServer.Validate` — the audit fields are the server's (#451).** On a saved

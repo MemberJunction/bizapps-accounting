@@ -22,7 +22,7 @@
  *                                                            sendJournalEntryBatch, one at a time; per-batch outcomes (golive #451)
  *   Accounting.ResumeJournalEntryBatchPosting    → resumeJournalEntryBatchPosting(...) finish a Posted batch's Batched→GLPosted flip; NO ERP call (#145)
  *   Accounting.GetStrandedJournalEntries         → findStrandedJournalEntries(...)  read-only: Failed / partly-flipped Posted batches holding entries (#145)
- *   Accounting.RecordJournalEntryBatchDecision   → gate.recordDecision + approveJournalEntryBatch | cancelJournalEntryBatch (in-app CFO approve/reject;
+ *   Accounting.RecordJournalEntryBatchDecision   → recordJournalEntryBatchDecision (gate.recordDecision + approveJournalEntryBatch | cancelJournalEntryBatch) (in-app CFO approve/reject;
  *                                                            the cancel requires the rejection this records first, #233)
  *   Accounting.GetJournalEntryBatchApprovalState → gate.assertApproved probe (read-only: is this batch dispatchable?)
  *   Accounting.ArchiveJournalEntryBatch          → batch.Archive(reason)             terminal close with NO ERP call; members stay locked (#214)
@@ -52,7 +52,6 @@ import {
   ErpPostingUnconfirmedError,
   resumeJournalEntryBatchPosting,
   findStrandedJournalEntries,
-  approveJournalEntryBatch,
   cancelJournalEntryBatch,
   pendingCompanies,
   EmptyJournalEntryBatchError,
@@ -66,12 +65,12 @@ import {
 import { dispatchApprovedJournalEntryBatches, type ApprovedBatchDispatchOutcome } from './ApprovedBatchDispatch.js';
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
+import { recordJournalEntryBatchDecision } from './JournalEntryBatchTaskDecision.js';
 import { ResolvePersonIDForUser } from './person-user-link.js';
 import { requireSqlGuid } from './SqlGuards.js';
 import { requireDateBound } from './BusinessDay.js';
 import { UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
 import {
-  IsApprovalOutcome,
   IsTaskDecisionOutcomeCode,
   TaskDecisionOutcomeCodes,
   type TaskDecisionOutcomeCode,
@@ -450,15 +449,9 @@ export class RecordJournalEntryBatchDecisionOperation extends BaseRemotableOpera
       throw new Error(`The decision was not recorded: '${input?.Decision}' is not a valid decision. Use one of: ${TaskDecisionOutcomeCodes.join(', ')}.`);
     }
     const personId = await this.resolveCurrentPersonId(user, provider);
-    await new TasksAppApprovalGate(provider).recordDecision(
-      input.JournalEntryBatchID, input.Decision, personId, input.Notes ?? undefined, user);
-
-    // Ask tasks what the outcome MEANS rather than re-deciding it here from literals.
-    if (IsApprovalOutcome(input.Decision)) {
-      await approveJournalEntryBatch(input.JournalEntryBatchID, user.ID, user, provider);
-    } else {
-      await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider, { reason: input.Notes ?? null });
-    }
+    // Records the decision, then approves or cancels the batch, under the batch's decision lock: closing
+    // the Task also runs the task type's hook, which finds the batch decided and does nothing (#468).
+    await recordJournalEntryBatchDecision(input.JournalEntryBatchID, input.Decision, personId, input.Notes ?? undefined, user, provider);
     return { Recorded: true };
   }
 

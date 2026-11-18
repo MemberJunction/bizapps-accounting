@@ -17,6 +17,7 @@
     "applications",
     "action-categories",
     "actions",
+    "task-types",
     "entity-actions",
     "entity-relationships",
     "scheduled-jobs",

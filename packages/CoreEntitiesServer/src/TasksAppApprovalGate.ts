@@ -92,8 +92,26 @@ const PERSON_ENTITY = 'MJ_BizApps_Common: People';
 /** What closed a batch, for the approval Task's comment and errors. */
 type BatchCloseAction = 'cancel' | 'archive';
 
-/** The seeded generic approval TaskType that CreateApprovalRequest expects. */
-const APPROVAL_REQUEST_TASK_TYPE = 'Approval Request';
+/**
+ * The approval TaskType this app seeds for batch approvals (metadata/task-types, #468). Unlike the
+ * tasks app's generic 'Approval Request' type, its OnComplete and OnReject hooks run
+ * Accounting.ApplyJournalEntryBatchTaskDecision, so a decision recorded in the Tasks app approves or
+ * cancels the batch. Batches built before it existed keep the generic type; their decision is made in
+ * the Accounting app.
+ */
+const APPROVAL_REQUEST_TASK_TYPE = 'Journal Entry Batch Approval';
+
+/** A terminal decision recorded on a batch's approval Task: what was decided, and the decider's notes. */
+export interface RecordedTaskDecision {
+  outcome: TaskDecisionOutcomeCode;
+  notes: string | null;
+}
+
+/** The Task Decision columns latestTerminalDecision reads. */
+interface TaskDecisionRow { OutcomeID: string; DecisionNotes: string | null }
+
+/** The Task Decision Outcome columns latestTerminalDecision reads. */
+interface TaskDecisionOutcomeRow { ID: string; Code: string }
 
 // Which terminal outcomes count as "approved to send" is tasks-core's answer, asked per row via
 // IsApprovalOutcome. It used to be a Set literal here. A Set of a subset of the union is a
@@ -172,9 +190,8 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
       TypeID: typeId,
       Description: `CFO approval required to dispatch Journal Entry Batch #${batch.JournalEntryBatchNumber} to ${batch.TargetSystem}, ` +
         `posting date ${postingDay} — the journal date ${batch.TargetSystem} receives. ` +
-        // A decision recorded on this Task alone does not move the batch (#466): only the
-        // Accounting app's decision approves or cancels it, so the approver is sent there.
-        'Approve or reject it in the Accounting app, under Batches. A decision recorded on this task does not change the batch.',
+        // A decision on this Task approves or cancels the batch through the task type's hooks (#468).
+        'Approve or reject it here or in the Accounting app, under Batches.',
       Priority: 'High',
       CreatedByPersonID: builderPersonId,
       LinkEntityID: batchEntityId,
@@ -341,26 +358,91 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     batchId: string, outcome: TaskDecisionOutcomeCode, decidedByPersonId: string | undefined, notes: string | undefined, contextUser: UserInfo,
   ): Promise<void> {
     const batch = await this.loadBatch(batchId, contextUser);
-    const cfoUserId = await this.resolveCFOUserIdForCompany(batch.CompanyID, contextUser);
-    if (!UUIDsEqual(cfoUserId, contextUser.ID)) {
-      throw new Error(
-        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the configured approver for company ${batch.CompanyID} ` +
-        `(the Approval CFO on its Accounting Company Profile) can approve or reject it, and you are not that approver.`,
-      );
-    }
-    if (IsRefusedSelfApproval(contextUser.ID, batch.BatchedByUserID, cfoUserId)) {
-      throw new Error(
-        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: the user who built a batch may not approve it, ` +
-        `unless they are the company's Approval CFO. Someone other than the builder must approve it.`,
-      );
-    }
-    this.assertDecidable(batch, outcome, notes);
+    await this.assertMayDecide(batch, outcome, notes, contextUser);
     // SECURITY (#313): the decision lands on the batch's stamped ApprovalTaskID, as assertApproved reads
     // it — never the newest Task Link, which a forged newer link could point at another Task. A batch
     // with no stamp is refused: assertApproved could never send it, whatever was decided.
     const task = await this.loadStampedApprovalTask(batch, contextUser);
     if (!task) throw new Error(`Batch ${batch.JournalEntryBatchNumber ?? batchId} has no approval task to record the decision on, so it was not built through the approval process.`);
     await this.orchestration.RecordDecision({ TaskID: task.ID, OutcomeCode: outcome, DecidedByPersonID: decidedByPersonId, Notes: notes }, contextUser);
+  }
+
+  /**
+   * Refuse a decision `contextUser` may not make on `batch`: they must be the company's configured CFO,
+   * must not be a builder the separation-of-duties rule refuses, and the batch must be able to carry
+   * the decision out (assertDecidable). recordDecision runs it before writing a decision; the decision
+   * recorded in the Tasks app runs it after (#468), since the Tasks app writes the decision first.
+   */
+  async assertMayDecide(
+    batch: mjBizAppsAccountingJournalEntryBatchEntity, outcome: TaskDecisionOutcomeCode, notes: string | undefined, contextUser: UserInfo,
+  ): Promise<void> {
+    const label = batch.JournalEntryBatchNumber ?? batch.ID;
+    const cfoUserId = await this.resolveCFOUserIdForCompany(batch.CompanyID, contextUser);
+    if (!UUIDsEqual(cfoUserId, contextUser.ID)) {
+      throw new Error(
+        `Batch ${label}: only the configured approver for company ${batch.CompanyID} ` +
+        `(the Approval CFO on its Accounting Company Profile) can approve or reject it, and you are not that approver.`,
+      );
+    }
+    if (IsRefusedSelfApproval(contextUser.ID, batch.BatchedByUserID, cfoUserId)) {
+      throw new Error(
+        `Batch ${label}: the user who built a batch may not approve it, ` +
+        `unless they are the company's Approval CFO. Someone other than the builder must approve it.`,
+      );
+    }
+    this.assertDecidable(batch, outcome, notes);
+  }
+
+  /**
+   * The most recent terminal decision on an approval Task, with its outcome code and notes, or null
+   * when it has none (#468). A Task closed without a decision (a cancel or archive closing a Pending
+   * batch's Task) has none. Outcomes whose code tasks-core does not know are skipped.
+   */
+  async latestTerminalDecision(taskId: string, contextUser: UserInfo): Promise<RecordedTaskDecision | null> {
+    requireSqlGuid(taskId, 'TasksAppApprovalGate.latestTerminalDecision');
+    const [decRes, outRes] = await this.viewProvider.RunViews([
+      { EntityName: TASK_DECISION_ENTITY, ExtraFilter: `TaskID='${taskId}'`, OrderBy: '__mj_CreatedAt DESC', ResultType: 'simple', BypassCache: true },
+      { EntityName: TASK_DECISION_OUTCOME_ENTITY, ExtraFilter: 'IsTerminal=1', ResultType: 'simple', BypassCache: true },
+    ], contextUser);
+    if (!decRes?.Success) throw new Error(`Could not read the decisions on approval task ${taskId}: ${decRes?.ErrorMessage ?? 'unknown error'}`);
+    if (!outRes?.Success) throw new Error(`Could not read the task decision outcomes: ${outRes?.ErrorMessage ?? 'unknown error'}`);
+    const codes = new Map<string, TaskDecisionOutcomeCode>();
+    for (const o of (outRes.Results ?? []) as TaskDecisionOutcomeRow[]) {
+      if (IsTaskDecisionOutcomeCode(o.Code)) codes.set(o.ID.toLowerCase(), o.Code);
+    }
+    for (const d of (decRes.Results ?? []) as TaskDecisionRow[]) {
+      const outcome = codes.get(d.OutcomeID.toLowerCase());
+      if (outcome) return { outcome, notes: d.DecisionNotes ?? null };
+    }
+    return null;
+  }
+
+  /**
+   * Put a batch's approval Task back to Open, with a comment saying why (#468): a decision recorded in
+   * the Tasks app closed it, but the batch refused that decision and is still Pending, so the approver
+   * must decide again. The comment is signed by `contextUser`'s Person and skipped when they have none.
+   */
+  async reopenAfterRefusedDecision(batch: mjBizAppsAccountingJournalEntryBatchEntity, reason: string, contextUser: UserInfo): Promise<void> {
+    const label = batch.JournalEntryBatchNumber ?? batch.ID;
+    const task = await this.loadStampedApprovalTask(batch, contextUser);
+    if (!task) throw new Error(`Batch ${label}: its approval task did not load, so it could not be reopened.`);
+    const personId = await this.resolvePersonIdForUser(contextUser);
+    if (personId) {
+      const comment = await this.provider.GetEntityObject<mjBizAppsTasksTaskCommentEntity>(TASK_COMMENT_ENTITY, contextUser);
+      comment.NewRecord();
+      comment.TaskID = task.ID;
+      comment.PersonID = personId;
+      comment.Content = `The decision on this task did not change journal entry batch ${label}, so the task is open again. ` +
+        `${reason} The batch is still Pending; the company's Approval CFO must approve or reject it.`;
+      if (!(await comment.Save())) {
+        throw new Error(`Batch ${label}: recording why its approval task was reopened failed: ${comment.LatestResult?.CompleteMessage ?? 'unknown'}`);
+      }
+    }
+    if (task.Status === 'Open') return;
+    task.Status = 'Open';
+    if (!(await task.Save())) {
+      throw new Error(`Batch ${label}: reopening its approval task failed: ${task.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    }
   }
 
   /**

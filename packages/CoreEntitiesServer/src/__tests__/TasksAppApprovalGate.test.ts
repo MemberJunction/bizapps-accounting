@@ -707,8 +707,25 @@ describe('TasksAppApprovalGate.onBatchBuilt — the approval Task', () => {
     expect(w.requests).toHaveLength(1);
     expect(w.requests[0].Name).toBe('Approve Journal Entry Batch #BATCH-0007 (posting date 2026-08-31)');
     expect(w.requests[0].Description).toContain('posting date 2026-08-31 — the journal date BusinessCentral receives');
-    // #466: a decision on the Task alone leaves the batch Pending, so the Task sends the approver to Accounting.
-    expect(w.requests[0].Description).toContain('Approve or reject it in the Accounting app, under Batches.');
+    // #468: a decision on the Task now reaches the batch, so the approver may decide in either app.
+    expect(w.requests[0].Description).toContain('Approve or reject it here or in the Accounting app, under Batches.');
+    expect(w.requests[0].Description).not.toContain('does not change the batch');
+  });
+
+  // #468: the batch approval type carries the hooks that apply a Tasks-app decision to the batch.
+  it('raises the Task with the Journal Entry Batch Approval task type, not the generic Approval Request', async () => {
+    const w = world();
+    const provider = buildProvider('user-link', w);
+    const filters: string[] = [];
+    type ViewParams = { EntityName: string; ExtraFilter?: string };
+    const views = provider as unknown as { RunView: (params: ViewParams, user?: UserInfo) => Promise<unknown> };
+    const runView = views.RunView;
+    views.RunView = async (params, user) => {
+      if (params.EntityName === 'MJ_BizApps_Tasks: Task Types') filters.push(params.ExtraFilter ?? '');
+      return runView(params, user);
+    };
+    await gateRecording(provider, w).onBatchBuilt(BATCH_ID, cfo);
+    expect(filters).toEqual(["Name='Journal Entry Batch Approval'"]);
   });
 
   // #387: the Tasks app lists a viewer's tasks by their Person, so a User assignee reached no inbox.
@@ -1124,5 +1141,106 @@ describe('TasksAppApprovalGate.onBatchBuilt — the builder is recorded as the T
     capture(gate, requests);
     await expect(gate.onBatchBuilt(BATCH_ID, cfo)).resolves.toBe(TASK_ID);
     expect(requests[0].CreatedByPersonID).toBeUndefined();
+  });
+});
+
+describe('TasksAppApprovalGate.latestTerminalDecision — the decision a Tasks-app close applies (#468)', () => {
+  const APPROVED_ID = 'a0000000-0000-4000-8000-00000000000a';
+  const REJECTED_ID = 'b0000000-0000-4000-8000-00000000000b';
+  const INTERIM_ID = 'c0000000-0000-4000-8000-00000000000c';
+
+  /** Decisions newest first, as the view's OrderBy returns them; only APPROVED_ID and REJECTED_ID are terminal. */
+  function decisionsProvider(decisions: Array<{ OutcomeID: string; DecisionNotes: string | null }>, captured: unknown[] = []): IMetadataProvider {
+    return {
+      RunViews: async (params: unknown[]) => {
+        captured.push(...params);
+        return [
+          { Success: true, Results: decisions },
+          { Success: true, Results: [{ ID: APPROVED_ID, Code: 'Approved' }, { ID: REJECTED_ID.toUpperCase(), Code: 'Rejected' }, { ID: 'd0000000-0000-4000-8000-00000000000d', Code: 'NotAnOutcome' }] },
+        ];
+      },
+    } as unknown as IMetadataProvider;
+  }
+
+  it('returns the newest terminal decision, with its notes, skipping interim ones', async () => {
+    const captured: unknown[] = [];
+    const gate = new TasksAppApprovalGate(decisionsProvider([
+      { OutcomeID: INTERIM_ID, DecisionNotes: 'thinking' },
+      { OutcomeID: REJECTED_ID, DecisionNotes: 'Wrong date' },
+      { OutcomeID: APPROVED_ID, DecisionNotes: null },
+    ], captured));
+    await expect(gate.latestTerminalDecision(TASK_ID, cfo)).resolves.toEqual({ outcome: 'Rejected', notes: 'Wrong date' });
+    expect(captured[0]).toMatchObject({ ExtraFilter: `TaskID='${TASK_ID}'`, OrderBy: '__mj_CreatedAt DESC' });
+  });
+
+  it('returns null when the Task has no terminal decision', async () => {
+    const gate = new TasksAppApprovalGate(decisionsProvider([{ OutcomeID: INTERIM_ID, DecisionNotes: null }]));
+    await expect(gate.latestTerminalDecision(TASK_ID, cfo)).resolves.toBeNull();
+  });
+
+  it('refuses a Task ID that is not a UUID', async () => {
+    const gate = new TasksAppApprovalGate(decisionsProvider([]));
+    await expect(gate.latestTerminalDecision("x' OR 1=1 --", cfo)).rejects.toThrow();
+  });
+
+  it('fails when the decisions cannot be read', async () => {
+    const gate = new TasksAppApprovalGate({
+      RunViews: async () => [{ Success: false, ErrorMessage: 'boom' }, { Success: true, Results: [] }],
+    } as unknown as IMetadataProvider);
+    await expect(gate.latestTerminalDecision(TASK_ID, cfo)).rejects.toThrow(/Could not read the decisions on approval task .*: boom/);
+  });
+});
+
+describe('TasksAppApprovalGate.reopenAfterRefusedDecision — a refused Tasks-app decision (#468)', () => {
+  const PERSON_ID = 'f0000000-0000-4000-8000-00000000000f';
+  type Saved = { entity: string; fields: Record<string, unknown> };
+
+  function reopenWorld(taskStatus: string, saved: Saved[]): IMetadataProvider {
+    return {
+      GetEntityObject: async (entityName: string) => {
+        const fields: Record<string, unknown> = entityName === 'MJ_BizApps_Tasks: Tasks' ? { ID: TASK_ID, Status: taskStatus } : {};
+        return Object.assign(fields, {
+          NewRecord: () => undefined,
+          Load: async () => true,
+          Save: async () => { saved.push({ entity: entityName, fields: { ...fields } }); return true; },
+        });
+      },
+    } as unknown as IMetadataProvider;
+  }
+
+  const batch = { ID: BATCH_ID, JournalEntryBatchNumber: 'BATCH-0007', ApprovalTaskID: TASK_ID } as never;
+
+  function gateWithPerson(provider: IMetadataProvider, personId: string | null): TasksAppApprovalGate {
+    const gate = new TasksAppApprovalGate(provider);
+    (gate as unknown as { resolvePersonIdForUser: () => Promise<string | null> }).resolvePersonIdForUser = async () => personId;
+    return gate;
+  }
+
+  it('comments why and puts a closed Task back to Open', async () => {
+    const saved: Saved[] = [];
+    await gateWithPerson(reopenWorld('Completed', saved), PERSON_ID).reopenAfterRefusedDecision(batch, 'You are not that approver.', cfo);
+    expect(saved).toHaveLength(2);
+    expect(saved[0].entity).toBe('MJ_BizApps_Tasks: Task Comments');
+    expect(saved[0].fields).toMatchObject({ TaskID: TASK_ID, PersonID: PERSON_ID });
+    expect(saved[0].fields.Content).toContain('did not change journal entry batch BATCH-0007');
+    expect(saved[0].fields.Content).toContain('You are not that approver.');
+    expect(saved[1]).toEqual({ entity: 'MJ_BizApps_Tasks: Tasks', fields: expect.objectContaining({ Status: 'Open' }) });
+  });
+
+  it('reopens without a comment when the user has no linked Person', async () => {
+    const saved: Saved[] = [];
+    await gateWithPerson(reopenWorld('Cancelled', saved), null).reopenAfterRefusedDecision(batch, 'No.', cfo);
+    expect(saved.map(s => s.entity)).toEqual(['MJ_BizApps_Tasks: Tasks']);
+  });
+
+  it('only comments on a Task that is already Open', async () => {
+    const saved: Saved[] = [];
+    await gateWithPerson(reopenWorld('Open', saved), PERSON_ID).reopenAfterRefusedDecision(batch, 'No.', cfo);
+    expect(saved.map(s => s.entity)).toEqual(['MJ_BizApps_Tasks: Task Comments']);
+  });
+
+  it('fails on a batch with no stamped approval Task', async () => {
+    const gate = gateWithPerson(reopenWorld('Completed', []), PERSON_ID);
+    await expect(gate.reopenAfterRefusedDecision({ ID: BATCH_ID, ApprovalTaskID: null } as never, 'No.', cfo)).rejects.toThrow(/did not load/);
   });
 });
