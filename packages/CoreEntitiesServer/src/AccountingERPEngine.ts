@@ -936,8 +936,8 @@ function pickPostingConnection(
 ): PostingConnectionChoice {
   if (candidates.length === 0) {
     const error = target
-      ? `Company ${companyId} has no active '${target}' connection, so the batch cannot be sent. Ask an administrator to set one up.`
-      : `Company ${companyId} has no active ERP connection, so the batch cannot be sent. Ask an administrator to set one up.`;
+      ? `Company ${companyId} has no active '${target}' connection, so the batch cannot be sent. Please ask your administrator to set one up.`
+      : `Company ${companyId} has no active ERP connection, so the batch cannot be sent. Please ask your administrator to set one up.`;
     return { Kind: 'Missing', Error: error };
   }
   if (candidates.length === 1) return { Kind: 'Chosen', Connection: candidates[0] };

@@ -70,7 +70,6 @@ import {
   SaveFinanceExceptionClearance,
 } from './FinanceExceptionEntityServer.js';
 import {
-  FINANCE_EXCEPTIONS_CLEAR_AUTH,
   FinanceExceptionClearRuleRefusal,
   HoldsAnyFinanceExceptionClearRight,
   HoldsFinanceExceptionClearRule,
@@ -558,7 +557,7 @@ async function ruleRefusal(
     context,
   );
   if ('Refusal' in resolution) return resolution.Refusal;
-  return HoldsFinanceExceptionClearRule(context, resolution.Rule, reviewer) ? null : FinanceExceptionClearRuleRefusal(context, resolution.Rule, type.Code);
+  return HoldsFinanceExceptionClearRule(context, resolution.Rule, reviewer) ? null : FinanceExceptionClearRuleRefusal(context, resolution.Rule);
 }
 
 export async function ClearFinanceException(
@@ -570,7 +569,7 @@ export async function ClearFinanceException(
   if (!UserCanClearFinanceExceptions(reviewer, provider)) {
     return {
       Success: false,
-      Errors: [{ Code: 'NOT_AUTHORIZED', Message: `You hold no right to clear finance exceptions (authorization ${FINANCE_EXCEPTIONS_CLEAR_AUTH}, or a per-type clearing right).` }],
+      Errors: [{ Code: 'NOT_AUTHORIZED', Message: "You don't have permission to clear finance exceptions. Please request this from Finance." }],
     };
   }
   const invalid = inputRefusal(input);

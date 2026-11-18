@@ -134,7 +134,7 @@ export function validateEntryType(draft: JournalEntryDraft, lookups: PipelineLoo
     return [{ Code: 'ENTRY_TYPE_UNKNOWN', Message: `The journal entry type '${String(draft.EntryType)}' does not exist. The app that books this type must set it up first.` }];
   }
   if (!type.IsActive) {
-    return [{ Code: 'ENTRY_TYPE_INACTIVE', Message: `The journal entry type '${draft.EntryType}' is inactive. Ask an administrator to reactivate it.` }];
+    return [{ Code: 'ENTRY_TYPE_INACTIVE', Message: `The journal entry type '${draft.EntryType}' is inactive. Please ask your administrator to reactivate it.` }];
   }
   return [];
 }

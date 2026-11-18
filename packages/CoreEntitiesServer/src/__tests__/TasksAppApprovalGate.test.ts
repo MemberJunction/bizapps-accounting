@@ -250,7 +250,7 @@ describe('TasksAppApprovalGate — who may cancel past approval', () => {
       caught = e as Error;
     }
     expect(caught?.message).toBe(
-      "Your account is not linked to a person record, so this cancel cannot be recorded on the batch's approval request. Ask an administrator to link your account, then try again.",
+      "Your account is not linked to a person record, so this cancel cannot be recorded on the batch's approval request. Please ask your administrator to link your account, then try again.",
     );
     expect(caught?.message).not.toMatch(/@|Email|LinkedEntityRecordID|LinkedUserID/);
     expect(logMock).toHaveBeenCalledWith(expect.stringContaining(CFO_USER_ID));
@@ -352,7 +352,7 @@ describe('TasksAppApprovalGate.recordCancellation — the approval Task records 
     const w: CancelWorld = { comments: [] };
     const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: TASK_ID, hasPerson: false }, w));
     await expect(gate.recordCancellation(BATCH_ID, { reason: 'Wrong posting period', fromStatus: 'Approved' }, cfo)).rejects.toThrow(
-      "Your account is not linked to a person record, so this cancel cannot be recorded on the batch's approval request. Ask an administrator to link your account, then try again.",
+      "Your account is not linked to a person record, so this cancel cannot be recorded on the batch's approval request. Please ask your administrator to link your account, then try again.",
     );
     expect(w.comments).toHaveLength(0);
   });
@@ -391,7 +391,7 @@ describe('TasksAppApprovalGate.recordArchive — the approval Task records an ar
     const w: CancelWorld = { comments: [] };
     const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: TASK_ID, hasPerson: false }, w));
     await expect(gate.recordArchive(BATCH_ID, { reason: 'Posted in the legacy system', fromStatus: 'Approved' }, cfo))
-      .rejects.toThrow("Your account is not linked to a person record, so this archive cannot be recorded on the batch's approval request. Ask an administrator to link your account, then try again.");
+      .rejects.toThrow("Your account is not linked to a person record, so this archive cannot be recorded on the batch's approval request. Please ask your administrator to link your account, then try again.");
     expect(w.comments).toHaveLength(0);
   });
 
@@ -564,12 +564,12 @@ describe('TasksAppApprovalGate.assertMayArchive — who may archive (#448, goliv
 
   it.each([BUILDER_USER_ID, OTHER_USER_ID, APPROVER_USER_ID])('refuses anyone else without the Finance role on a Pending batch, the builder included (%s)', async (userId) => {
     await expect(gateFor('Pending').assertMayArchive(BATCH_ID, { ID: userId } as UserInfo)).rejects.toThrow(
-      /only the company's configured approver \(the Approval CFO on its Accounting Company Profile\) or a user with the .* authorization \(the Finance role\) may archive it before approval/,
+      /You don't have permission to archive batch .* before it is approved\. Only the company's CFO approver or the Finance role can\./,
     );
   });
 
   it('refuses a builder without the Finance role on a Pending batch even when the company has no CFO configured', async () => {
-    await expect(gateFor('Pending', true, null).assertMayArchive(BATCH_ID, { ID: BUILDER_USER_ID } as UserInfo)).rejects.toThrow(/may archive it before approval/);
+    await expect(gateFor('Pending', true, null).assertMayArchive(BATCH_ID, { ID: BUILDER_USER_ID } as UserInfo)).rejects.toThrow(/You don't have permission to archive batch .* before it is approved/);
   });
 
   it('still lets the builder cancel the Pending batch it may not archive', async () => {
@@ -591,7 +591,7 @@ describe('TasksAppApprovalGate.assertMayArchive — who may archive (#448, goliv
 
   it('refuses an allowed user with no linked Person past approval (#458)', async () => {
     await expect(gateFor('Approved', false).assertMayArchive(BATCH_ID, { ID: CFO_USER_ID } as UserInfo)).rejects.toThrow(
-      "Your account is not linked to a person record, so this archive cannot be recorded on the batch's approval request. Ask an administrator to link your account, then try again.",
+      "Your account is not linked to a person record, so this archive cannot be recorded on the batch's approval request. Please ask your administrator to link your account, then try again.",
     );
   });
 });

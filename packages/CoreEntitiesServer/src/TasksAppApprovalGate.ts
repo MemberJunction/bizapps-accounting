@@ -56,7 +56,7 @@
  */
 import { IMetadataProvider, IRunViewProvider, LogError, UserInfo } from '@memberjunction/core';
 import { UUIDsEqual } from '@memberjunction/global';
-import { JOURNAL_ENTRY_BATCH_OPERATE_AUTH, UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
+import { UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
 import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 import {
   IsApprovalOutcome,
@@ -438,9 +438,8 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     const isBatchOperator = UserCanOperateJournalEntryBatches(contextUser, this.provider.Authorizations);
     if (!isCfo && !isBatchOperator) {
       throw new Error(
-        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the company's configured approver ` +
-        `(the Approval CFO on its Accounting Company Profile) or a user with the ${JOURNAL_ENTRY_BATCH_OPERATE_AUTH} authorization ` +
-        `(the Finance role) may archive it before approval; its builder may cancel it instead.`,
+        `You don't have permission to archive batch ${batch.JournalEntryBatchNumber ?? batchId} before it is approved. ` +
+        `Only the company's CFO approver or the Finance role can. If you built this batch, you can cancel it instead.`,
       );
     }
   }
@@ -568,7 +567,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     );
     return new Error(
       `Your account is not linked to a person record, so this ${action} cannot be recorded on the batch's approval request. ` +
-      'Ask an administrator to link your account, then try again.',
+      'Please ask your administrator to link your account, then try again.',
     );
   }
 

@@ -30,7 +30,7 @@ export function FirstOpenDay(closedThrough: string): string {
 export function ClosedBooksPostingDateProblem(postingDate: string, closedThrough: string | null | undefined): string | null {
   if (!closedThrough || !IsInClosedBooks(postingDate, closedThrough)) return null;
   return `The posting date ${postingDate} is in a month finance has closed: the books are closed through ${closedThrough}. ` +
-    `Choose ${FirstOpenDay(closedThrough)} or later, or ask finance to reopen the month.`;
+    `Choose ${FirstOpenDay(closedThrough)} or later, or please request that Finance reopen the month.`;
 }
 
 // ─── closing and reopening a month (bc-aidp-next-golive#447) ─────────────────

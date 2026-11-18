@@ -124,7 +124,7 @@ function decide(context: FinanceExceptionClearContext, s: FinanceExceptionClearS
   if ('Refusal' in resolution) return resolution.Refusal.Code;
   return HoldsFinanceExceptionClearRule(context, resolution.Rule, reviewer)
     ? `ALLOWED:${resolution.Rule.Kind}`
-    : FinanceExceptionClearRuleRefusal(context, resolution.Rule, s.TypeCode).Code;
+    : FinanceExceptionClearRuleRefusal(context, resolution.Rule).Code;
 }
 
 describe('FinanceExceptionClearTypeAuthName', () => {
@@ -215,13 +215,13 @@ describe('the section 4 configuration', () => {
     expect(decide(context, subject({ SourceCreatedByUserID: FINANCE.ID }), SENIOR)).toBe('ALLOWED:Type');
   });
 
-  it('names the right and the roles granted it when refusing', () => {
+  it('names the roles granted the right, and never the right itself, when refusing', () => {
     const resolution = ResolveFinanceExceptionClearRule(subject({ TypeCode: 'PRICE_BELOW_ENGINE_UNAPPROVED' }), context);
     if (!('Rule' in resolution)) throw new Error('expected a rule');
-    const refusal = FinanceExceptionClearRuleRefusal(context, resolution.Rule, 'PRICE_BELOW_ENGINE_UNAPPROVED');
+    const refusal = FinanceExceptionClearRuleRefusal(context, resolution.Rule);
     expect(refusal.Code).toBe('TYPE_NOT_AUTHORIZED');
-    expect(refusal.Message).toContain('MJ.BizApps.Accounting.FinanceExceptions.ClearType.PRICE_BELOW_ENGINE_UNAPPROVED');
-    expect(refusal.Message).toContain('(granted to: CFO)');
+    expect(refusal.Message).toBe("You don't have permission to clear this exception. This type of exception can be cleared only by specific roles. This is limited to: CFO.");
+    expect(refusal.Message).not.toContain('MJ.BizApps');
   });
 });
 
@@ -259,8 +259,8 @@ describe('escalation shared by the CFO and the senior finance leads (creator nev
   it("names both roles in the refusal", () => {
     const resolution = ResolveFinanceExceptionClearRule(subject({ SourceCreatedByUserID: CFO.ID }), context);
     if (!('Rule' in resolution)) throw new Error('expected a rule');
-    expect(FinanceExceptionClearRuleRefusal(context, resolution.Rule, 'WON_DEAL_ORDER_NOT_CONFIRMED').Message).toContain(
-      '(granted to: CFO, Senior Finance (AR))',
+    expect(FinanceExceptionClearRuleRefusal(context, resolution.Rule).Message).toContain(
+      'This is limited to: CFO, Senior Finance (AR).',
     );
   });
   // That the creator themself is refused is the operation's check (CREATOR_CANNOT_CLEAR), pinned in
@@ -286,7 +286,7 @@ describe('the grant row Type is read the way MJ reads it', () => {
     });
     const resolution = ResolveFinanceExceptionClearRule(subject({ TypeCode: 'PRICE_BELOW_ENGINE_UNAPPROVED' }), context);
     if (!('Rule' in resolution)) throw new Error('expected a rule');
-    expect(FinanceExceptionClearRuleRefusal(context, resolution.Rule, 'PRICE_BELOW_ENGINE_UNAPPROVED').Message).toContain('(granted to: CFO)');
+    expect(FinanceExceptionClearRuleRefusal(context, resolution.Rule).Message).toContain('This is limited to: CFO.');
   });
 });
 
@@ -338,8 +338,8 @@ describe('partial and unusual configurations', () => {
 
   it('works without a role list, leaving the role names out of the message', () => {
     const context = { ...buildContext(SECTION_4), Roles: undefined };
-    const refusal = FinanceExceptionClearRuleRefusal(context, { Kind: 'Escalated', AuthorizationName: FINANCE_EXCEPTIONS_CLEAR_ESCALATED_AUTH }, 'X');
-    expect(refusal).toEqual({ Code: 'ESCALATED_NOT_AUTHORIZED', Message: expect.not.stringContaining('granted to') });
+    const refusal = FinanceExceptionClearRuleRefusal(context, { Kind: 'Escalated', AuthorizationName: FINANCE_EXCEPTIONS_CLEAR_ESCALATED_AUTH });
+    expect(refusal).toEqual({ Code: 'ESCALATED_NOT_AUTHORIZED', Message: expect.not.stringContaining('limited to') });
   });
 
   it('refuses everyone when the catalog has none of the rights', () => {
