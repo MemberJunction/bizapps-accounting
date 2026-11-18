@@ -19,6 +19,12 @@ import { isSqlGuid } from '@mj-biz-apps/accounting-core-entities-server';
  */
 @RegisterClass(BaseAction, 'Accounting.ListOffboardingHoldings')
 export class ListOffboardingHoldingsAction extends BaseAction {
+  /**
+   * Lets any signed-in user run this action without an action authorization. It grants nothing:
+   * every read runs as the caller, so entity permissions still decide what is listed.
+   */
+  public static readonly AuthorizesCaller = true;
+
   protected async InternalRunAction(params: RunActionParams): Promise<ActionResultSimple> {
     const input = readLeaverInput(params);
     if (!input.userId && !input.employeeId) {

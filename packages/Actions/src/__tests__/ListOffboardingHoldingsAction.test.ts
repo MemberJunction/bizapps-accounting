@@ -75,6 +75,10 @@ describe('ListOffboardingHoldingsAction', () => {
         expect(instance).toBeInstanceOf(ListOffboardingHoldingsAction);
     });
 
+    it('declares on its own class that it authorizes its caller', () => {
+        expect(Object.getOwnPropertyDescriptor(ListOffboardingHoldingsAction, 'AuthorizesCaller')?.value).toBe(true);
+    });
+
     it('lists each company whose CFO approver is the leaver, never reassignable, pointing to Company Setup', async () => {
         mockRunView(world);
         const params = runParams({ LeaverUserID: USER_A });
