@@ -29,7 +29,6 @@ import {
   FiscalYearOf,
   FirstOpenDay,
   IsInClosedBooks,
-  JOURNAL_ENTRY_BATCH_OPERATE_AUTH,
   UserCanOperateJournalEntryBatches,
 } from '@mj-biz-apps/accounting-engine-base';
 import { IsCalendarDay, ToCalendarDay, type CalendarDay } from '@mj-biz-apps/common-entities';
@@ -83,7 +82,7 @@ export class RedatePendingJournalEntriesOperation extends BaseRemotableOperation
 
   protected async InternalExecute(input: RedatePendingJournalEntriesInput, provider: IMetadataProvider, user: UserInfo): Promise<RedatePendingJournalEntriesOutput> {
     if (!UserCanOperateJournalEntryBatches(user, provider.Authorizations)) {
-      throw new Error(`RedatePendingJournalEntries: requires the ${JOURNAL_ENTRY_BATCH_OPERATE_AUTH} authorization (the Finance role).`);
+      throw new Error("You don't have permission to change the date of pending journal entries. This is limited to the Finance role.");
     }
     const day = input?.EffectiveDate;
     if (!IsCalendarDay(day)) throw new Error(`The entries were not re-dated: '${String(day)}' is not a YYYY-MM-DD date.`);
@@ -139,7 +138,7 @@ function companyDateProblems(day: CalendarDay, rule: CompanyDateRules | undefine
   const problems: string[] = [];
   const closedThrough = ToCalendarDay(rule?.BooksClosedThroughDate ?? null);
   if (closedThrough && IsInClosedBooks(day, closedThrough)) {
-    problems.push(`${day} is in a month finance has closed: the books are closed through ${closedThrough}. Choose ${FirstOpenDay(closedThrough)} or later, or ask finance to reopen the month.`);
+    problems.push(`${day} is in a month finance has closed: the books are closed through ${closedThrough}. Choose ${FirstOpenDay(closedThrough)} or later, or please request that Finance reopen the month.`);
   }
   const postingStart = ToCalendarDay(rule?.PostingStartDate ?? null);
   if (postingStart && day < postingStart) {

@@ -229,7 +229,7 @@ describe('archiving a batch through the real TasksAppApprovalGate (#214, #325, #
     const b = await buildPendingBatch('A1');
     const before = await taskStatus(b.taskId);
     await expect(archive(b.batchId, builder.info, REASON))
-      .rejects.toThrow(/may archive it before approval; its builder may cancel it instead/);
+      .rejects.toThrow(/You don't have permission to archive batch .* before it is approved\..*you can cancel it instead/);
     await expectUntouched(b, 'Pending', before);
     await cancelJournalEntryBatch(b.batchId, builder.info, provider, { reason: 'A1 cleanup' });
   });

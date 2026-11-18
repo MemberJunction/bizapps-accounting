@@ -120,7 +120,7 @@ describe('DispatchApprovedJournalEntryBatchesOperation (golive #451)', () => {
     const { provider, runView } = providerWith([row(1)]);
 
     await expect(new ProbeOperation().Run({}, provider, OTHER_USER))
-      .rejects.toThrow(`DispatchApprovedJournalEntryBatches: requires the ${JOURNAL_ENTRY_BATCH_OPERATE_AUTH} authorization`);
+      .rejects.toThrow("You don't have permission to send approved journal entry batches. This is limited to the Finance role.");
     expect(runView).not.toHaveBeenCalled();
     expect(sendSpy).not.toHaveBeenCalled();
   });

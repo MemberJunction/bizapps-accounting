@@ -451,7 +451,8 @@ describe('Accounting.ClearFinanceException', () => {
     const s = stubProvider({ stored: openRow(), grantedRules: [{ Name: typeRight, holders: [SUPERVISOR.ID] }] });
     const result = await clear(s, {});
     expect(result.Output).toEqual({ Success: false, Status: 'Open', Errors: [expect.objectContaining({ Code: 'TYPE_NOT_AUTHORIZED' })] });
-    expect(result.Output?.Errors?.[0].Message).toContain(typeRight);
+    expect(result.Output?.Errors?.[0].Message).toContain('This type of exception can be cleared only by specific roles.');
+    expect(result.Output?.Errors?.[0].Message).not.toContain(typeRight);
     expect(s.saved).toHaveLength(0);
   });
 
