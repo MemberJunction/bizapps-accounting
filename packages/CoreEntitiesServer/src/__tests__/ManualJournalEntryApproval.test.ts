@@ -138,7 +138,7 @@ describe('AssertMayDecideManualJournalEntry — who may decide', () => {
   });
 
   it('refuses a Standard entry to someone with neither the role nor the CFO seat', () => {
-    expect(() => decide({ DeciderHoldsApproverRole: false })).toThrow(/only a holder of the company's manual-entry approver role/);
+    expect(() => decide({ DeciderHoldsApproverRole: false })).toThrow(/Only the company's journal entry approvers/);
   });
 
   it('refuses a CFO-level entry to anyone but the CFO, role or not', () => {

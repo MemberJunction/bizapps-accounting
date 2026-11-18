@@ -382,7 +382,7 @@ describe('AccountingERPEngine.PostJournalBatch', () => {
 
     const result: ErpPostResult = await AccountingERPEngine.Instance.PostJournalBatch(batch, [], user, p);
 
-    expect(result).toEqual({ success: false, error: `Company ${COMPANY} has no active 'QuickBooks' connection, so the batch cannot be sent. Ask an administrator to set one up.` });
+    expect(result).toEqual({ success: false, error: `Company ${COMPANY} has no active 'QuickBooks' connection, so the batch cannot be sent. Please ask your administrator to set one up.` });
     expect(runVerb).not.toHaveBeenCalled();
   });
 
@@ -1495,7 +1495,7 @@ describe('AccountingERPEngine — choosing the posting connection (#256)', () =>
   it('refuses as before when the company has no connection for the target, running only afterPostFailure', async () => {
     const { runVerb, posted, found } = await postAndFind([connection(CI_PROD, 'HubSpot', 'HubSpot')]);
 
-    const error = `Company ${COMPANY} has no active 'BusinessCentral' connection, so the batch cannot be sent. Ask an administrator to set one up.`;
+    const error = `Company ${COMPANY} has no active 'BusinessCentral' connection, so the batch cannot be sent. Please ask your administrator to set one up.`;
     expect(posted).toEqual({ success: false, error });
     expect(found).toEqual({ status: 'Unavailable' });
     expect(runVerb).not.toHaveBeenCalled();

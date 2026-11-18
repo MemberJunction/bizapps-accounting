@@ -127,7 +127,7 @@ describe('Accounting.RedatePendingJournalEntries — success', () => {
 describe('Accounting.RedatePendingJournalEntries — refusals', () => {
   it('refuses a caller without the batch-operator Authorization, before any read', async () => {
     const { provider, filters } = world([entry(JE_1, '2026-11-02')]);
-    await expect(new TestOperation().Run(byPayment('2026-10-30'), provider, OTHER)).rejects.toThrow(`requires the ${JOURNAL_ENTRY_BATCH_OPERATE_AUTH} authorization`);
+    await expect(new TestOperation().Run(byPayment('2026-10-30'), provider, OTHER)).rejects.toThrow("You don't have permission to change the date of pending journal entries");
     expect(filters).toHaveLength(0);
   });
 

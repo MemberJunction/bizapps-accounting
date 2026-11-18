@@ -214,7 +214,7 @@ export function AssertMayDecideManualJournalEntry(input: ManualJournalEntryDecid
   }
   if (!isCFO && !input.DeciderHoldsApproverRole) {
     throw new ManualJournalEntryApprovalError(
-      `${input.EntryLabel}: only a holder of the company's manual-entry approver role, or its Approval CFO, may decide this entry.`,
+      `You don't have permission to approve or reject ${input.EntryLabel}. Only the company's journal entry approvers or its CFO approver can.`,
     );
   }
 }
@@ -511,7 +511,7 @@ export class ManualJournalEntryApprovalService {
     if (approved && !je.CheckPermissions(EntityPermissionType.Update, false)) {
       throw new ManualJournalEntryApprovalError(
         `${label}: you may approve this entry, but none of your roles may update Journal Entries, so the approval cannot be recorded on it. ` +
-        'Ask an administrator to grant the manual-entry approver role Update on Journal Entries.',
+        'Please ask your administrator to grant the manual-entry approver role Update on Journal Entries.',
       );
     }
     const approvedAt = new Date();

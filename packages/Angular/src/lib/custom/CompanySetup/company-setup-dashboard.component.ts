@@ -15,7 +15,7 @@ const COMPANY_PROFILE_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profil
 // metadata" as a red card on the Configuration page (same bug class as TasksAppApprovalGate).
 const USER_ENTITY = 'MJ: Users';
 /** Shown for a CFO save that failed for a reason not fit to show (#383). */
-const CFO_NOT_SAVED = 'The CFO approver was not saved. Try again; if it keeps failing, ask an administrator.';
+const CFO_NOT_SAVED = 'The CFO approver was not saved. Try again; if it keeps failing, please contact your administrator.';
 
 /** Value-list unions, derived from the generated entity (rule 2c — never hand-copied). */
 type EntityType = mjBizAppsAccountingAccountingCompanyProfileEntity['EntityType'];
