@@ -31,6 +31,15 @@ import { JournalEntryLineEntity } from './JournalEntryLineEntity';
 @RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Journal Entries')
 export class JournalEntryEntity extends mjBizAppsAccountingJournalEntryEntity {
     /**
+     * Load only the journal entry header row without hydrating `Lines` or line dimensions.
+     * On the client tier this delegates to `super.Load()`; `JournalEntryEntityServer` overrides it
+     * to bypass `LoadLines()` when a batch operation only mutates header status/batch columns.
+     */
+    public async LoadHeader(ID: string, EntityRelationshipsToLoad?: string[]): Promise<boolean> {
+        return super.Load(ID, EntityRelationshipsToLoad);
+    }
+
+    /**
      * Whether the line set is KNOWN, as opposed to merely empty.
      *
      * An empty collection means "no lines" only when there cannot be any on disk: an entry that was

@@ -62,7 +62,7 @@ describe('Company Setup dashboard (tier 4)', () => {
     expect(expectedCompanies.length, 'demo seed guarantees at least the 3 Assoc Demo companies').toBeGreaterThanOrEqual(3);
 
     const el: HTMLElement = fixture.nativeElement;
-    const items = [...el.querySelectorAll('.cs-listitem')];
+    const items = Array.from(el.querySelectorAll('.cs-listitem'));
     expect(items.length).toBe(expectedCompanies.length);
     for (const c of expectedCompanies) {
       const item = items.find((i) => (i.textContent ?? '').includes(c.Name));
@@ -95,7 +95,7 @@ describe('Company Setup dashboard (tier 4)', () => {
     await waitFor(fixture, () => !comp.IsBusy);
 
     const el: HTMLElement = fixture.nativeElement;
-    const btn = [...el.querySelectorAll('button')].find((b) => /New company/i.test(b.textContent ?? ''));
+    const btn = Array.from(el.querySelectorAll('button')).find((b) => /New company/i.test(b.textContent ?? ''));
     // The header create verb was HOISTED to the category shell (orders-style rule). The dashboard
     // itself must ship no duplicate; its create path is the CreateSignal input the shell bumps.
     expect(btn, 'no local New company button — the category header owns the verb').toBeUndefined();

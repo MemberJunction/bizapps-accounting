@@ -6,16 +6,12 @@ import { GridColumnConfig } from '@memberjunction/ng-entity-viewer';
 import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { CompositeKey } from '@memberjunction/core';
 import { openBizDetail, openBizCreate } from '../../shared/biz-detail-form';
+import type { mjBizAppsAccountingDimensionEntity } from '@mj-biz-apps/accounting-entities';
 
 const DIM_ENTITY = 'MJ_BizApps_Accounting: Dimensions';
 const DIMVAL_ENTITY = 'MJ_BizApps_Accounting: Dimension Values';
 
-interface DimensionRow {
-  ID: string;
-  Code: string;
-  Name: string;
-  IsActive: boolean;
-}
+type DimensionRow = Pick<mjBizAppsAccountingDimensionEntity, 'ID' | 'Code' | 'Name' | 'IsActive'>;
 
 /**
  * Dimensions (UI plan §8.3) — Dimension + DimensionValue admin: a master list on the left, its

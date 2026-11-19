@@ -2,8 +2,8 @@
  * JournalEntryTypeEntityServer — the IsSystem row lock (issue #24, BA-D29). No DB: mock
  * EntityInfo, saved-state via LoadFromData.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
-import { Metadata, EntityInfo } from '@memberjunction/core';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { Metadata, EntityInfo, BaseEntity } from '@memberjunction/core';
 import { JournalEntryTypeEntityServer } from '../JournalEntryTypeEntityServer.js';
 
 const JET_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Types';
@@ -91,5 +91,72 @@ describe('JournalEntryTypeEntityServer (system-row lock)', () => {
     row.IsJournalEntryBatchSummary = false;
     row.IsActive = true;
     expect(row.Validate().Success).toBe(true);
+  });
+
+  describe('consumer row referenced by journal entries (#392)', () => {
+    const loadedConsumerRow = async (runViewCount: number, runViewSuccess = true): Promise<JournalEntryTypeEntityServer> => {
+      const provider = {
+        Entities: [info],
+        RunView: vi.fn(async () => ({
+          Success: runViewSuccess,
+          TotalRowCount: runViewCount,
+          Results: [],
+          ErrorMessage: runViewSuccess ? undefined : 'timeout',
+        })),
+      };
+      Metadata.Provider = provider as any;
+      const row = new JournalEntryTypeEntityServer(info as any);
+      Object.defineProperty(row, 'ProviderToUse', { configurable: true, get: () => provider });
+      await row.LoadFromData({
+        ID: '11111111-1111-4111-8111-111111111111',
+        Code: 'OrderBooking',
+        Name: 'Order Booking',
+        IsSystem: false,
+        IsJournalEntryBatchSummary: false,
+        IsActive: true,
+      });
+      return row;
+    };
+
+    it('opts into ValidateAsync so the reference check runs on Save', () => {
+      const row = new JournalEntryTypeEntityServer(info as any);
+      expect(row.DefaultSkipAsyncValidation).toBe(false);
+    });
+
+    it('refuses changing Code on a consumer row when journal entries reference it', async () => {
+      const row = await loadedConsumerRow(3);
+      row.Code = 'OrderBookingRenamed';
+      const result = await row.ValidateAsync();
+      expect(result.Success).toBe(false);
+      expect(result.Errors.some(e => /used by 3 journal entries, so its Code cannot change/.test(e.Message))).toBe(true);
+    });
+
+    it('allows changing Code on a consumer row when no journal entries reference it', async () => {
+      const row = await loadedConsumerRow(0);
+      row.Code = 'OrderBookingRenamed';
+      const result = await row.ValidateAsync();
+      expect(result.Success).toBe(true);
+    });
+
+    it('refuses Delete on a consumer row when journal entries reference it', async () => {
+      const row = await loadedConsumerRow(2);
+      await expect(row.Delete()).rejects.toThrow(/used by 2 journal entries and cannot be deleted/);
+    });
+
+    it('allows Delete on a consumer row when no journal entries reference it', async () => {
+      const superDelete = vi.spyOn(BaseEntity.prototype, 'Delete').mockResolvedValue(true);
+      try {
+        const row = await loadedConsumerRow(0);
+        await expect(row.Delete()).resolves.toBe(true);
+      } finally {
+        superDelete.mockRestore();
+      }
+    });
+
+    it('fails closed when the reference query fails', async () => {
+      const row = await loadedConsumerRow(0, false);
+      row.Code = 'OrderBookingRenamed';
+      await expect(row.ValidateAsync()).rejects.toThrow(/Could not check whether journal entries use type 'OrderBooking'/);
+    });
   });
 });

@@ -101,9 +101,11 @@ re-routes as for any date change.
 ### F1 — Routine JE validator *(🚫 retired 2026-07-24 — `JournalEntryValidation.ts` deleted)*
 Nothing called it. Its rules run on **every save** of a JournalEntry instead:
 - `JournalEntryEntity.Validate()` (`packages/Entities`, browser and server): **≥2 lines**, **balanced** (±0.005).
-- `JournalEntryEntityServer.Validate()`: born `Pending`, legal status transitions, no blank lines.
+- `JournalEntryEntityServer.Validate()`: born `Pending`, legal status transitions, `EntryNumber` and `EffectiveDate` immutable on saved records (#391), no blank lines.
 - `JournalEntryEntityServer.ValidateAsync()`: every line's GL account **exists**, is **active** and belongs to the
-  JE's company (D3; trigger 50019 is the floor), plus the reversal-type pairing, W9 and the `GLPosted` transition check.
+  JE's company (D3; trigger 50019 is the floor), existing lines hydrate in memory via `LoadFromData` (#450), plus the reversal-type pairing, W9 and the `GLPosted` transition check.
+- `JournalEntryLineEntityServer.Validate()`: `JournalEntryID` is immutable on saved lines (#391).
+- `JournalEntryTypeEntityServer.Validate()`: `IsJournalEntryBatchSummary` cannot be cleared from the designated summary entry type (#392).
 
 ---
 

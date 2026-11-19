@@ -64,6 +64,7 @@ const SCHEMA = '__mj_BizAppsAccounting';
 const ACP_TABLE = `${SCHEMA}.AccountingCompanyProfile`;
 const COMPANY_TABLE = '__mj.Company';
 const GL_TABLE = `${SCHEMA}.GLAccount`;
+const GL_LINK_TABLE = `${SCHEMA}.GLAccountLink`;
 const JE_TABLE = `${SCHEMA}.JournalEntry`;
 const BATCH_TABLE = `${SCHEMA}.JournalEntryBatch`;
 
@@ -210,6 +211,8 @@ async function main(): Promise<void> {
   await test('W1.2 create leaves the chart EMPTY; explicit SeedDefaultChartOfAccounts() seeds the 10', async () => {
     const preN = await scalar(pool, `SELECT COUNT(*) AS n FROM ${GL_TABLE} WHERE CompanyID=@id`, acpId);
     assert(preN === 0, `expected an EMPTY chart on create (auto-seed retired), got ${preN} accounts`);
+    const preLinks = await scalar(pool, `SELECT COUNT(*) AS n FROM ${GL_LINK_TABLE} WHERE LOWER(RecordID)=LOWER(CONVERT(NVARCHAR(100),@id))`, acpId);
+    assert(preLinks === 0, `expected 0 GLAccountLink rows on newly created company, got ${preLinks}`);
     const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, user);
     assert(await acp.Load(acpId), 'ACP reload failed');
     await (acp as unknown as { SeedDefaultChartOfAccounts(): Promise<void> }).SeedDefaultChartOfAccounts();
@@ -231,17 +234,16 @@ async function main(): Promise<void> {
     assert(dbN === 10, `raw DB GL count expected 10, got ${dbN}`);
   });
 
-  await test('W1.3 default GL-account refs stay UNWIRED (retired 2026-07-23 — role/link model replaces them)', async () => {
-    // The former 5-ref wiring was deliberately retired; the role-based GLAccountRole/GLAccountLink
-    // model replaces it, and per-company link seeding lands with the port work. This asserts the
-    // retirement is honored — a re-appearing wired ref would mean the old code path came back.
-    const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, user);
-    await acp.Load(acpId);
-    assert(acp.AROpenGLAccountID == null, `AROpenGLAccountID unexpectedly wired: ${acp.AROpenGLAccountID}`);
-    assert(acp.DeferredRevenueGLAccountID == null, `DeferredRevenueGLAccountID unexpectedly wired: ${acp.DeferredRevenueGLAccountID}`);
-    assert(acp.SalesTaxPayableGLAccountID == null, `SalesTaxPayableGLAccountID unexpectedly wired: ${acp.SalesTaxPayableGLAccountID}`);
-    assert(acp.RealizedFXGainLossGLAccountID == null, `RealizedFXGainLossGLAccountID unexpectedly wired: ${acp.RealizedFXGainLossGLAccountID}`);
-    assert(acp.UnrealizedFXGainLossGLAccountID == null, `UnrealizedFXGainLossGLAccountID unexpectedly wired: ${acp.UnrealizedFXGainLossGLAccountID}`);
+  await test('W1.3 default GL-account links stay UNWIRED (role/link model replaces the retired profile columns)', async () => {
+    // The former 5-ref profile columns were dropped; the role-based GLAccountRole/GLAccountLink
+    // model replaces them, and SeedDefaultChartOfAccounts seeds only the starter accounts without
+    // pre-wiring company-level GLAccountLink rows.
+    const linkCount = await scalar(
+      pool,
+      `SELECT COUNT(*) AS n FROM ${GL_LINK_TABLE} WHERE LOWER(RecordID)=LOWER(CONVERT(NVARCHAR(100),@id))`,
+      acpId,
+    );
+    assert(linkCount === 0, `expected 0 auto-wired GLAccountLink rows on company ${acpId}, got ${linkCount}`);
   });
 
   await test('W1.4 leaves OperatingTimeZone blank so the business zone applies (#158)', async () => {

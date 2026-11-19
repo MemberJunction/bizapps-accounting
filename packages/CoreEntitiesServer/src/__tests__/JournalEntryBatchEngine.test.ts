@@ -399,13 +399,17 @@ describe('JournalEntryBatchEngine — each chunked read splits 1,200 ids into 3 
         calls.filter(c => c.EntityName === 'MJ_BizApps_Accounting: Journal Entries' && (c.ExtraFilter ?? '').startsWith('ID IN (') && (c.ExtraFilter ?? '').includes('EffectiveDate >') === dated);
     const readsOf = (calls: Call[], entityName: string) => calls.filter(c => c.EntityName === entityName && (c.ExtraFilter ?? '').includes(' IN ('));
 
-    it('an explicit build re-reads the ids, checks their dates and reads their lines and dimensions in 3 reads each', async () => {
+    it('an explicit build re-reads the ids, checks their dates and reads their lines and dimensions in 3 reads per pass', async () => {
         const w = world();
         await expect(buildJournalEntryBatchFromExplicitIds(entries.map(e => e.ID), 'BusinessCentral', 'USER-1', mockUser, w.provider, stopGate, '2026-08-31'))
             .rejects.toThrow(STOP);
         expect(jeIdReads(w.calls, false)).toHaveLength(3);
-        expect(jeIdReads(w.calls, true)).toHaveLength(3);
-        expect(readsOf(w.calls, 'MJ_BizApps_Accounting: Journal Entry Lines')).toHaveLength(3);
+        // The dates are checked for the whole company before it is split by external system (#68),
+        // and again by each split batch's build: 3 reads each.
+        expect(jeIdReads(w.calls, true)).toHaveLength(6);
+        // Lines are read twice, 3 reads each: once to group the entries by external system (#68),
+        // once for the amounts the batch nets.
+        expect(readsOf(w.calls, 'MJ_BizApps_Accounting: Journal Entry Lines')).toHaveLength(6);
         expect(readsOf(w.calls, 'MJ_BizApps_Accounting: Journal Entry Line Dimensions')).toHaveLength(3);
     });
 

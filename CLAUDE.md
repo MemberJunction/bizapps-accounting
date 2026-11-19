@@ -185,7 +185,7 @@ Generated files are committed, and AIDP Next ships them as they are: it excludes
 
 ## Testing
 - `pnpm run test` runs each package's `test`, `test:dom` and `test:types` scripts through Turborepo, leaving out the integration tests. It is the only test step CI runs (`.github/workflows/build.yml`).
-- `pnpm run test:integration` runs the live suite in `packages/IntegrationTests` through `test-harnesses/integration.mjs`, after `pnpm run build`. It needs a running MJAPI, that MJAPI's system API key in `MJ_API_KEY`, and the bizapps-orders integration world loaded, and it writes data on every run (`RUN_MUTATION_TESTS=0` does not stop it). CI does not run it. Prerequisites: [`packages/IntegrationTests/README.md`](packages/IntegrationTests/README.md).
+- `pnpm run test:integration` runs the live suite in `packages/IntegrationTests` through `packages/IntegrationTests/integration.mjs`, after `pnpm run build`. It needs a running MJAPI, that MJAPI's system API key in `MJ_API_KEY`, and the bizapps-orders integration world loaded (`RUN_MUTATION_TESTS=0` skips checks marked `RequiresMutation`). CI does not run it. Prerequisites: [`packages/IntegrationTests/README.md`](packages/IntegrationTests/README.md).
 - Every test tier and how to run each: [`test-harnesses/README.md`](test-harnesses/README.md).
 
 ## Ports

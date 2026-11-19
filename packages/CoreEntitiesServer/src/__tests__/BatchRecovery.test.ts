@@ -63,6 +63,7 @@ interface FakeBatch {
     PostedAt: Date | null;
     SentAt: Date | null;
     SealMismatchDetectedAt: Date | null;
+    ERPPostUnconfirmedAt: Date | null;
     SummaryJournalEntryID: string | null;
     LatestResult: { CompleteMessage: string } | null;
     statusHistory: string[];
@@ -72,8 +73,8 @@ interface FakeBatch {
     CheckApprovedContent: () => Promise<{ CoherenceProblems: string[]; SealProblems: string[] }>;
 }
 
-/** What the database holds for the batch: the columns the SealMismatchDetectedAt rule reads. */
-interface StoredBatch { Status: string; SendAttemptCount: number; SealMismatchDetectedAt: Date | null }
+/** What the database holds for the batch: the columns the SealMismatchDetectedAt and ERPPostUnconfirmedAt rules read. */
+interface StoredBatch { Status: string; SendAttemptCount: number; SealMismatchDetectedAt: Date | null; ERPPostUnconfirmedAt: Date | null }
 
 /**
  * trg_JournalEntryBatch_Immutability's SealMismatchDetectedAt rule (50034, #216): set only by the save
@@ -90,11 +91,27 @@ function sealFlagRefusal(before: StoredBatch, after: StoredBatch): string | null
     return changed || setOutsideAdoption ? 'JournalEntryBatch SealMismatchDetectedAt refused.' : null;
 }
 
+/**
+ * trg_JournalEntryBatch_Immutability's ERPPostUnconfirmedAt rule (50040, #414): first written only by
+ * the save that takes a Sent batch to Posted or Failed, cleared only when a Failed batch is re-sent or
+ * cancelled, and otherwise changed only on Sent -> Failed. The fake's Save applies it, so a send that
+ * stamps the batch where the database would refuse it fails here too.
+ */
+function unconfirmedStampRefusal(before: StoredBatch, after: StoredBatch): string | null {
+    const was = before.ERPPostUnconfirmedAt;
+    const now = after.ERPPostUnconfirmedAt;
+    const sentTo = (...to: string[]) => before.Status === 'Sent' && to.includes(after.Status);
+    const set = was === null && now !== null && !sentTo('Posted', 'Failed');
+    const cleared = was !== null && now === null && !(before.Status === 'Failed' && ['Sent', 'Cancelled'].includes(after.Status));
+    const changed = was !== null && now !== null && Math.abs(now.getTime() - was.getTime()) >= 1 && !sentTo('Failed');
+    return set || cleared || changed ? 'JournalEntryBatch ERPPostUnconfirmedAt refused.' : null;
+}
+
 /** An in-memory world: one batch, its member entries, and which entry saves should fail. */
 function world(status: string, entries: Record<string, JournalEntryRow>, opts: { failingEntryIds?: string[]; missingEntryIds?: string[]; drift?: string[]; sealDrift?: string[]; summaryLinesScanFails?: boolean; failFirstSaveAt?: string; failSavesAt?: string[]; sentSaveMessage?: string; currentStatus?: string } = {}) {
     let saveFailed = false;
     // Every batch past Approved was sent at least once (Posted and Failed are reachable only from Sent).
-    const stored: StoredBatch = { Status: status, SendAttemptCount: status === 'Approved' || status === 'Pending' ? 0 : 1, SealMismatchDetectedAt: null };
+    const stored: StoredBatch = { Status: status, SendAttemptCount: status === 'Approved' || status === 'Pending' ? 0 : 1, SealMismatchDetectedAt: null, ERPPostUnconfirmedAt: null };
     const batch: FakeBatch = {
         ID: BATCH_ID,
         JournalEntryBatchNumber: 'JEB-0001',
@@ -104,6 +121,7 @@ function world(status: string, entries: Record<string, JournalEntryRow>, opts: {
         PostedAt: status === 'Posted' ? new Date('2026-09-01T10:00:00Z') : null,
         SentAt: null,
         SealMismatchDetectedAt: null,
+        ERPPostUnconfirmedAt: null,
         SummaryJournalEntryID: opts.summaryLinesScanFails ? 'cccccccc-0000-0000-0000-000000000001' : null,
         LatestResult: null,
         statusHistory: [],
@@ -115,8 +133,8 @@ function world(status: string, entries: Record<string, JournalEntryRow>, opts: {
             if (opts.sentSaveMessage && batch.Status === 'Sent') { batch.LatestResult = { CompleteMessage: opts.sentSaveMessage }; return false; }
             // The entity stamps SendAttemptCount on every move into Sent.
             const sendAttemptCount = batch.Status === 'Sent' && stored.Status !== 'Sent' ? stored.SendAttemptCount + 1 : stored.SendAttemptCount;
-            const next: StoredBatch = { Status: batch.Status, SendAttemptCount: sendAttemptCount, SealMismatchDetectedAt: batch.SealMismatchDetectedAt };
-            const refusal = sealFlagRefusal(stored, next);
+            const next: StoredBatch = { Status: batch.Status, SendAttemptCount: sendAttemptCount, SealMismatchDetectedAt: batch.SealMismatchDetectedAt, ERPPostUnconfirmedAt: batch.ERPPostUnconfirmedAt };
+            const refusal = sealFlagRefusal(stored, next) ?? unconfirmedStampRefusal(stored, next);
             if (refusal) { batch.LatestResult = { CompleteMessage: refusal }; return false; }
             Object.assign(stored, next);
             batch.statusHistory.push(batch.Status);
@@ -138,6 +156,7 @@ function world(status: string, entries: Record<string, JournalEntryRow>, opts: {
                 if (opts.missingEntryIds?.includes(id)) return false;
                 je.ID = id; Object.assign(je, entries[id]); return true;
             },
+            LoadHeader: async (id: string) => je.Load(id),
             Save: async () => {
                 if (opts.failingEntryIds?.includes(je.ID)) return false;
                 Object.assign(entries[je.ID], { Status: je.Status, GLPostedAt: je.GLPostedAt, GLReferenceID: je.GLReferenceID });
@@ -651,6 +670,42 @@ describe('sendJournalEntryBatch — the pre-flight ERP lookup (#182)', () => {
 
     // #30 item 6: thrown, the save failure left the batch at Sent on a manual dispatch, which nothing
     // retries, archives or reports.
+    // The poster does what AccountingERPEngine.PostJournalBatch does on a failed read-back: stamps the batch, reports success.
+    it('records a batch Posted, with ERPPostUnconfirmedAt, when the ERP accepted it and the read-back failed (#414)', async () => {
+        const { batch, entries, provider, stored } = world('Approved', { 'je-1': batched() });
+        const poster: ErpPoster = async (sent) => {
+            (sent as { ERPPostUnconfirmedAt?: Date | null }).ERPPostUnconfirmedAt = new Date('2026-11-19T12:00:00Z');
+            return { success: true, externalJournalEntryBatchRef: 'ERP-REF-2', readbackError: 'BC 503' };
+        };
+
+        const result = await send({ gate: approvedGate(), poster, lookup: lookupReturning({ status: 'NotFound' }), provider });
+
+        expect(result.Status).toBe('Posted');
+        expect(batch.statusHistory).toEqual(['Sent', 'Posted']);
+        expect(stored.ERPPostUnconfirmedAt).toEqual(new Date('2026-11-19T12:00:00Z'));
+        expect(batch.ErrorMessage).toBeNull();
+        expect(entries['je-1'].Status).toBe('GLPosted');
+    });
+
+    it('keeps ERPPostUnconfirmedAt through a failed Posted save and the retry that records the batch Posted (#414)', async () => {
+        const { batch, provider, stored } = world('Approved', { 'je-1': batched() }, { failFirstSaveAt: 'Posted' });
+        const stampedAt = new Date('2026-11-19T12:00:00Z');
+        const poster: ErpPoster = vi.fn(async (sent) => {
+            (sent as { ERPPostUnconfirmedAt?: Date | null }).ERPPostUnconfirmedAt = stampedAt;
+            return { success: true, externalJournalEntryBatchRef: 'ERP-REF-2', readbackError: 'BC 503' };
+        });
+
+        await send({ gate: approvedGate(), poster, lookup: lookupReturning({ status: 'NotFound' }), provider });
+        expect(stored).toMatchObject({ Status: 'Failed', ERPPostUnconfirmedAt: stampedAt });
+
+        const result = await send({ gate: approvedGate(), poster, lookup: lookupReturning({ status: 'NotFound' }), provider });
+
+        expect(poster).toHaveBeenCalledTimes(1);
+        expect(result.Status).toBe('Posted');
+        expect(batch.statusHistory).toEqual(['Sent', 'Failed', 'Sent', 'Posted']);
+        expect(stored.ERPPostUnconfirmedAt).toEqual(stampedAt);
+    });
+
     it('marks a batch Failed, keeping the ERP reference, when the ERP accepted it and the Posted save failed', async () => {
         const { batch, entries, provider } = world('Approved', { 'je-1': batched() }, { failFirstSaveAt: 'Posted' });
         batch.LatestResult = { CompleteMessage: 'deadlock victim' };
@@ -857,7 +912,7 @@ describe('sendJournalEntryBatch — a Failed retry whose approved-content seal n
         const { batch, provider, stored } = world('Failed', { 'je-1': batched() }, { sealDrift: SEAL, failFirstSaveAt: 'Posted' });
 
         await send({ lookup: found(), provider });
-        expect(stored).toEqual({ Status: 'Failed', SendAttemptCount: 2, SealMismatchDetectedAt: null });
+        expect(stored).toMatchObject({ Status: 'Failed', SendAttemptCount: 2, SealMismatchDetectedAt: null });
 
         const result = await send({ lookup: found(), provider });
 

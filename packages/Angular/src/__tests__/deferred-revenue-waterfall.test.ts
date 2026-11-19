@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { RunView, type RunViewResult } from '@memberjunction/core';
 import { FromCalendarDay } from '@mj-biz-apps/common-entities';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
@@ -476,6 +479,35 @@ describe('DeferredRevenueWaterfallComponent', () => {
             await Promise.resolve();
             expect(comp.Summary.TotalRecognizedYTD).toBe(10);
             expect(config).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('journal entry badge label (#455)', () => {
+        it('renders EntryNumber directly without prepending a second JE- prefix, falling back to JE-<id> only when unnumbered', async () => {
+            const templatePath = join(
+                dirname(fileURLToPath(import.meta.url)),
+                '../lib/components/deferred-revenue-waterfall/deferred-revenue-waterfall.component.html',
+            );
+            const template = readFileSync(templatePath, 'utf8');
+            expect(template).not.toContain('JE-{{ cell.JournalEntry.EntryNumber');
+            expect(template).toContain("{{ cell.JournalEntry.EntryNumber || ('JE-' + cell.JournalEntry.ID.slice(0, 8)) }}");
+
+            const numbered = await mockEntry({
+                ID: '12345678-aaaa-bbbb-cccc-000000000001',
+                EntryNumber: 'JE-2026-000042',
+                EffectiveDate: FromCalendarDay('2026-01-01'),
+                LinkedRecordID: 'sub-term-1',
+                Description: 'Monthly Subscription Rev Rec',
+                CreditAmount: 100,
+            });
+            const comp = new DeferredRevenueWaterfallComponent();
+            comp.JournalEntries = [numbered];
+            comp.ngOnChanges({
+                JournalEntries: { currentValue: [numbered], previousValue: [], firstChange: true, isFirstChange: () => true },
+            });
+            const cellJe = comp.YearGroups[0].Months[0].JournalEntry!;
+            const renderedLabel = cellJe.EntryNumber || ('JE-' + cellJe.ID.slice(0, 8));
+            expect(renderedLabel).toBe('JE-2026-000042');
         });
     });
 });

@@ -48,7 +48,6 @@ import { AllJournalEntriesPageComponent } from './pages/all-journal-entries.page
 import { AllBatchesPageComponent } from './pages/all-batches.page';
 import { BatchDetailPanelComponent } from './pages/batch-detail-panel.component';
 import { JEApprovalsPageComponent } from './pages/je-approvals.page';
-import { JournalEntryBatchWorkspacePageComponent } from './pages/journal-entry-batch-workspace.page';
 import { DispatchStatusPageComponent } from './pages/dispatch-status.page';
 import { JeDashboardPageComponent } from './pages/je-dashboard.page';
 import { JournalEntryBatchesDashboardPageComponent } from './pages/journal-entry-batches-dashboard.page';
@@ -92,7 +91,6 @@ import { DimensionsResourceComponent } from '../resources/dimensions-resource.co
     JournalEntriesCategoryResourceComponent,
     AllJournalEntriesPageComponent,
     JEApprovalsPageComponent,
-    JournalEntryBatchWorkspacePageComponent,
     DispatchStatusPageComponent,
     JeDashboardPageComponent,
     JournalEntryBatchesDashboardPageComponent,
@@ -120,7 +118,7 @@ import { DimensionsResourceComponent } from '../resources/dimensions-resource.co
     EntityViewerModule, // <mj-entity-data-grid> — the house grid
     // The Batches category HOSTS these existing dashboards (now on interior chrome, §6 sweep).
     JournalEntryBatchDispatchModule, // <mj-batch-dispatch-dashboard> — Batch approvals
-    ReadModelsModule, // <mj-batch-status-dashboard> + the read-model report dashboards
+    ReadModelsModule, // retained for external module import compatibility
     ChartOfAccountsModule, // <mj-coa-dashboard> — Accounts
     CompanySetupModule, // <mj-company-setup-dashboard> — Configuration
     ERPSyncWidgetsModule,
@@ -160,7 +158,6 @@ import { DimensionsResourceComponent } from '../resources/dimensions-resource.co
     JournalEntriesCategoryResourceComponent,
     AllJournalEntriesPageComponent,
     JEApprovalsPageComponent,
-    JournalEntryBatchWorkspacePageComponent,
     DispatchStatusPageComponent,
     JeDashboardPageComponent,
     JournalEntryBatchesDashboardPageComponent,

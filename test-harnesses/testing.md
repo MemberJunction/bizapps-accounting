@@ -31,10 +31,8 @@ in CI). Only tier 1 and the DOM suite run in CI.
   assigned an untyped `vi.fn()` to `TearDownSummaryAndUnlock`.
 - **Tier 4 has a script.** `pnpm run test:gui` in `packages/Angular` (needs MJAPI; not in CI).
   It resolves **only inside an mjdev instance**: in a plain clone `@memberjunction/ng-bootstrap-lite`
-  and `undici` are not installed, so all five files fail on module resolution before any test
-  runs. `tsc -p test-harnesses/gui/tsconfig.gui.json` also reports three TS2488 errors
-  (`company-setup.dom.test.ts:65,98`, `journal-entry-batch-workspace.dom.test.ts:68`); tier 4 is
-  outside `test:types`.
+  and `undici` are not installed, so the files fail on module resolution before any test runs; tier
+  4 is outside `test:types`.
 - **`batch-workspace.pure.test.ts` moved** to `packages/CoreEntitiesServer/src/__tests__/BatchWorkspace.test.ts`.
   It needs no DB, and the tier-2 config it ran under is run by nothing automatic. `src/__tests__/`
   is excluded from the CES build, so it still does not ship. The tier-2 config now includes only

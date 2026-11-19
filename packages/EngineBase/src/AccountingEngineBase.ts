@@ -36,6 +36,7 @@ import { RegisterForStartup } from '@memberjunction/core';
 import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
   mjBizAppsAccountingCurrencyEntity,
+  mjBizAppsAccountingCurrencySpotRateEntity,
   mjBizAppsAccountingDimensionEntity,
   mjBizAppsAccountingDimensionValueEntity,
   mjBizAppsAccountingGLAccountEntity,
@@ -265,6 +266,7 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
   private _dimensionValues: mjBizAppsAccountingDimensionValueEntity[] = [];
   private _companyProfiles: mjBizAppsAccountingAccountingCompanyProfileEntity[] = [];
   private _currencies: mjBizAppsAccountingCurrencyEntity[] = [];
+  private _currencySpotRates: mjBizAppsAccountingCurrencySpotRateEntity[] = [];
   private _intercompanyMatches: mjBizAppsAccountingIntercompanyAccountMatchEntity[] = [];
   private _intercompanyMatchDimensions: mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity[] = [];
   private _linkMissRefresh: Promise<void> | null = null;
@@ -284,6 +286,7 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
       { PropertyName: '_dimensionValues', EntityName: 'MJ_BizApps_Accounting: Dimension Values' },
       { PropertyName: '_companyProfiles', EntityName: 'MJ_BizApps_Accounting: Accounting Company Profiles' },
       { PropertyName: '_currencies', EntityName: 'MJ_BizApps_Accounting: Currencies' },
+      { PropertyName: '_currencySpotRates', EntityName: 'MJ_BizApps_Accounting: Currency Spot Rates' },
       { PropertyName: '_journalEntryTypes', EntityName: 'MJ_BizApps_Accounting: Journal Entry Types' },
       { PropertyName: '_intercompanyMatches', EntityName: 'MJ_BizApps_Accounting: Intercompany Account Matches' },
       {
@@ -323,6 +326,9 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
   }
   public get Currencies(): mjBizAppsAccountingCurrencyEntity[] {
     return this.GetConfigData<mjBizAppsAccountingCurrencyEntity>('_currencies');
+  }
+  public get CurrencySpotRates(): mjBizAppsAccountingCurrencySpotRateEntity[] {
+    return this.GetConfigData<mjBizAppsAccountingCurrencySpotRateEntity>('_currencySpotRates');
   }
   public get JournalEntryTypes(): mjBizAppsAccountingJournalEntryTypeEntity[] {
     return this.GetConfigData<mjBizAppsAccountingJournalEntryTypeEntity>('_journalEntryTypes');

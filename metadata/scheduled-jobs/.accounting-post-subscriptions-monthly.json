@@ -40,7 +40,7 @@
       "JobTypeID": "3B94DD43-E961-4D85-B7F4-B6783D748766",
       "CronExpression": "0 0 3 1 * *",
       "Timezone": "America/Chicago",
-      "Status": "Active",
+      "Status": "Disabled",
       "ConcurrencyMode": "Skip",
       "MissedRunPolicy": "RunOnce",
       "RunImmediatelyIfNeverRun": false,

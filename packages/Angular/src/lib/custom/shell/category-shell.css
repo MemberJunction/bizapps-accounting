@@ -12,19 +12,16 @@
   height: 100%;
 }
 
-/* ── Contain each page's stacking ──────────────────────────────────────────────
-   Sub-pages mount their own <mj-page-header> (and sticky table headers) with positive z-indexes.
-   Those are SIBLINGS-in-context of the shell's category header (also z-index:1), so later DOM
-   order let a page's subheader paint OVER the category header (its shadow stopped landing) and
-   OVER the company-scope dropdown (capped inside the header's z:1 context). `isolation: isolate`
-   makes the content pane its own stacking context: inner z-indexes keep working against each
-   other (sticky theads over rows, etc.) but can no longer escape to fight the shell chrome —
-   the category header, scope menu, and the rail's hover-peek overlay (z:60 sibling) all win.
-   NOTE: the real chrome fix is pages adopting <mj-page-header-interior> per
-   explorer-chrome-conventions §10 (tracked for the UI hardening pass); this rule stays valid
-   either way as the structural guarantee. */
-:host ::ng-deep mj-left-nav-content {
-  isolation: isolate;
+/* ── Header stacking without trapping inner dialogs (#456) ─────────────────────
+   Do NOT set `isolation: isolate` on `mj-left-nav-content`: pages mounted inside the content pane
+   render MJ dialogs (`z-index: 1000`) in-place, and an isolated stacking context on the content
+   pane traps those dialogs underneath sibling chrome such as the left rail (`z-index: 50+`).
+   Instead, raise `mj-page-header` to `z-index: 20` so the category header and its company-scope
+   dropdown stay above page-interior sticky table headers while dialogs inside the content pane can
+   still cover the full shell at `z-index: 1000`. */
+:host ::ng-deep mj-page-header {
+  position: relative;
+  z-index: 20;
 }
 
 /* mj-left-nav becomes an off-canvas drawer at <=700px; stack the body at the same breakpoint so

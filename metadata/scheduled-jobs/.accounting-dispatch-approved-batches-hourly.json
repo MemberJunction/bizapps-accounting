@@ -16,7 +16,7 @@
       "  · NotifyOnFailure: a run where a batch did not post reports POST_INCOMPLETE with each batch's reason. OwnerUserID / NotifyUserID stay",
       "    NULL, as on the other jobs.",
       "",
-      "  · Hosts disable this row rather than deleting it."
+      "  · Ships Disabled so a freshly installed host does not run unattended jobs before an administrator reviews and enables them."
     ],
     "fields": {
       "Name": "Accounting — Dispatch approved journal entry batches (hourly)",
@@ -24,7 +24,7 @@
       "JobTypeID": "3B94DD43-E961-4D85-B7F4-B6783D748766",
       "CronExpression": "0 30 * * * *",
       "Timezone": "America/Chicago",
-      "Status": "Active",
+      "Status": "Disabled",
       "ConcurrencyMode": "Skip",
       "MissedRunPolicy": "RunOnce",
       "RunImmediatelyIfNeverRun": false,

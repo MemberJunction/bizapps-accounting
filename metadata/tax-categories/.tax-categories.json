@@ -1,0 +1,101 @@
+[
+  {
+    "fields": {
+      "Code": "Standard",
+      "Name": "Standard",
+      "Description": "Default taxable rate for general goods and services",
+      "IsActive": true
+    },
+    "primaryKey": {
+      "Code": "Standard"
+    }
+  },
+  {
+    "fields": {
+      "Code": "Reduced",
+      "Name": "Reduced",
+      "Description": "Lower statutory rate for qualifying goods or services",
+      "IsActive": true
+    },
+    "primaryKey": {
+      "Code": "Reduced"
+    }
+  },
+  {
+    "fields": {
+      "Code": "Zero",
+      "Name": "Zero",
+      "Description": "Taxable at 0% (input tax credit eligible where applicable)",
+      "IsActive": true
+    },
+    "primaryKey": {
+      "Code": "Zero"
+    }
+  },
+  {
+    "fields": {
+      "Code": "Exempt",
+      "Name": "Exempt",
+      "Description": "Statutory tax exemption (no tax charged)",
+      "IsActive": true
+    },
+    "primaryKey": {
+      "Code": "Exempt"
+    }
+  },
+  {
+    "fields": {
+      "Code": "Custom",
+      "Name": "Custom",
+      "Description": "Custom or special-purpose tax rate category",
+      "IsActive": true
+    },
+    "primaryKey": {
+      "Code": "Custom"
+    }
+  },
+  {
+    "fields": {
+      "Code": "OutOfScope",
+      "Name": "Out of Scope",
+      "Description": "Outside the scope of the tax regime",
+      "IsActive": true
+    },
+    "primaryKey": {
+      "Code": "OutOfScope"
+    }
+  },
+  {
+    "fields": {
+      "Code": "Publications",
+      "Name": "Publications",
+      "Description": "Books, periodicals, and qualifying printed/digital publications",
+      "IsActive": true
+    },
+    "primaryKey": {
+      "Code": "Publications"
+    }
+  },
+  {
+    "fields": {
+      "Code": "Groceries",
+      "Name": "Groceries",
+      "Description": "Food and grocery items for home consumption",
+      "IsActive": true
+    },
+    "primaryKey": {
+      "Code": "Groceries"
+    }
+  },
+  {
+    "fields": {
+      "Code": "DigitalGoods",
+      "Name": "Digital Goods",
+      "Description": "Electronically supplied services, SaaS, and digital downloads",
+      "IsActive": true
+    },
+    "primaryKey": {
+      "Code": "DigitalGoods"
+    }
+  }
+]

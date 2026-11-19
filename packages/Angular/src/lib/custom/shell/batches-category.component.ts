@@ -15,11 +15,10 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 /**
  * Batches category shell (UI plan §8.0 / §8.2) — the highest-pain flow (§1/§2).
  *
- * Rail: Dashboard · All batches · Batch workspace | WORK: Batch approvals (badge) · Dispatch status.
+ * Rail: Dashboard · All journal entry batches · JE batch approvals (badge) · Dispatch status.
  *
- * All batches + Batch approvals host the EXISTING BatchStatus / BatchDispatch dashboards, migrated
- * to interior chrome so they nest without a doubled header (the §6 consistency sweep for those two
- * screens). Their engines/tests are untouched — this is a chrome + hosting change.
+ * Batch approvals hosts the BatchDispatch dashboard on interior chrome so it nests without a
+ * doubled header.
  */
 @Component({
   standalone: false,
@@ -50,9 +49,8 @@ export class BatchesCategoryComponent extends CategoryShellBase {
         // carried no information); all five category rails standardize on a single flat group.
         items: [
           { id: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-gauge-high' },
-          // Label scheme mirrors the JE category: primary list spelled out ("All journal entries" ↔ "All journal entry
-          // batches"), tool pages take the established "JE" abbreviation ("JE workspace" ↔
-          // "JE batch workspace").
+          // Label scheme mirrors the JE category: primary list spelled out ("All journal entries" ↔
+          // "All journal entry batches"), tool pages take the established "JE" abbreviation.
           { id: 'all-batches', label: 'All journal entry batches', icon: 'fa-solid fa-layer-group' },
           {
             id: 'approvals',

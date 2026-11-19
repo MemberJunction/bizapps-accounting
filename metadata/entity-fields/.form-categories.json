@@ -499,7 +499,9 @@
   {
     "fields": {
       "Category": "Anomaly Detection",
-      "GeneratedFormSection": "Category"
+      "GeneratedFormSection": "Category",
+      "Description": "Label derived from Status for anomaly models: Voided for Voided entries, Reversed when another entry points at this one as ReversedFromJournalEntryID, Normal for Posted entries with no reversal, NULL while Draft/Submitted/PendingApproval/Approved/Rejected.",
+      "AutoUpdateDescription": false
     },
     "primaryKey": {
       "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=AnomalyOutcome"
@@ -512,7 +514,9 @@
   {
     "fields": {
       "Category": "Anomaly Detection",
-      "GeneratedFormSection": "Category"
+      "GeneratedFormSection": "Category",
+      "Description": "Sum of FunctionalDebitAmount across all JournalEntryLine rows on this entry, in the company functional currency. Zero when the entry has no lines.",
+      "AutoUpdateDescription": false
     },
     "primaryKey": {
       "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=TotalDebitAmount"
@@ -525,7 +529,9 @@
   {
     "fields": {
       "Category": "Anomaly Detection",
-      "GeneratedFormSection": "Category"
+      "GeneratedFormSection": "Category",
+      "Description": "Total number of JournalEntryLine rows attached to this entry.",
+      "AutoUpdateDescription": false
     },
     "primaryKey": {
       "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=LineCount"
@@ -538,7 +544,9 @@
   {
     "fields": {
       "Category": "Anomaly Detection",
-      "GeneratedFormSection": "Category"
+      "GeneratedFormSection": "Category",
+      "Description": "Calendar month of EffectiveDate (1 = January through 12 = December), exposed for seasonal anomaly features.",
+      "AutoUpdateDescription": false
     },
     "primaryKey": {
       "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=EffectiveMonth"
@@ -551,7 +559,9 @@
   {
     "fields": {
       "Category": "Anomaly Detection",
-      "GeneratedFormSection": "Category"
+      "GeneratedFormSection": "Category",
+      "Description": "ISO day-of-week of EffectiveDate (1 = Monday through 7 = Sunday), independent of session DATEFIRST.",
+      "AutoUpdateDescription": false
     },
     "primaryKey": {
       "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=EffectiveDayOfWeek"
@@ -564,7 +574,9 @@
   {
     "fields": {
       "Category": "Anomaly Detection",
-      "GeneratedFormSection": "Category"
+      "GeneratedFormSection": "Category",
+      "Description": "True when EffectiveDate falls on Saturday or Sunday (ISO day-of-week 6 or 7).",
+      "AutoUpdateDescription": false
     },
     "primaryKey": {
       "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=IsWeekend"
@@ -577,7 +589,9 @@
   {
     "fields": {
       "Category": "Anomaly Detection",
-      "GeneratedFormSection": "Category"
+      "GeneratedFormSection": "Category",
+      "Description": "True when LinkedEntityID and LinkedRecordID are both populated, indicating the entry originated from a source business document rather than a standalone manual journal.",
+      "AutoUpdateDescription": false
     },
     "primaryKey": {
       "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=HasLinkedRecord"
@@ -590,7 +604,9 @@
   {
     "fields": {
       "Category": "Anomaly Detection",
-      "GeneratedFormSection": "Category"
+      "GeneratedFormSection": "Category",
+      "Description": "True when FileID is populated (supporting attachment present on the entry header).",
+      "AutoUpdateDescription": false
     },
     "primaryKey": {
       "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=HasFile"
@@ -780,6 +796,141 @@
     "sync": {
       "lastModified": "2026-10-20T12:29:55.071Z",
       "checksum": "d02dae4375485bc9c7b7ca3753ec15a883ae01c77816fe659668d9dea4280128"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Financial Settings",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Accounting Company Profiles&Name=ERPJournalCode"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Approval and Dispatch",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entry Batches&Name=ERPPostUnconfirmedAt"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Category Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Tax Categories&Name=Code"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Category Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Tax Categories&Name=Name"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Category Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Tax Categories&Name=Description"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Category Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Tax Categories&Name=IsActive"
+    }
+  },
+  {
+    "fields": {
+      "Category": "System Metadata",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Tax Categories&Name=__mj_CreatedAt"
+    }
+  },
+  {
+    "fields": {
+      "Category": "System Metadata",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Tax Categories&Name=__mj_UpdatedAt"
+    }
+  },
+  {
+    "fields": {
+      "Category": "System Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: External Accounting Systems&Name=Code"
+    }
+  },
+  {
+    "fields": {
+      "Category": "System Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: External Accounting Systems&Name=Name"
+    }
+  },
+  {
+    "fields": {
+      "Category": "System Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: External Accounting Systems&Name=Description"
+    }
+  },
+  {
+    "fields": {
+      "Category": "System Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: External Accounting Systems&Name=IsDefault"
+    }
+  },
+  {
+    "fields": {
+      "Category": "System Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: External Accounting Systems&Name=IsActive"
+    }
+  },
+  {
+    "fields": {
+      "Category": "System Metadata",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: External Accounting Systems&Name=__mj_CreatedAt"
+    }
+  },
+  {
+    "fields": {
+      "Category": "System Metadata",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: External Accounting Systems&Name=__mj_UpdatedAt"
     }
   }
 ]

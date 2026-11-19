@@ -1,26 +1,20 @@
 /**
- * TIER 5 (new nav) — batch REGENERATE in the real browser (Marcelo's 2026-07-29 sweep).
- * Regenerate is offered on an OPEN (Pending) batch: it unlocks the batch's entries and re-gathers
- * ALL current candidates in place. Flow, with exact netted values:
- *   1. Build a batch from the fixture's 3 JEs → the card shows Entries 3 (member JEs), Total
- *      Debits 600.00 (netted: AR 400 Dr · Cash 200 Dr · Revenue 600 Cr).
- *   2. A LATE candidate lands (fixture add-je: AR 111 Dr / Revenue 111 Cr).
- *   3. Regenerate → Entries 4 (the late member re-gathered), totals 711.00, and the toast states
- *      the netting exactly: "4 JE(s) … → 3 summary line(s); Dr 711 / Cr 711".
- *   4. Reject → JEs return to the pool (teardown-clean).
- * Engine regenerate semantics are proven at tier 2/3; tier 5's add is the real button → op →
- * card refresh round trip with the exact re-gathered totals.
+ * TIER 5 (new nav) — batch REGENERATE + two-user Reject in the real browser (#440, #459):
+ *   1. User 1 builds a batch on the Batches page from the fixture's 3 JEs (Entries = 3, Total Debits = 600.00).
+ *   2. A LATE candidate lands out-of-band (fixture add-je: AR 111 Dr / Revenue 111 Cr).
+ *   3. User 1 regenerates on JE batch approvals → Entries = 4, netted debits = 711.00.
+ *   4. User 2 (the company's CFO) rejects the batch on the Batches page → JEs return to the candidate pool.
  */
 import { test, expect, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { loginViaMagicLink } from '../lib/auth';
+import { loginViaMagicLink, loginAsEmailViaMagicLink } from '../lib/auth';
 import { openAccountingApp, openNavItem, captureConsoleErrors, expectNoConsoleErrors, resetCompanyScopeToAll, scopeToCompany } from '../lib/explorer';
 import { HARNESS_DIR } from '../lib/env';
 import { REPO_ROOT, TSX_BIN } from '../../harness-paths.mjs';
 
 const FIXTURE = path.resolve(HARNESS_DIR, 'lib', 'batching-fixture.ts');
-let fx: { companyId: string; companyName: string; cfoPersonId: string } | null = null;
+let fx: { companyId: string; companyName: string; cfoPersonId: string; cfoEmail: string } | null = null;
 
 test.beforeAll(() => {
   const out = execFileSync(TSX_BIN, [FIXTURE, 'setup'], { cwd: REPO_ROOT, encoding: 'utf8', timeout: 180_000 });
@@ -34,39 +28,29 @@ test.afterAll(() => {
 
 async function railItem(page: Page, category: string, item: string): Promise<void> {
   await openNavItem(page, category);
-  // EXACT name: substring matching made { name: 'Companies' } hit the scope chip's
-  // "Scope: All companies" accessible name (earlier in DOM) and open its menu over the page.
-  // Anchored regex, not exact:true (2026-07-30): rail badges fold their count into the button's
-  // accessible name ("Batch approvals 2"), so exact broke once a count rendered; the anchors
-  // still block the substring collision exact was guarding (the scope chip name).
   await page.getByRole('button', { name: new RegExp('^' + item + '( \\d+)?$') }).first().click();
-  await page.mouse.move(820, 480); // let the collapsed rail's hover-peek retract (see accounts spec)
+  await page.mouse.move(820, 480);
   await page.waitForTimeout(3500);
 }
 
-test('Build → late candidate → Regenerate re-gathers (5→6 entries, 600→711 netted) → Reject returns the pool', async ({ page }) => {
+test('Build on Batches → late candidate → Regenerate re-gathers (3→4 entries, 600→711 netted) → CFO Reject returns the pool', async ({ page, browser }) => {
   const sink = captureConsoleErrors(page);
   await loginViaMagicLink(page);
   await openAccountingApp(page);
   await resetCompanyScopeToAll(page);
-  // Scope to the FIXTURE company only: builds sweep every company in scope (and require each
-  // company's CFO), so All would drag demo/other data into this spec's batch.
   await scopeToCompany(page, fx!.companyName);
 
-  // ── 1. Build (the workspace's deferred-query flow) ──────────────────────────
-  await railItem(page, 'Journal Entry Batches', 'JE batch workspace');
-  const loadBtn = page.getByRole('button', { name: /Load entries/i }).first();
-  await expect(loadBtn).toBeVisible({ timeout: 30_000 });
-  await loadBtn.click();
-  const buildBtn = page.getByRole('button', { name: /Build JE batch/i }).first();
-  await expect(buildBtn, 'Build enables once candidates load').toBeEnabled({ timeout: 30_000 });
+  // ── 1. User 1 builds on the Batches page ───────────────────────────────────
+  await openNavItem(page, 'Batches');
+  const openModalBtn = page.getByRole('button', { name: /Build (First )?Batch/i }).first();
+  await expect(openModalBtn).toBeVisible({ timeout: 30_000 });
+  await openModalBtn.click();
+  const buildBtn = page.getByRole('button', { name: /Build Batch \(\d+\)/i }).first();
+  await expect(buildBtn, 'Build Batch (N) enables once candidates load').toBeEnabled({ timeout: 30_000 });
   await buildBtn.click();
-  await page.waitForTimeout(2000);
-  const confirm = page.getByRole('button', { name: /Build JE batch \(\d+\)/i }).first();
-  if (await confirm.isVisible().catch(() => false)) { await confirm.click(); }
-  await page.waitForTimeout(7000);
+  await page.waitForTimeout(6000);
 
-  // ── 2. The pending card shows the EXACT netted pre-state: 5 entries, 600.00 ─
+  // ── 2. The pending card shows the EXACT netted pre-state: 3 entries, 600.00 ─
   await railItem(page, 'Journal Entry Batches', 'JE batch approvals');
   const card = page.locator('.bd-card').filter({ has: page.getByRole('button', { name: /Regenerate/i }) }).first();
   await expect(card, 'a Pending batch card with Regenerate').toBeVisible({ timeout: 30_000 });
@@ -84,15 +68,39 @@ test('Build → late candidate → Regenerate re-gathers (5→6 entries, 600→7
   await expect(page.getByText(/Regenerated batch .*4 JE\(s\) across 1 company\(ies\) → 3 summary line\(s\); Dr 711 \/ Cr 711/).first(),
     'the toast states the exact re-netting').toBeVisible();
 
-  // ── 5. Reject → batch Cancelled, entries return to the candidate pool ───────
-  await card.getByRole('button', { name: /Reject/i }).click();
-  await page.waitForTimeout(5000);
-  await railItem(page, 'Journal Entry Batches', 'JE batch workspace');
-  const loadBtn2 = page.getByRole('button', { name: /Load entries/i }).first();
-  await expect(loadBtn2).toBeVisible({ timeout: 30_000 });
-  await loadBtn2.click();
-  const buildBtn2 = page.getByRole('button', { name: /Build JE batch/i }).first();
-  await expect(buildBtn2, 'all 6 JEs are back in the pool (buildable again)').toBeEnabled({ timeout: 30_000 });
+  // ── 5. User 2 (CFO) rejects on the Batches page → entries return to the pool ─
+  const cfoContext = await browser.newContext();
+  const cfoPage = await cfoContext.newPage();
+  const cfoSink = captureConsoleErrors(cfoPage);
+  try {
+    await loginAsEmailViaMagicLink(cfoPage, fx!.cfoEmail);
+    await openAccountingApp(cfoPage);
+    await resetCompanyScopeToAll(cfoPage);
+    await scopeToCompany(cfoPage, fx!.companyName);
+    await openNavItem(cfoPage, 'Batches');
+
+    const pendingRow = cfoPage.locator('tr').filter({ hasText: fx!.companyName }).filter({ has: cfoPage.getByRole('button', { name: /^Reject$/i }) }).first();
+    await expect(pendingRow).toBeVisible({ timeout: 30_000 });
+    await pendingRow.getByRole('button', { name: /^Reject$/i }).first().click();
+    const confirmReject = cfoPage.getByRole('button', { name: /^Reject batch$/i }).first();
+    if (await confirmReject.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await confirmReject.click();
+    }
+    await expect(
+      cfoPage.getByText(/Rejected batch .+cancelled; its journal entries returned to the candidate pool/i).first(),
+    ).toBeVisible({ timeout: 20_000 });
+    expectNoConsoleErrors(cfoSink, 'CFO reject in regenerate flow');
+  } finally {
+    await cfoContext.close();
+  }
+
+  // ── 6. User 1 sees all 4 JEs back in the Build Batch candidate pool ─────────
+  await openNavItem(page, 'Batches');
+  const openModalBtn2 = page.getByRole('button', { name: /Build (First )?Batch/i }).first();
+  await expect(openModalBtn2).toBeVisible({ timeout: 30_000 });
+  await openModalBtn2.click();
+  const buildBtn2 = page.getByRole('button', { name: /Build Batch \(4\)/i }).first();
+  await expect(buildBtn2, 'all 4 JEs are back in the pool (buildable again)').toBeEnabled({ timeout: 30_000 });
 
   expectNoConsoleErrors(sink, 'batch regenerate flow');
 });

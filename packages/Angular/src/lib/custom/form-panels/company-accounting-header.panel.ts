@@ -248,6 +248,12 @@ const COMPANY_ACCOUNTING_HERO_CSS = `
                             <span class="mja-comp-stat__label">Fiscal Year Start</span>
                             <span class="mja-comp-stat__value">{{ FiscalYearStart }}</span>
                         </div>
+                        @if (ERPJournalCode) {
+                            <div class="mja-comp-stat">
+                                <span class="mja-comp-stat__label">ERP Journal Code</span>
+                                <span class="mja-comp-stat__value mja-comp-code">{{ ERPJournalCode }}</span>
+                            </div>
+                        }
                     </div>
                 </div>
             }
@@ -266,6 +272,7 @@ export class CompanyAccountingHeaderPanel extends BaseFormPanel<MJCompanyEntity>
     public TaxID = '';
     public TimeZone = BusinessTimeZoneEngine.Instance.Zone;
     public FiscalYearStart = 'Jan 1';
+    public ERPJournalCode = '';
 
     private get StorageKey(): string {
         const id = this.Record?.ID ? String(this.Record.ID).toLowerCase() : 'new';
@@ -304,6 +311,7 @@ export class CompanyAccountingHeaderPanel extends BaseFormPanel<MJCompanyEntity>
                 this.Jurisdiction = String(p['JurisdictionCountry'] || 'US');
                 this.TaxID = String(p['FederalTaxID'] || '');
                 this.TimeZone = String(p['OperatingTimeZone'] || BusinessTimeZoneEngine.Instance.Zone);
+                this.ERPJournalCode = String(p['ERPJournalCode'] || '');
                 const m = Number(p['FiscalYearStartMonth'] || 1);
                 const d = Number(p['FiscalYearStartDay'] || 1);
                 const date = new Date(2026, m - 1, d);
