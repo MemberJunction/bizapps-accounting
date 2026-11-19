@@ -14,12 +14,12 @@
  *     the User record reached no one's inbox.
  *   assertApproved(batchId): load the Task named by the batch's stamped ApprovalTaskID (not a Task
  *     Link, which anyone with tasks-app write access can create); require a terminal Approved /
- *     ApprovedWithConditions Task Decision made by an allowed decider — the company's CFO, who did not
- *     build the batch (golive #320 §3; a decision saved straight into the tasks app by anyone else does
- *     not count); otherwise THROW (blocks the send). Fails closed when ApprovalTaskID is empty.
+ *     ApprovedWithConditions Task Decision made by an allowed decider — the company's CFO (golive #320
+ *     §3; a decision saved straight into the tasks app by anyone else does not count); otherwise THROW
+ *     (blocks the send). Fails closed when ApprovalTaskID is empty.
  *     The Task records the batch's builder as its creator (CreatedByPersonID).
  *     It also requires the batch's recorded approver (written only by the approval, #447), not its
- *     builder (#446).
+ *     builder (#446) — unless the builder is the company's CFO (golive #450, IsRefusedSelfApproval).
  *   recordDecision(batchId, outcome, decidedByPersonId, notes): record the decision on the batch's
  *     stamped approval Task via TaskOrchestrationService (#313). The shared entry point for BOTH the in-app approve
  *     control and the Tasks inbox. It refuses first, writing nothing, when the batch is no longer
@@ -56,7 +56,7 @@
  */
 import { IMetadataProvider, IRunViewProvider, LogError, UserInfo } from '@memberjunction/core';
 import { UUIDsEqual } from '@memberjunction/global';
-import { JOURNAL_ENTRY_BATCH_OPERATE_AUTH, UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
+import { UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
 import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 import {
   IsApprovalOutcome,
@@ -99,6 +99,28 @@ const APPROVAL_REQUEST_TASK_TYPE = 'Approval Request';
 // IsApprovalOutcome. It used to be a Set literal here. A Set of a subset of the union is a
 // perfectly legal value, so widening the union upstream produced no error and no warning — a new
 // approving outcome would simply have stopped counting as approved, and the batch would never send.
+
+/**
+ * SEPARATION OF DUTIES, with one deliberate exception (golive #450): whether the builder-is-not-approver
+ * rule refuses `approverUserId` on a batch `builderUserId` built.
+ *
+ * The rule: the user who built a batch may not approve it. The exception: the company's configured
+ * approver (`AccountingCompanyProfile.ApprovalCFOUserID`, `cfoUserId`) may approve a batch they built.
+ * Reason: the CFO is the company's only approver, so under the plain rule a batch the CFO built could
+ * never be approved or sent, and finance asked for its lead to build, approve and dispatch any batch.
+ * The CFO already holds the final say on every batch, so a second person would add a hand-off, not a
+ * check the CFO could not override. Everyone else stays under the rule.
+ *
+ * Every builder/approver comparison in this gate goes through here, so the exception is applied the
+ * same way when a decision is recorded and when a batch is sent. The Accounting app's
+ * `MayDecideBatch` mirrors it to decide whether Approve and Reject show.
+ */
+export function IsRefusedSelfApproval(
+  approverUserId: string | null | undefined, builderUserId: string | null | undefined, cfoUserId: string | null | undefined,
+): boolean {
+  if (!approverUserId || !builderUserId || !UUIDsEqual(approverUserId, builderUserId)) return false;
+  return !(cfoUserId && UUIDsEqual(approverUserId, cfoUserId));
+}
 
 /**
  * Real CFO-approval gate, backed by bizapps-tasks. Stateless — one instance can serve every batch.
@@ -195,41 +217,38 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     if (approvals.length === 0) {
       throw new Error(`Batch ${batchId} is not approved yet: its approval task has no Approved decision.`);
     }
-    const refusal = await this.approvalRefusal(batch, approvals, contextUser);
+    const cfoUserId = await this.readCFOUserIdForCompany(batch.CompanyID, contextUser);
+    const refusal = await this.approvalRefusal(batch, approvals, cfoUserId, contextUser);
     if (refusal) throw new Error(`Batch ${batch.JournalEntryBatchNumber ?? batchId} cannot be sent: ${refusal}`);
-    this.assertRecordedApprover(batch);
+    this.assertRecordedApprover(batch, cfoUserId);
   }
 
   /**
    * SECURITY (golive #320 §3): why none of the approval Task's Approved decisions came from an
-   * allowed decider — the company's configured CFO, who did not build the batch — or null when one
-   * did. recordDecision enforces that at the write, but a decision can also be saved straight into
+   * allowed decider — the company's configured CFO (who may approve a batch they built, golive #450;
+   * see IsRefusedSelfApproval) — or null when one did. recordDecision enforces that at the write, but a decision can also be saved straight into
    * the tasks app (the Tasks inbox, or any user allowed to create a Task Decision), so the read
    * checks it too:
    *   - a decision with no Person (an approver User with no linked Person, which recordDecision
    *     permits) counts only when the batch's own approval audit names the CFO, because that is what
    *     the sanctioned approval writes (RecordJournalEntryBatchDecision → approveJournalEntryBatch,
    *     whose ApprovedByUserID JournalEntryBatchEntityServer requires to be the approving user);
-   *   - a decision attributed to a Person counts only when that Person is bound to the CFO user and
-   *     not to the builder. One Person can be bound to two users (the builder through
-   *     People.LinkedUserID, the CFO through User.LinkedEntityRecordID), which the user-level check
-   *     cannot see.
-   * Each refusal names its own cause: no approver configured, the approver built the batch, the
-   * approver's Person is also the builder's, or nobody allowed decided. The CFO and builder Person
+   *   - a decision attributed to a Person counts only when that Person is bound to the CFO user and,
+   *     when someone other than the CFO built the batch, not to the builder. One Person can be bound
+   *     to two users (the builder through People.LinkedUserID, the CFO through
+   *     User.LinkedEntityRecordID), which the user-level check cannot see.
+   * Each refusal names its own cause: no approver configured, the approver's Person is also the
+   * (non-CFO) builder's, or nobody allowed decided. The CFO and builder Person
    * lookups run only when a decision needs them.
    * The CFO is read as configured NOW: a batch approved by a former CFO is cancelled and rebuilt.
    */
   private async approvalRefusal(
-    batch: mjBizAppsAccountingJournalEntryBatchEntity, approvals: mjBizAppsTasksTaskDecisionEntity[], contextUser: UserInfo,
+    batch: mjBizAppsAccountingJournalEntryBatchEntity, approvals: mjBizAppsTasksTaskDecisionEntity[], cfoUserId: string | null,
+    contextUser: UserInfo,
   ): Promise<string | null> {
-    const cfoUserId = await this.readCFOUserIdForCompany(batch.CompanyID, contextUser);
     if (!cfoUserId) {
       return `company ${batch.CompanyID} has no approver configured, so no decision on its approval task can count. ` +
         `Set the Approval CFO on the company's Accounting Company Profile.`;
-    }
-    if (UUIDsEqual(cfoUserId, batch.BatchedByUserID)) {
-      return `the company's Approval CFO (user ${cfoUserId}) built this batch, and the user who built a batch may not approve it, ` +
-        `so no decision on its approval task can count. Cancel it and have someone other than the Approval CFO build it again.`;
     }
     if (approvals.some(d => !d.DecidedByPersonID) && UUIDsEqual(batch.ApprovedByUserID, cfoUserId)) return null;
     const deciderPersonIds = approvals.map(d => d.DecidedByPersonID).filter((id): id is string => !!id);
@@ -237,6 +256,9 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     const cfoPersonIds = deciderPersonIds.length > 0 ? await this.personIdsForUserId(cfoUserId, contextUser) : [];
     const byCfo = deciderPersonIds.filter(id => among(cfoPersonIds, id));
     if (byCfo.length > 0) {
+      // The CFO built it: IsRefusedSelfApproval's exception (golive #450) lets the CFO approve their
+      // own batch, so the builder exclusion below does not apply; every CFO Person is the builder's too.
+      if (UUIDsEqual(cfoUserId, batch.BatchedByUserID)) return null;
       const builderPersonIds = batch.BatchedByUserID ? await this.personIdsForUserId(batch.BatchedByUserID, contextUser) : [];
       if (byCfo.some(id => !among(builderPersonIds, id))) return null;
       return `its approval came from a Person linked to the company's Approval CFO (user ${cfoUserId}) who is also linked to ` +
@@ -247,17 +269,19 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
   }
 
   /**
-   * Throws when the batch records no approver, or records its builder (#446, #447). Only the approval
-   * writes ApprovedByUserID, so a batch without one was not approved through the approval decision.
+   * Throws when the batch records no approver, or records its builder when the builder is not the
+   * company's CFO (#446, #447; the CFO exception is golive #450, see IsRefusedSelfApproval). Only the
+   * approval writes ApprovedByUserID, so a batch without one was not approved through the approval decision.
    */
-  private assertRecordedApprover(batch: mjBizAppsAccountingJournalEntryBatchEntity): void {
+  private assertRecordedApprover(batch: mjBizAppsAccountingJournalEntryBatchEntity, cfoUserId: string | null): void {
     const label = batch.JournalEntryBatchNumber ?? batch.ID;
     if (!batch.ApprovedByUserID) {
       throw new Error(`Batch ${label} cannot be sent: it records no approver, so it was never approved through the approval decision.`);
     }
-    if (UUIDsEqual(batch.ApprovedByUserID, batch.BatchedByUserID)) {
+    if (IsRefusedSelfApproval(batch.ApprovedByUserID, batch.BatchedByUserID, cfoUserId)) {
       throw new Error(
-        `Batch ${label} cannot be sent: its recorded approver is the user who built it, and the user who built a batch may not approve it.`,
+        `Batch ${label} cannot be sent: its recorded approver is the user who built it, and only the company's Approval CFO ` +
+        `may approve a batch they built.`,
       );
     }
   }
@@ -307,10 +331,11 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
    * every decision path, so the check lives here rather than in each caller. A company with no
    * configured CFO rejects loudly (resolveCFOUserIdForCompany hard-fails) — never "anyone may approve".
    *
-   * SEPARATION OF DUTIES: being the configured CFO is necessary but not sufficient — the caller must
-   * also not be the person who built the batch (`JournalEntryBatch.BatchedByUserID`, NOT NULL, stamped
-   * by JournalEntryBatchEngine at build time). A CFO who batches entries themselves would otherwise
-   * satisfy the identity gate above and self-approve a dispatch of real journal lines to the ERP.
+   * SEPARATION OF DUTIES: the user who built the batch (`JournalEntryBatch.BatchedByUserID`, NOT NULL,
+   * stamped by JournalEntryBatchEngine at build time) may not approve it, with one deliberate
+   * exception: the company's configured CFO may approve a batch they built (golive #450; the rule and
+   * its reason are on IsRefusedSelfApproval). Since only the CFO passes the identity check above, the
+   * builder check refuses no one today; it stays so the rule holds if more approvers are allowed.
    */
   async recordDecision(
     batchId: string, outcome: TaskDecisionOutcomeCode, decidedByPersonId: string | undefined, notes: string | undefined, contextUser: UserInfo,
@@ -323,10 +348,10 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
         `(the Approval CFO on its Accounting Company Profile) can approve or reject it, and you are not that approver.`,
       );
     }
-    if (UUIDsEqual(contextUser.ID, batch.BatchedByUserID)) {
+    if (IsRefusedSelfApproval(contextUser.ID, batch.BatchedByUserID, cfoUserId)) {
       throw new Error(
-        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: the user who built a batch may not approve it. ` +
-        `Someone other than the builder must approve it.`,
+        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: the user who built a batch may not approve it, ` +
+        `unless they are the company's Approval CFO. Someone other than the builder must approve it.`,
       );
     }
     this.assertDecidable(batch, outcome, notes);
@@ -413,9 +438,8 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     const isBatchOperator = UserCanOperateJournalEntryBatches(contextUser, this.provider.Authorizations);
     if (!isCfo && !isBatchOperator) {
       throw new Error(
-        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the company's configured approver ` +
-        `(the Approval CFO on its Accounting Company Profile) or a user with the ${JOURNAL_ENTRY_BATCH_OPERATE_AUTH} authorization ` +
-        `(the Finance role) may archive it before approval; its builder may cancel it instead.`,
+        `You don't have permission to archive batch ${batch.JournalEntryBatchNumber ?? batchId} before it is approved. ` +
+        `Only the company's CFO approver or the Finance role can. If you built this batch, you can cancel it instead.`,
       );
     }
   }
@@ -543,7 +567,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     );
     return new Error(
       `Your account is not linked to a person record, so this ${action} cannot be recorded on the batch's approval request. ` +
-      'Ask an administrator to link your account, then try again.',
+      'Please ask your administrator to link your account, then try again.',
     );
   }
 

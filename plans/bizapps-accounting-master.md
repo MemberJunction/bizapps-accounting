@@ -559,7 +559,9 @@ lets it through; the operator attests only when the lookup cannot settle it. Its
 to the candidate pool for a new batch and approval. Regeneration of a batch invalidates any
 pending approval (mechanism for reset-vs-replace deliberately deferred). The decider is
 enforced: `TasksAppApprovalGate.recordDecision` accepts a decision only from the company's
-`ApprovalCFOUserID`, and never from the user who built the batch.
+`ApprovalCFOUserID`, and never from the user who built the batch, except that the CFO may approve a
+batch the CFO built (golive #450: the CFO is the only approver, so the plain rule left such a batch
+unapprovable). `IsRefusedSelfApproval` holds that rule; the send check (`assertApproved`) applies it too.
 
 ### 7.4 Dispatch
 

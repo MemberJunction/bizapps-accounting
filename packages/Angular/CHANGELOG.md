@@ -1,5 +1,15 @@
 # @mj-biz-apps/accounting-ng
 
+## 0.28.1
+
+### Patch Changes
+
+- 5b5a825: Security: the company's Approval CFO may approve a journal entry batch the CFO built (bc-aidp-next-golive#450). The builder-is-not-approver rule still applies to everyone else. Before, a batch the CFO built could never be approved or sent, because the CFO is the company's only approver. The exception is one rule, `IsRefusedSelfApproval`, applied when a decision is recorded (`recordDecision`) and when a batch is sent (`assertApproved`: the decision check and the recorded-approver check). The Batch Dispatch screen shows Approve and Reject to the CFO on a batch the CFO built.
+- 0a22d28: Permission refusals no longer show authorization names or operation names. Building, regenerating, sending and re-dating journal entries, archiving a batch before approval, clearing a finance exception and deciding a manual journal entry each say what the person cannot do and who can (bc-aidp-next-golive#493). Messages that send a person to Finance or an administrator now ask politely ("Please request that Finance…", "Please ask your administrator to…"). `FinanceExceptionClearRuleRefusal` no longer takes the exception's type code.
+- Updated dependencies [0a22d28]
+  - @mj-biz-apps/accounting-engine-base@0.28.1
+  - @mj-biz-apps/accounting-entities@0.28.1
+
 ## 0.28.0
 
 ### Patch Changes
