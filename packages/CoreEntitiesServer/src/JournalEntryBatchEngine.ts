@@ -999,13 +999,49 @@ export async function resolveExternalAccount(
   glAccountId: string, targetSystem: JournalEntryBatchTargetSystem, contextUser: UserInfo, provider: IMetadataProvider,
   requireExternalAccountID = false,
 ): Promise<string> {
+  return (await resolveERPAccount(glAccountId, targetSystem, contextUser, provider, requireExternalAccountID)).accountNumber;
+}
+
+/** A GL account as the ERP receives it. */
+export interface ERPAccountRef {
+  /** The ERP's G/L account number (see `resolveExternalAccount`). */
+  accountNumber: string;
+  /**
+   * The Business Central bank account the G/L account sits behind, when finance has set one: the
+   * line then posts to that bank account, and BC posts its G/L entry to `accountNumber` through the
+   * bank's posting group. Undefined for every other ERP.
+   */
+  bankAccountNumber?: string;
+}
+
+/** `resolveExternalAccount`, plus the Business Central bank account the line posts to, if any. */
+export async function resolveERPAccount(
+  glAccountId: string, targetSystem: JournalEntryBatchTargetSystem, contextUser: UserInfo, provider: IMetadataProvider,
+  requireExternalAccountID = false,
+): Promise<ERPAccountRef> {
   const p = resolveProviders(provider);
-  const glRes = await p.rv.RunView<{ Code: string; ExternalSystem: string | null; ExternalAccountID: string | null }>(
-    { EntityName: GL_ENTITY, ExtraFilter: `ID='${glAccountId}'`, Fields: ['Code', 'ExternalSystem', 'ExternalAccountID'], ResultType: 'simple', BypassCache: true },
+  const glRes = await p.rv.RunView<GLAccountWireFields>(
+    {
+      EntityName: GL_ENTITY, ExtraFilter: `ID='${glAccountId}'`,
+      Fields: ['Code', 'ExternalSystem', 'ExternalAccountID', 'ExternalBankAccountNumber'], ResultType: 'simple', BypassCache: true,
+    },
     contextUser,
   );
   const gl = glRes.Results?.[0];
   if (!gl) throw new Error(`GL account ${glAccountId} was not found, so its ERP account number cannot be looked up.`);
+  const accountNumber = externalAccountNumber(gl, targetSystem, requireExternalAccountID);
+  const bankAccountNumber = targetSystem === 'BusinessCentral' ? gl.ExternalBankAccountNumber?.trim() || undefined : undefined;
+  return bankAccountNumber ? { accountNumber, bankAccountNumber } : { accountNumber };
+}
+
+interface GLAccountWireFields {
+  Code: string;
+  ExternalSystem: string | null;
+  ExternalAccountID: string | null;
+  ExternalBankAccountNumber?: string | null;
+}
+
+function externalAccountNumber(gl: GLAccountWireFields, targetSystem: JournalEntryBatchTargetSystem, requireExternalAccountID: boolean): string {
   if (gl.ExternalAccountID && (!gl.ExternalSystem || gl.ExternalSystem === targetSystem)) {
     // BC takes the account number; an id there (the usual mistake: BC's GUID) would fail in BC (bc-aidp-next-golive#282).
     const bcError = targetSystem === 'BusinessCentral' ? BusinessCentralAccountNumberError(gl.Code, gl.ExternalAccountID) : null;

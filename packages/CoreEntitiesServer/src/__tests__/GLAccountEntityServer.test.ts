@@ -49,13 +49,13 @@ describe('GLAccountEntityServer (Business Central account number)', () => {
   let info: EntityInfo;
 
   beforeEach(() => {
-    info = createMockEntity(GL_ENTITY, ['ID', 'CompanyID', 'Code', 'Name', 'AccountType', 'CurrencyCode', 'ExternalSystem', 'ExternalAccountID', 'IsActive'], ['IsActive']);
+    info = createMockEntity(GL_ENTITY, ['ID', 'CompanyID', 'Code', 'Name', 'AccountType', 'CurrencyCode', 'ExternalSystem', 'ExternalAccountID', 'ExternalBankAccountNumber', 'IsActive'], ['IsActive']);
     Metadata.Provider = { Entities: [info] } as unknown as IMetadataProvider;
   });
 
   const account = async (externalSystem: string | null, externalAccountID: string | null): Promise<GLAccountEntityServer> => {
     const row = new GLAccountEntityServer(info);
-    await row.LoadFromData({ ID: 'gl-1', CompanyID: 'co-1', Code: '41507', Name: 'Event revenue', AccountType: 'Revenue', CurrencyCode: null, ExternalSystem: null, ExternalAccountID: null, IsActive: true });
+    await row.LoadFromData({ ID: 'gl-1', CompanyID: 'co-1', Code: '41507', Name: 'Event revenue', AccountType: 'Revenue', CurrencyCode: null, ExternalSystem: null, ExternalAccountID: null, ExternalBankAccountNumber: null, IsActive: true });
     row.ExternalSystem = externalSystem;
     row.ExternalAccountID = externalAccountID;
     return row;
@@ -79,5 +79,43 @@ describe('GLAccountEntityServer (Business Central account number)', () => {
   // The limit is BC's; another ERP's ids are its own business.
   it('leaves another ERP\'s External Account ID alone', async () => {
     expect((await account('QuickBooks', BC_ACCOUNT_ID)).Validate().Success).toBe(true);
+  });
+});
+
+describe('GLAccountEntityServer (Business Central bank account)', () => {
+  let info: EntityInfo;
+
+  beforeEach(() => {
+    info = createMockEntity(GL_ENTITY, ['ID', 'CompanyID', 'Code', 'Name', 'AccountType', 'CurrencyCode', 'ExternalSystem', 'ExternalAccountID', 'ExternalBankAccountNumber', 'IsActive'], ['IsActive']);
+    Metadata.Provider = { Entities: [info] } as unknown as IMetadataProvider;
+  });
+
+  const account = async (accountType: string, externalSystem: string | null, bank: string | null): Promise<GLAccountEntityServer> => {
+    const row = new GLAccountEntityServer(info);
+    await row.LoadFromData({ ID: 'gl-1', CompanyID: 'co-1', Code: '11101', Name: 'Operating', AccountType: accountType, CurrencyCode: null, ExternalSystem: externalSystem, ExternalAccountID: null, ExternalBankAccountNumber: null, IsActive: true });
+    row.ExternalBankAccountNumber = bank;
+    return row;
+  };
+
+  it('accepts a bank account on a Business Central asset account', async () => {
+    expect((await account('Asset', 'BusinessCentral', 'OPERATING')).Validate().Success).toBe(true);
+  });
+
+  it('accepts a bank account on an asset account with no External System', async () => {
+    expect((await account('Asset', null, 'OPERATING')).Validate().Success).toBe(true);
+  });
+
+  it('refuses a bank account on an account that is not an asset', async () => {
+    const result = (await account('Revenue', 'BusinessCentral', 'OPERATING')).Validate();
+
+    expect(result.Success).toBe(false);
+    expect(result.Errors.some(e => e.Source === 'ExternalBankAccountNumber' && /only an asset account/.test(e.Message))).toBe(true);
+  });
+
+  it('refuses a bank account on an account mapped to another ERP', async () => {
+    const result = (await account('Asset', 'QuickBooks', 'OPERATING')).Validate();
+
+    expect(result.Success).toBe(false);
+    expect(result.Errors.some(e => /used only for Business Central/.test(e.Message))).toBe(true);
   });
 });

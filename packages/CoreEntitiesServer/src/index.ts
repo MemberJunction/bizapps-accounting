@@ -18,7 +18,7 @@ export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
 export { JournalEntryLineDimensionEntityServer, LoadJournalEntryLineDimensionEntityServer } from './JournalEntryLineDimensionEntityServer.js';
 export { JournalEntryBatchEntityServer, type ApprovedContentCheck, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
-export { GLAccountEntityServer, BusinessCentralAccountNumberError, BUSINESS_CENTRAL_ACCOUNT_NUMBER_MAX_LENGTH } from './GLAccountEntityServer.js';
+export { GLAccountEntityServer, BusinessCentralAccountNumberError, ExternalBankAccountNumberError, BUSINESS_CENTRAL_ACCOUNT_NUMBER_MAX_LENGTH } from './GLAccountEntityServer.js';
 export { DimensionEntityServer, LoadDimensionEntityServer } from './DimensionEntityServer.js';
 export { DimensionValueEntityServer, LoadDimensionValueEntityServer } from './DimensionValueEntityServer.js';
 export { GLAccountLinkEntityServer, LoadGLAccountLinkEntityServer } from './GLAccountLinkEntityServer.js';
@@ -83,6 +83,7 @@ export {
   regenerateJournalEntryBatch,
   netLines,
   resolveExternalAccount,
+  resolveERPAccount,
   resolveExternalDimensions,
   mockErpPoster,
   unavailableErpLookup,
@@ -96,6 +97,7 @@ export type {
   JournalEntryBatchTargetSystem,
   DimRef,
   ExternalDimensionRef,
+  ERPAccountRef,
   NettableLine,
   NetGroup,
   BuildJournalEntryBatchResult,

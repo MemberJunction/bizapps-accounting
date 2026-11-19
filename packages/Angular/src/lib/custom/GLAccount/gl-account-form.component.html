@@ -81,6 +81,9 @@
         [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
     <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="ExternalAccountID" Type="textbox"
         [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
+    <!-- Business Central only: the bank account a cash account sits behind. Batches post its lines there. -->
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="ExternalBankAccountNumber" Type="textbox"
+        [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
   </mj-collapsible-panel>
 
   <!-- ── Chart-of-accounts tree ────────────────────────────────────────────── -->
