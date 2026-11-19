@@ -65,29 +65,37 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+      - uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         id: changesets
         with:
-          # Changesets action v2 pairs with Changesets CLI v3 (`@changesets/cli ^3.0.0`).
+          # Pinned to v1 because this repo runs Changesets CLI v2 (`@changesets/cli ^2.29.8`).
+          # The action version-gates on the CLI major and v2.x refuses outright:
+          #   "This version of the Changesets action is designed to work with Changesets CLI
+          #    v3. Changesets CLI v2 is not supported; use Changesets action v1 instead."
+          # Moving to action v2 therefore means upgrading the CLI to v3 first — a separate
+          # change with its own changeset-format and config implications, not a pin bump.
           #
           # Input names are major-specific, and Actions IGNORES unknown inputs rather than
-          # failing, so a mismatch silently runs the action's defaults. v2 takes
-          # `version-script`/`publish-script`/`pr-title`/`commit-message`/`pr-base-branch`
-          # (renamed from v1's `version`/`publish`/`title`/`commit`/`branch`).
+          # failing, so a mismatch silently runs the action's defaults. v1 takes
+          # `version`/`publish`/`title`/`commit`/`branch`; v2 renames them to
+          # `version-script`/`publish-script`/`pr-title`/`commit-message`/`pr-base-branch`.
+          # Passing v2 names to v1 is what produced a Version Packages PR with no lockfile
+          # refresh and no mj-app.json sync — the tell was the PR title falling back to the
+          # default "Version Packages".
           #
-          # `pr-base-branch: main` is what makes this the release PR. The action sets BOTH the
+          # `branch: main` is what makes this the release PR. In v1 the input sets BOTH the
           # PR base and the version branch's name, and `prepareBranch` resets that branch to
           # `github.context.sha` — the commit this workflow ran on, i.e. `next`'s HEAD. So the
           # PR carries next's tree plus the bump, based on `main`. The head is therefore
           # `changeset-release/main`, named after the base rather than the source; that is the
           # action's own convention and nothing depends on the name.
           #
-          # No `publish-script` input: this workflow only ever versions. Publishing happens in
+          # No `publish` input: this workflow only ever versions. Publishing happens in
           # publish.yml, on the push to `main` that this PR's merge produces.
-          version-script: pnpm run version:prepare
-          pr-base-branch: main
-          pr-title: 'chore(release): version packages'
-          commit-message: 'chore(release): version packages'
+          version: pnpm run version:prepare
+          branch: main
+          title: 'chore(release): version packages'
+          commit: 'chore(release): version packages'
           github-token: ${{ steps.app-token.outputs.token }}
 
       # The action hard-codes the closing sentence of the PR body, and with no `publish` input it
