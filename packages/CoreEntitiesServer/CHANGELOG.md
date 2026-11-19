@@ -1,5 +1,17 @@
 # @mj-biz-apps/accounting-core-entities-server
 
+## 0.29.0
+
+### Minor Changes
+
+- 65dd999: A GL account can name the Business Central bank account it sits behind (`GLAccount.ExternalBankAccountNumber`). A batch then sends that account's lines to Business Central as Bank Account lines, so they post through the bank ledger, and a cash account with Direct Posting turned off no longer fails the batch. The GL account forms show the field; only Business Central asset accounts can carry it.
+
+### Patch Changes
+
+- Updated dependencies [65dd999]
+  - @mj-biz-apps/accounting-entities@0.29.0
+  - @mj-biz-apps/accounting-engine-base@0.29.0
+
 ## 0.28.1
 
 ### Patch Changes
