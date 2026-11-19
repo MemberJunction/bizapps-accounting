@@ -12,9 +12,11 @@
 -- (its .pg.sql output marks the trigger SKIPPED), so the PostgreSQL trigger is
 -- written here by hand.
 --
--- ERPPostUnconfirmedAt is written only when a Sent batch fails (Sent -> Failed),
--- cleared only when a Failed batch is re-sent or cancelled (Failed -> Sent or
--- Cancelled), and never changed in any other update or carried on insert.
+-- ERPPostUnconfirmedAt is first written only by the update that takes a Sent
+-- batch to Posted or Failed (Sent -> Posted is the usual case: the ERP accepted
+-- the post and the read-back failed), cleared only when a Failed batch is
+-- re-sent or cancelled (Failed -> Sent or Cancelled), and never changed in any
+-- other update or carried on insert.
 -- Compared at millisecond precision, as on SQL Server: the entity writes
 -- JavaScript dates.
 --
@@ -31,7 +33,7 @@ BEGIN
            TG_OP = 'UPDATE'
            AND OLD."ERPPostUnconfirmedAt" IS NULL
            AND NEW."ERPPostUnconfirmedAt" IS NOT NULL
-           AND NOT (OLD."Status" = 'Sent' AND NEW."Status" = 'Failed')
+           AND NOT (OLD."Status" = 'Sent' AND NEW."Status" IN ('Posted', 'Failed'))
        )
        OR (
            TG_OP = 'UPDATE'
@@ -47,7 +49,7 @@ BEGIN
            AND NOT (OLD."Status" = 'Sent' AND NEW."Status" = 'Failed')
        )
     THEN
-        RAISE EXCEPTION 'JournalEntryBatch ERPPostUnconfirmedAt refused. It is set only when a Sent batch fails (Sent -> Failed), cleared only when a Failed batch is re-sent or cancelled, and never modified otherwise.'
+        RAISE EXCEPTION 'JournalEntryBatch ERPPostUnconfirmedAt refused. It is set only by the update that takes a Sent batch to Posted or Failed, cleared only when a Failed batch is re-sent or cancelled, and never modified otherwise.'
             USING ERRCODE = 'P0001', DETAIL = '50040';
     END IF;
 

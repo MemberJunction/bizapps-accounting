@@ -437,7 +437,10 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
   private async raiseUnreadPosting(
     batch: mjBizAppsAccountingJournalEntryBatchEntity, integrationName: string, posted: ErpPostResult, provider: IMetadataProvider,
   ): Promise<void> {
-    (batch as { ERPPostUnconfirmedAt?: Date | null }).ERPPostUnconfirmedAt = new Date();
+    // Stamped once: the Sent→Posted save carries it (50040 allows the first write there), and a
+    // later change to a stamp already stored is refused.
+    const stamped = batch as { ERPPostUnconfirmedAt?: Date | null };
+    stamped.ERPPostUnconfirmedAt ??= new Date();
     const exception = unreadPostingException(batch, integrationName, posted);
     const why = await this.tryRaiseUnreadPosting(exception, provider);
     if (why === null) return;

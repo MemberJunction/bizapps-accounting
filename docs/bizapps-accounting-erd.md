@@ -17,7 +17,7 @@
 > - **NEW `ExternalAccountingSystem`** (#68): catalog table (`Code` PK, `Name`, `Description`, `IsDefault`, `IsActive`, filtered unique index `UX_ExternalAccountingSystem_SingleDefault`) replacing `CK_JournalEntryBatch_TargetSystem` with `FK_JournalEntryBatch_TargetSystem`.
 > - **NEW `TaxCategory`** (#445): lookup table (`Code` PK, `Name`, `Description`, `IsActive`) replacing `CK_TaxRate_Category` with `FK_TaxRate_TaxCategory`.
 > - **`AccountingCompanyProfile.ERPJournalCode`** (#399): nullable `NVARCHAR(50)` per-company Business Central journal batch code.
-> - **`JournalEntryBatch.ERPPostUnconfirmedAt`** (#414): nullable `DATETIMEOFFSET(7)` set once (50040) when an ERP post returns an unconfirmed outcome, holding the batch in `Sent` until retry verification.
+> - **`JournalEntryBatch.ERPPostUnconfirmedAt`** (#414): nullable `DATETIMEOFFSET(7)` set once (50040) when the ERP accepted a post that could not then be read back. First written only by the save that takes the batch from `Sent` to `Posted` or `Failed`; the post stands.
 > - **`UX_IntercompanyAccountMatch_Active_Pair_Start`** (#393): filtered unique index on `(SourceCompanyID, TargetCompanyID, StartedAt) WHERE Status = 'Active'`.
 > - **`GLAccountRole.Cardinality`** (`One` | `Many`, BA-D34) and the `BankAccount` role, the only
 >   `Many` role. Its migration is dated 2026-08-27; the column was first drawn here on 2026-10-11.

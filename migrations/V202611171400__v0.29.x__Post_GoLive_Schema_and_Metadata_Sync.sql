@@ -196,8 +196,10 @@ BEGIN
     )
         THROW 50034, 'JournalEntryBatch SealMismatchDetectedAt refused. It is set only by the update that records a retried batch Posted (Sent -> Posted, SendAttemptCount above 1), and once set it is never changed or cleared.', 1;
 
-    -- ERP POST UNCONFIRMED: ERPPostUnconfirmedAt is written only when a Sent batch fails
-    -- (Sent -> Failed), cleared only when a Failed batch is re-sent or cancelled, and never
+    -- ERP POST UNCONFIRMED: ERPPostUnconfirmedAt is first written only by the update that takes a
+    -- Sent batch to Posted or Failed. Sent -> Posted is the usual case: the ERP accepted the post
+    -- and the read-back failed, and refusing the stamp there would turn an accepted post into a
+    -- Failed batch. It is cleared only when a Failed batch is re-sent or cancelled, and never
     -- changed in any other update or carried on insert.
     IF EXISTS (
         SELECT 1
@@ -208,7 +210,7 @@ BEGIN
                d.ID IS NOT NULL
                AND d.ERPPostUnconfirmedAt IS NULL
                AND i.ERPPostUnconfirmedAt IS NOT NULL
-               AND NOT (d.Status = 'Sent' AND i.Status = 'Failed')
+               AND NOT (d.Status = 'Sent' AND i.Status IN ('Posted', 'Failed'))
            )
            OR (
                d.ID IS NOT NULL
@@ -224,7 +226,7 @@ BEGIN
                AND NOT (d.Status = 'Sent' AND i.Status = 'Failed')
            )
     )
-        THROW 50040, 'JournalEntryBatch ERPPostUnconfirmedAt refused. It is set only when a Sent batch fails (Sent -> Failed), cleared only when a Failed batch is re-sent or cancelled, and never modified otherwise.', 1;
+        THROW 50040, 'JournalEntryBatch ERPPostUnconfirmedAt refused. It is set only by the update that takes a Sent batch to Posted or Failed, cleared only when a Failed batch is re-sent or cancelled, and never modified otherwise.', 1;
 END;
 GO
 
