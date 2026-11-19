@@ -21,6 +21,12 @@ export const ERP_PROVIDER_KEYS: readonly string[] = [
 export interface ERPJournalLine {
   /** The ERP's identity for the account: the GL account's `ExternalAccountID`, or its `Code`. */
   accountNumber: string;
+  /**
+   * Business Central only: the bank account the line posts to instead of `accountNumber`, which BC
+   * then reaches through the bank's posting group. The posted G/L entry still carries
+   * `accountNumber`, so the post-send comparison keeps matching on it.
+   */
+  bankAccountNumber?: string;
   debit?: number;
   credit?: number;
   description?: string;

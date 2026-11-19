@@ -75,12 +75,12 @@ describe('batch operations require the batch-operator Authorization (#448)', () 
   });
 
   it.each(cases)('$name refuses a user without it, before reaching the engine', async ({ run, reached }) => {
-    await expect(run(providerFor().provider, OTHER_USER)).rejects.toThrow(`requires the ${JOURNAL_ENTRY_BATCH_OPERATE_AUTH} authorization`);
+    await expect(run(providerFor().provider, OTHER_USER)).rejects.toThrow(/^You don't have permission to .* journal entry batches\. This is limited to the Finance role\.$/);
     expect(reached()).not.toHaveBeenCalled();
   });
 
   it.each(cases)('$name refuses everyone when the Authorization is missing from the catalog', async ({ run, reached }) => {
-    await expect(run(providerFor(false).provider, FINANCE_USER)).rejects.toThrow(/authorization \(the Finance role\)/);
+    await expect(run(providerFor(false).provider, FINANCE_USER)).rejects.toThrow(/This is limited to the Finance role/);
     expect(reached()).not.toHaveBeenCalled();
   });
 

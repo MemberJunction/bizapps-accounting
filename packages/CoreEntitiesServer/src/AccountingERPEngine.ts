@@ -43,7 +43,7 @@ import {
   type RenumberedJournalSearch,
 } from './BaseAccountingERPProvider.js';
 import {
-  resolveExternalAccount,
+  resolveERPAccount,
   resolveExternalDimensions,
   type ErpJournalLookupResult,
   type ErpPostResult,
@@ -1009,8 +1009,8 @@ function pickPostingConnection(
 ): PostingConnectionChoice {
   if (candidates.length === 0) {
     const error = target
-      ? `Company ${companyId} has no active '${target}' connection, so the batch cannot be sent. Ask an administrator to set one up.`
-      : `Company ${companyId} has no active ERP connection, so the batch cannot be sent. Ask an administrator to set one up.`;
+      ? `Company ${companyId} has no active '${target}' connection, so the batch cannot be sent. Please ask your administrator to set one up.`
+      : `Company ${companyId} has no active ERP connection, so the batch cannot be sent. Please ask your administrator to set one up.`;
     return { Kind: 'Missing', Error: error };
   }
   if (candidates.length === 1) return { Kind: 'Chosen', Connection: candidates[0] };
@@ -1129,9 +1129,9 @@ async function erpLinesFor(
   const dimensionsByLine = await resolveExternalDimensions(summaryLines.map((l) => l.ID), user, provider);
   const lines: CreateERPJournalInput['Lines'] = [];
   for (const line of summaryLines) {
-    const accountNumber = await resolveExternalAccount(line.GLAccountID, target, user, provider, requireExternalAccountID);
+    const account = await resolveERPAccount(line.GLAccountID, target, user, provider, requireExternalAccountID);
     lines.push({
-      accountNumber,
+      ...account,
       debit: line.DebitAmount ?? undefined,
       credit: line.CreditAmount ?? undefined,
       description: withBatchToken(line.Description, batch.ID),

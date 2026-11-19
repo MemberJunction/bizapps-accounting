@@ -39,6 +39,7 @@ type AccountRow = Pick<
   | 'CurrencyCode'
   | 'ExternalSystem'
   | 'ExternalAccountID'
+  | 'ExternalBankAccountNumber'
   | 'IsActive'
   | 'IsSystemSeeded'
   | 'Description'
@@ -212,6 +213,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
     { field: 'CurrencyCode', title: 'Currency', width: 100, sortable: true },
     { field: 'ExternalSystem', title: 'External system', width: 140, sortable: true },
     { field: 'ExternalAccountID', title: 'External account ID', width: 160, sortable: true },
+    { field: 'ExternalBankAccountNumber', title: 'BC bank account', width: 140, sortable: true },
     { field: 'IsActive', title: 'Active', type: 'boolean', width: 90, sortable: true },
     { field: 'IsSystemSeeded', title: 'Seeded', type: 'boolean', width: 90, sortable: true },
     { field: 'ID', title: 'ID', width: 280, sortable: true },
@@ -532,6 +534,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
     d.CurrencyCode = d.CurrencyCode || null;
     d.ExternalSystem = (d.ExternalSystem ?? '').trim() || null;
     d.ExternalAccountID = (d.ExternalAccountID ?? '').trim() || null;
+    d.ExternalBankAccountNumber = (d.ExternalBankAccountNumber ?? '').trim() || null;
     d.Description = (d.Description ?? '').trim() || null;
   }
 
@@ -728,6 +731,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
       CurrencyCode: a.CurrencyCode,
       ExternalSystem: a.ExternalSystem,
       ExternalAccountID: a.ExternalAccountID,
+      ExternalBankAccountNumber: a.ExternalBankAccountNumber,
       IsActive: a.IsActive,
       IsSystemSeeded: a.IsSystemSeeded,
       Description: a.Description,

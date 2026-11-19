@@ -280,4 +280,22 @@ describe('CreateBusinessCentralJournalEntryWithDimensionsAction — posting date
     expect(result.Success).toBe(false);
     expect(result.Message).toBe('The Business Central journal entry could not be created: the server has no metadata provider loaded.');
   });
+
+  it('posts a line with a bank account number as a Bank Account line, and other lines as G/L lines', async () => {
+    const action = new CreateBusinessCentralJournalEntryWithDimensionsAction();
+    const spy = stubBC(action);
+
+    const result = await run(action, inputs({
+      CompanyID: 'comp-1',
+      Lines: [
+        { accountNumber: '11101', bankAccountNumber: 'OPERATING', debit: 100 },
+        { accountNumber: '11203', credit: 100 },
+      ],
+    }));
+
+    const posted = calls(spy).filter(c => c[0].endsWith('/journalLines') && c[1] === 'POST').map(c => c[2]);
+    expect(posted.map(b => [b?.accountType, b?.accountNumber])).toEqual([['Bank Account', 'OPERATING'], ['G/L Account', '11203']]);
+    expect(Object.keys(posted[0] ?? {})).not.toContain('bankAccountNumber');
+    expect(result.Success).toBe(true);
+  });
 });

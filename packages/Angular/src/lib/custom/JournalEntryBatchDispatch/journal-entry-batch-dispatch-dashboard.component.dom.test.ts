@@ -636,11 +636,11 @@ describe('JournalEntryBatchDispatchDashboardComponent — who sees Approve, Reje
     expect(actions).toContain('Reject');
   });
 
-  it('shows the approver no Approve or Reject on a batch they built', async () => {
+  it('shows the approver Approve and Reject on a batch they built (golive #450)', async () => {
     listed = { ...batchRow('Pending'), BatchedByUserID: APPROVER_USER_ID };
     const actions = await actionsFor(APPROVER_USER_ID);
-    expect(actions).not.toContain('Approve');
-    expect(actions).not.toContain('Reject');
+    expect(actions).toContain('Approve');
+    expect(actions).toContain('Reject');
     expect(actions, 'the builder may still cancel it').toContain('Cancel');
   });
 

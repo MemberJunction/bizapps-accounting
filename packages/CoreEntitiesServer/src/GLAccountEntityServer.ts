@@ -66,6 +66,26 @@ export function BusinessCentralAccountNumberError(code: string | null | undefine
     `the account posts under, not BC's account id. Enter the BC account number, or clear it to post under the Code.`;
 }
 
+/**
+ * Why a GL account cannot carry `bankAccountNumber`, or null when it can. Only Business Central posts
+ * to a bank account, and a bank account sits behind an asset (cash) account.
+ */
+export function ExternalBankAccountNumberError(
+  code: string | null | undefined, accountType: string | null | undefined, externalSystem: string | null | undefined,
+  bankAccountNumber: string | null | undefined,
+): string | null {
+  if (!bankAccountNumber?.trim()) return null;
+  if (externalSystem && externalSystem !== 'BusinessCentral') {
+    return `GL account ${code ?? '(no code)'}: a bank account number is used only for Business Central, and this account's External System is ${externalSystem}. ` +
+      `Clear the bank account number, or set External System to Business Central or blank.`;
+  }
+  if (accountType !== 'Asset') {
+    return `GL account ${code ?? '(no code)'}: only an asset account can sit behind a Business Central bank account, and this one is ${accountType ?? 'untyped'}. ` +
+      `Clear the bank account number.`;
+  }
+  return null;
+}
+
 @RegisterClass(BaseEntity, GL_ENTITY)
 export class GLAccountEntityServer extends mjBizAppsAccountingGLAccountEntity {
 
@@ -95,7 +115,10 @@ export class GLAccountEntityServer extends mjBizAppsAccountingGLAccountEntity {
    * denormalized CompanyID. Pure in-memory OldValue check — no DB probe needed anymore.
    * Cosmetic fields (Name, Description, IsActive, ExternalSystem/ExternalAccountID) stay editable.
    */
-  /** A Business Central account's External Account ID must be a BC account number (bc-aidp-next-golive#282). */
+  /**
+   * A Business Central account's External Account ID must be a BC account number
+   * (bc-aidp-next-golive#282), and only a Business Central asset account may name a bank account.
+   */
   public override Validate(): ValidationResult {
     const result = super.Validate();
     if (this.ExternalSystem === 'BusinessCentral') {
@@ -104,6 +127,11 @@ export class GLAccountEntityServer extends mjBizAppsAccountingGLAccountEntity {
         result.Success = false;
         result.Errors.push(new ValidationErrorInfo('ExternalAccountID', error, this.ExternalAccountID));
       }
+    }
+    const bankError = ExternalBankAccountNumberError(this.Code, this.AccountType, this.ExternalSystem, this.ExternalBankAccountNumber);
+    if (bankError) {
+      result.Success = false;
+      result.Errors.push(new ValidationErrorInfo('ExternalBankAccountNumber', bankError, this.ExternalBankAccountNumber));
     }
     return result;
   }

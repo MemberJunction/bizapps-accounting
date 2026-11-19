@@ -1108,6 +1108,11 @@ export const mjBizAppsAccountingGLAccountSchema = z.object({
         * * SQL Data Type: bit
         * * Default Value: 0
         * * Description: A control account (AR, deferred revenue, unbilled, customer deposits, cash, or any account the company names): a manual journal entry with a line on it always needs the company's Approval CFO, whatever its amount. Default 0.`),
+    ExternalBankAccountNumber: z.string().nullable().describe(`
+        * * Field Name: ExternalBankAccountNumber
+        * * Display Name: External Bank Account Number
+        * * SQL Data Type: nvarchar(20)
+        * * Description: The No. of the Business Central bank account this GL account sits behind. When set, a journal entry batch sends this account's lines to Business Central as Bank Account lines with this No., so they post through the bank ledger and the bank's posting group. NULL posts them as G/L Account lines. Business Central only; asset accounts only.`),
     Company: z.string().describe(`
         * * Field Name: Company
         * * Display Name: Company Name
@@ -5735,6 +5740,19 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
     }
     set IsControlAccount(value: boolean) {
         this.Set('IsControlAccount', value);
+    }
+
+    /**
+    * * Field Name: ExternalBankAccountNumber
+    * * Display Name: External Bank Account Number
+    * * SQL Data Type: nvarchar(20)
+    * * Description: The No. of the Business Central bank account this GL account sits behind. When set, a journal entry batch sends this account's lines to Business Central as Bank Account lines with this No., so they post through the bank ledger and the bank's posting group. NULL posts them as G/L Account lines. Business Central only; asset accounts only.
+    */
+    get ExternalBankAccountNumber(): string | null {
+        return this.Get('ExternalBankAccountNumber');
+    }
+    set ExternalBankAccountNumber(value: string | null) {
+        this.Set('ExternalBankAccountNumber', value);
     }
 
     /**
