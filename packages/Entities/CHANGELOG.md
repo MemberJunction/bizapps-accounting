@@ -1,5 +1,15 @@
 # @mj-biz-apps/accounting-entities
 
+## 1.0.0
+
+### Major Changes
+
+- 3b8eab9: Accounting leaves 0.x: its first release from the `lts/6.2` release line is 1.0.0. Apps that depend on accounting must accept 1.x (for example `>=0.24.0 <2.0.0`).
+
+### Minor Changes
+
+- 65dd999: A GL account can name the Business Central bank account it sits behind (`GLAccount.ExternalBankAccountNumber`). A batch then sends that account's lines to Business Central as Bank Account lines, so they post through the bank ledger, and a cash account with Direct Posting turned off no longer fails the batch. The GL account forms show the field; only Business Central asset accounts can carry it.
+
 ## 0.28.1
 
 ## 0.28.0

@@ -35,6 +35,7 @@ import { TasksAppApprovalGate } from '../TasksAppApprovalGate.js';
 
 const USER = { ID: 'USER-1' } as UserInfo;
 const BATCH_ID = 'bbbbbbbb-0000-4000-8000-000000000183';
+const SUMMARY_ID = '55555555-0000-4000-8000-000000000001';
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const SENT_AT = new Date('2026-09-30T12:00:00Z');
 
@@ -80,7 +81,7 @@ function world(status: string): World {
   batch.NewRecord();
   const sent = status === 'Failed' ? { SentAt: SENT_AT, SendAttemptCount: 1 } : {};
   const approved = status === 'Pending' ? {} : { ApprovedAt: new Date('2026-09-29T12:00:00Z'), ApprovedByUserID: 'U-APPROVER' };
-  batch.SetMany({ ID: BATCH_ID, JournalEntryBatchNumber: 'JEB-0183', Status: status, SummaryJournalEntryID: 'SUM1', ...approved, ...sent }, true, true);
+  batch.SetMany({ ID: BATCH_ID, JournalEntryBatchNumber: 'JEB-0183', Status: status, SummaryJournalEntryID: SUMMARY_ID, ...approved, ...sent }, true, true);
   batch.Load = vi.fn(async () => true) as never;
   const teardown = vi.fn<JournalEntryBatchEntityServer['ReleaseMembersAndDeleteSummary']>().mockResolvedValue(undefined);
   batch.ReleaseMembersAndDeleteSummary = teardown;
@@ -192,7 +193,7 @@ describe('cancelJournalEntryBatch — a Pending cancel (#233, golive #302)', () 
     expect(g.assertMayCancelPending).not.toHaveBeenCalled();
     expect(g.assertMayCancelApproved).not.toHaveBeenCalled();
     expect(g.recordCancellation).not.toHaveBeenCalled(); // the rejection is the record
-    expect(w.teardown).toHaveBeenCalledWith('SUM1', USER);
+    expect(w.teardown).toHaveBeenCalledWith(SUMMARY_ID, USER);
     expect(w.batch.Status).toBe('Cancelled');
   });
 
@@ -204,7 +205,7 @@ describe('cancelJournalEntryBatch — a Pending cancel (#233, golive #302)', () 
     expect(g.assertMayCancelPending).toHaveBeenCalledWith(BATCH_ID, USER);
     expect(g.assertMayCancelApproved).not.toHaveBeenCalled();
     expect(g.recordCancellation).toHaveBeenCalledWith(BATCH_ID, { reason: 'Built with the wrong entries', fromStatus: 'Pending' }, USER);
-    expect(w.teardown).toHaveBeenCalledWith('SUM1', USER);
+    expect(w.teardown).toHaveBeenCalledWith(SUMMARY_ID, USER);
     expect(w.batch.Status).toBe('Cancelled');
     expect(w.batch.CancelReason).toBe('Built with the wrong entries');
     expect(w.batch.CancelledByUserID).toBe(USER.ID);
@@ -537,7 +538,7 @@ describe('cancelJournalEntryBatch — the second ERP check before a Failed cance
     expect(w.batch.SendAttemptCount).toBe(2);
     expect(w.batch.CancelledAt).toBeNull();
     expect(w.batch.ERPNotPostedBasis).toBeNull();
-    expect(w.batch.SummaryJournalEntryID).toBe('SUM1');
+    expect(w.batch.SummaryJournalEntryID).toBe(SUMMARY_ID);
   });
 
   it('applies the same rule when the canceller attested because the first lookup could not settle it', async () => {
@@ -597,7 +598,7 @@ describe('cancelJournalEntryBatch — the second ERP check before a Failed cance
     expect(w.batch.ExternalJournalEntryBatchRef).toBeNull();
     expect(w.batch.CancelledAt).toBeNull();
     expect(w.batch.ERPNotPostedBasis).toBeNull();
-    expect(w.batch.SummaryJournalEntryID).toBe('SUM1');
+    expect(w.batch.SummaryJournalEntryID).toBe(SUMMARY_ID);
   });
 
   it('lets a confirmed cancel commit when the second lookup reports the same mismatch the first did', async () => {

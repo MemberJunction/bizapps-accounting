@@ -56,7 +56,15 @@
                     @for (line of Lines; track line.ID) {
                         <tr>
                             <td class="mja-je-td-num">
-                                <button type="button" class="mja-je-line-badge" (click)="OpenLine(line)" title="Open line record">
+                                <button
+                                    type="button"
+                                    class="mja-je-line-badge"
+                                    mjRecordLink
+                                    [EntityName]="LineEntity"
+                                    [RecordID]="line.ID"
+                                    [HandleClick]="false"
+                                    (click)="OpenLine(line)"
+                                    title="Open line record">
                                     {{ line.LineNumber || '—' }}
                                 </button>
                             </td>
@@ -65,7 +73,16 @@
                                     @if (SplitAccount(line.GLAccount).code; as code) {
                                         <span class="mja-je-acctline__code">{{ code }}</span>
                                     }
-                                    <button type="button" class="mja-je-link mja-je-acctline__name" (click)="OpenAccount(line)">
+                                    <button
+                                        type="button"
+                                        class="mja-je-link mja-je-acctline__name"
+                                        [mjRecordLink]="line"
+                                        FieldName="GLAccountID"
+                                        [EntityName]="'MJ_BizApps_Accounting: GL Accounts'"
+                                        [RecordID]="line.GLAccountID"
+                                        [DisplayName]="line.GLAccount"
+                                        [HandleClick]="false"
+                                        (click)="OpenAccount(line)">
                                         {{ SplitAccount(line.GLAccount).name }}
                                     </button>
                                 </div>
@@ -80,7 +97,14 @@
                             <td>
                                 <div class="mja-je-chips">
                                     @for (dim of line.Dimensions.Items; track dim.ID) {
-                                        <span class="mja-je-dim">
+                                        <span
+                                            class="mja-je-dim"
+                                            [mjRecordLink]="dim"
+                                            FieldName="DimensionValueID"
+                                            [EntityName]="'MJ_BizApps_Accounting: Dimension Values'"
+                                            [RecordID]="dim.DimensionValueID"
+                                            [DisplayName]="dim.DimensionValue"
+                                            (Navigate)="FormComponent.OnFormNavigate($event)">
                                             <span class="mja-je-dim__key">{{ dim.Dimension }}</span>
                                             <span class="mja-je-dim__sep">·</span>
                                             <span class="mja-je-dim__val">{{ dim.DimensionValue }}</span>

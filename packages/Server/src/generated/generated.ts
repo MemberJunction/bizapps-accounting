@@ -2775,6 +2775,10 @@ export class mjBizAppsAccountingGLAccount_ {
     @Field(() => Boolean, {nullable: true, description: "A control account (AR, deferred revenue, unbilled, customer deposits, cash, or any account the company names): a manual journal entry with a line on it always needs the company's Approval CFO, whatever its amount. Default 0."}) 
     IsControlAccount?: boolean;
         
+    @Field({nullable: true, description: "The No. of the Business Central bank account this GL account sits behind. When set, a journal entry batch sends this account's lines to Business Central as Bank Account lines with this No., so they post through the bank ledger and the bank's posting group. NULL posts them as G/L Account lines. Business Central only; asset accounts only."}) 
+    @MaxLength(20)
+    ExternalBankAccountNumber?: string;
+        
     @Field({nullable: true}) 
     @MaxLength(50)
     Company?: string;
@@ -2852,6 +2856,9 @@ export class CreatemjBizAppsAccountingGLAccountInput {
     @Field(() => Boolean, { nullable: true })
     IsControlAccount?: boolean;
 
+    @Field({ nullable: true })
+    ExternalBankAccountNumber: string | null;
+
     @Field(() => RestoreContextInput, { nullable: true })
     RestoreContext___?: RestoreContextInput;
 }
@@ -2900,6 +2907,9 @@ export class UpdatemjBizAppsAccountingGLAccountInput {
 
     @Field(() => Boolean, { nullable: true })
     IsControlAccount?: boolean;
+
+    @Field({ nullable: true })
+    ExternalBankAccountNumber?: string | null;
 
     @Field(() => [KeyValuePairInput], { nullable: true })
     OldValues___?: KeyValuePairInput[];

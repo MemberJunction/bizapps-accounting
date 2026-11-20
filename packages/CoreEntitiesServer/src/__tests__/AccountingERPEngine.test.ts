@@ -27,7 +27,7 @@ import { AccountingERPEngine, ERP_POSTING_NOT_READ_BACK, namesMatch } from '../A
 import { FINANCE_EXCEPTION_TYPE_ENTITY } from '../FinanceExceptions.js';
 import { BaseAccountingERPProvider } from '../BaseAccountingERPProvider.js';
 import type { AccountingVerbResult } from '../AccountingVerbRunner.js';
-import type { ErpPostResult } from '../JournalEntryBatchEngine.js';
+import { resolveERPAccount, type ErpPostResult } from '../JournalEntryBatchEngine.js';
 
 const user = { ID: 'user-1', Name: 'Test' } as unknown as UserInfo;
 const COMPANY = 'aaaaaaaa-0000-0000-0000-000000000001';
@@ -143,6 +143,10 @@ const DIM_VENTURE = 'dddddddd-0000-0000-0000-000000000001';
 const DIM_PRODUCT = 'dddddddd-0000-0000-0000-000000000002';
 const VAL_ACME = 'eeeeeeee-0000-0000-0000-000000000001';
 const VAL_WIDGET = 'eeeeeeee-0000-0000-0000-000000000002';
+// Real UUIDs: resolveERPAccount validates the GL account id (sqlGuidLiteral) before it queries.
+const GL_1 = 'a1a1a1a1-0000-0000-0000-000000000001';
+const GL_2 = 'a1a1a1a1-0000-0000-0000-000000000002';
+const GL_3 = 'a1a1a1a1-0000-0000-0000-000000000003';
 
 /** The views a tagged Business Central post reads, minus the Dimensions view each case varies. */
 function dimensionTaggedViews(): Record<string, unknown[]> {
@@ -182,8 +186,8 @@ function taggedBatch() {
 
 function taggedLines() {
   return [
-    { ID: LINE_1, GLAccountID: 'gl-1', DebitAmount: 100, CreditAmount: null, Description: 'Debit side' },
-    { ID: LINE_2, GLAccountID: 'gl-2', DebitAmount: null, CreditAmount: 100, Description: 'Credit side' },
+    { ID: LINE_1, GLAccountID: GL_1, DebitAmount: 100, CreditAmount: null, Description: 'Debit side' },
+    { ID: LINE_2, GLAccountID: GL_2, DebitAmount: null, CreditAmount: 100, Description: 'Credit side' },
   ] as never;
 }
 
@@ -361,7 +365,7 @@ describe('AccountingERPEngine.PostJournalBatch', () => {
       JournalEntryBatchNumber: 'BATCH-1',
       PostingDate: new Date('2026-08-01'),
     } as never;
-    const lines = [{ GLAccountID: 'gl-1', DebitAmount: 10, CreditAmount: null, Description: 'x' }] as never;
+    const lines = [{ GLAccountID: GL_1, DebitAmount: 10, CreditAmount: null, Description: 'x' }] as never;
     // resolveExternalAccount hits GL Accounts view with ExtraFilter — our stub ignores filter
     const result: ErpPostResult = await AccountingERPEngine.Instance.PostJournalBatch(batch, lines, user, p);
     expect(result.success).toBe(false);
@@ -496,8 +500,8 @@ describe('AccountingERPEngine.PostJournalBatch', () => {
     const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS' }));
     AccountingERPEngine.Instance.UseSeams({ runVerb });
     const lines = [
-      { ID: LINE_1, GLAccountID: 'gl-1', DebitAmount: 100, CreditAmount: null, Description: fitsWithToken },
-      { ID: LINE_2, GLAccountID: 'gl-2', DebitAmount: null, CreditAmount: 100, Description: overWithToken },
+      { ID: LINE_1, GLAccountID: GL_1, DebitAmount: 100, CreditAmount: null, Description: fitsWithToken },
+      { ID: LINE_2, GLAccountID: GL_2, DebitAmount: null, CreditAmount: 100, Description: overWithToken },
     ] as never;
 
     const result: ErpPostResult = await AccountingERPEngine.Instance.PostJournalBatch(
@@ -586,7 +590,7 @@ describe('AccountingERPEngine.PostJournalBatch — after the ERP accepts', () =>
   it('stamps the batch token on every line it sends, after the line\'s own description', async () => {
     const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }] }));
     AccountingERPEngine.Instance.UseSeams({ runVerb });
-    const lines = [...(taggedLines() as unknown as object[]), { ID: 'line-3', GLAccountID: 'gl-3', DebitAmount: 0, CreditAmount: null, Description: null }] as never;
+    const lines = [...(taggedLines() as unknown as object[]), { ID: 'line-3', GLAccountID: GL_3, DebitAmount: 0, CreditAmount: null, Description: null }] as never;
 
     await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), lines, user, providerWith(taggedViewsWithCodes()));
 
@@ -1858,5 +1862,55 @@ describe('AccountingERPEngine.SyncMasterData — shared master data merges on Co
     } finally {
       logged.mockRestore();
     }
+  });
+});
+
+// A cash account behind a Business Central bank account posts to the bank account; BC books the G/L
+// entry on the account's own number through the bank's posting group.
+describe('AccountingERPEngine — Business Central bank account lines', () => {
+  const BANK_GL = [{ Code: '1000', ExternalSystem: null, ExternalAccountID: null, ExternalBankAccountNumber: 'OPERATING' }];
+
+  beforeEach(() => {
+    vi.spyOn(AccountingEngine.Instance, 'Config').mockResolvedValue();
+  });
+
+  it('sends the bank account number with the G/L number on each line of a bank-mapped account', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }] }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+
+    await AccountingERPEngine.Instance.PostJournalBatch(
+      taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes({ 'MJ_BizApps_Accounting: GL Accounts': BANK_GL })),
+    );
+
+    const sent = (runVerb.mock.calls[0] as unknown as [{ Params: { Lines: Array<{ accountNumber: string; bankAccountNumber?: string }> } }])[0].Params.Lines;
+    expect(sent.map((l) => [l.accountNumber, l.bankAccountNumber])).toEqual([['1000', 'OPERATING'], ['1000', 'OPERATING']]);
+  });
+
+  it('sends no bank account number for an account without one', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }] }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+
+    await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    const sent = (runVerb.mock.calls[0] as unknown as [{ Params: { Lines: Array<Record<string, unknown>> } }])[0].Params.Lines;
+    expect(sent.every((l) => !('bankAccountNumber' in l))).toBe(true);
+  });
+
+  it('matches the posting by G/L number, since BC books a bank line on the account behind the bank', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb([glEntry(100, 0), glEntry(0, 100)]) });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(
+      taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes({ 'MJ_BizApps_Accounting: GL Accounts': BANK_GL })),
+    );
+
+    expect(result).toEqual({ status: 'Found', externalJournalEntryBatchRef: 'BATCH-1' });
+  });
+
+  it('leaves the bank account number off for an ERP other than Business Central', async () => {
+    const views = { 'MJ_BizApps_Accounting: GL Accounts': [{ ...BANK_GL[0], ExternalAccountID: '35' }] };
+
+    const account = await resolveERPAccount(GL_1, 'QuickBooks', user, providerWith(views));
+
+    expect(account).toEqual({ accountNumber: '35' });
   });
 });
