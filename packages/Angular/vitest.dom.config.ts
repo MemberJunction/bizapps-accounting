@@ -29,5 +29,8 @@ export default defineConfig({
     hookTimeout: 30000,
     // Angular's compiled output references `globalThis` symbols, so run forked, not threaded.
     pool: 'forks',
+    // common-ng ships ngc output with extensionless relative imports, which a bundler resolves and
+    // Node's ESM loader does not. Inlining it lets Vite resolve them, as the host build does.
+    server: { deps: { inline: ['@mj-biz-apps/common-ng'] } },
   },
 });
