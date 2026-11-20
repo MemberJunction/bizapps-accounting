@@ -69,7 +69,7 @@ import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 import { ResolvePersonIDForUser } from './person-user-link.js';
 import { requireSqlGuid } from './SqlGuards.js';
 import { requireDateBound } from './BusinessDay.js';
-import { JOURNAL_ENTRY_BATCH_OPERATE_AUTH, UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
+import { UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
 import {
   IsApprovalOutcome,
   IsTaskDecisionOutcomeCode,
@@ -87,9 +87,9 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
  * where the request's provider (and its Authorization catalog) is in hand, as ClearFinanceException does.
  * The scheduled build and auto-post call the engine directly, not these operations, so they are unaffected.
  */
-function requireBatchOperator(user: UserInfo, provider: IMetadataProvider, operation: string): void {
+function requireBatchOperator(user: UserInfo, provider: IMetadataProvider, action: string): void {
   if (UserCanOperateJournalEntryBatches(user, provider.Authorizations)) return;
-  throw new Error(`${operation}: requires the ${JOURNAL_ENTRY_BATCH_OPERATE_AUTH} authorization (the Finance role).`);
+  throw new Error(`You don't have permission to ${action}. This is limited to the Finance role.`);
 }
 
 // ─── Accounting.PreviewJournalEntryBatch + Accounting.BuildJournalEntryBatch ─────────────────────────
@@ -192,7 +192,7 @@ export class BuildJournalEntryBatchOperation extends BaseRemotableOperation<Buil
   public readonly RequiredScope = 'accounting:write';
 
   protected async InternalExecute(input: BuildJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<BuildJournalEntryBatchOutput> {
-    requireBatchOperator(user, provider, 'BuildJournalEntryBatch');
+    requireBatchOperator(user, provider, 'build journal entry batches');
     if (!input?.TargetSystem) throw new Error('The batch was not built: no target ERP was given.');
     const gate = new TasksAppApprovalGate(provider);
     const options = toOptions(input);
@@ -247,7 +247,7 @@ export class RegenerateJournalEntryBatchOperation extends BaseRemotableOperation
   public readonly RequiredScope = 'accounting:write';
 
   protected async InternalExecute(input: RegenerateJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<BuildJournalEntryBatchResult> {
-    requireBatchOperator(user, provider, 'RegenerateJournalEntryBatch');
+    requireBatchOperator(user, provider, 'regenerate journal entry batches');
     if (!input?.JournalEntryBatchID) throw new Error('The batch was not rebuilt: no batch was given.');
     requireSqlGuid(input.JournalEntryBatchID, 'RegenerateJournalEntryBatch');
     if (!input?.TargetSystem) throw new Error('The batch was not rebuilt: no target ERP was given.');
@@ -293,7 +293,7 @@ export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<D
   public readonly RequiredScope = 'accounting:post';
 
   protected async InternalExecute(input: DispatchJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<DispatchJournalEntryBatchOutput> {
-    requireBatchOperator(user, provider, 'DispatchJournalEntryBatch');
+    requireBatchOperator(user, provider, 'send journal entry batches');
     if (!input?.JournalEntryBatchID) throw new Error('The batch was not sent: no batch was given.');
     requireSqlGuid(input.JournalEntryBatchID, 'DispatchJournalEntryBatch');
     try {
@@ -368,7 +368,7 @@ export class DispatchApprovedJournalEntryBatchesOperation extends BaseRemotableO
   public readonly RequiredScope = 'accounting:post';
 
   protected async InternalExecute(input: DispatchApprovedJournalEntryBatchesInput, provider: IMetadataProvider, user: UserInfo): Promise<DispatchApprovedJournalEntryBatchesOutput> {
-    requireBatchOperator(user, provider, 'DispatchApprovedJournalEntryBatches');
+    requireBatchOperator(user, provider, 'send approved journal entry batches');
     const companyIds = input?.CompanyIDs?.length ? input.CompanyIDs : null;
     const outcomes = await dispatchApprovedJournalEntryBatches({ targetSystem: null, companyIds }, user, provider);
     const batches = outcomes.map(toOutcomeWire);
@@ -391,7 +391,7 @@ export class ResumeJournalEntryBatchPostingOperation extends BaseRemotableOperat
   public readonly RequiredScope = 'accounting:post';
 
   protected async InternalExecute(input: ResumeJournalEntryBatchPostingInput, provider: IMetadataProvider, user: UserInfo): Promise<ResumeJournalEntryBatchPostingOutput> {
-    requireBatchOperator(user, provider, 'ResumeJournalEntryBatchPosting');
+    requireBatchOperator(user, provider, 'resume sending journal entry batches');
     if (!input?.JournalEntryBatchID) throw new Error('Posting was not resumed: no batch was given.');
     requireSqlGuid(input.JournalEntryBatchID, 'ResumeJournalEntryBatchPosting');
     const { batch, journalEntriesPosted } = await resumeJournalEntryBatchPosting(input.JournalEntryBatchID, user, provider);

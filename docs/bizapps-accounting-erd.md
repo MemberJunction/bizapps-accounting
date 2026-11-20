@@ -346,6 +346,7 @@ erDiagram
         string CurrencyCode FK
         string ExternalSystem "ERP identity (D13)"
         string ExternalAccountID
+        string ExternalBankAccountNumber "BC bank account the cash account sits behind"
         bool IsActive
         bool IsSystemSeeded
         bool IsControlAccount "manual entries on it always need the CFO"
@@ -651,6 +652,7 @@ erDiagram
         string CurrencyCode FK "nullable"
         string ExternalSystem "nullable - ERP identity lives HERE (D13)"
         string ExternalAccountID "nullable"
+        string ExternalBankAccountNumber "nullable - BC bank account No.; lines post to the bank account"
         bool IsActive
         bool IsSystemSeeded "minimal ~10-12 account seed"
         bool IsControlAccount "default 0 - a manual entry with a line on it always needs the Approval CFO"
@@ -893,7 +895,8 @@ and a batch becomes `Cancelled` only with its summary pointer cleared — in the
 regenerate's teardown before it (#183, #213). `Posted`, `Cancelled` and `Archived` are terminal, no batch returns to `Pending`,
 only a `Pending` batch is approved, only a `Sent` batch becomes `Posted` or `Failed` (#221), a `Sent` batch is not archived, and a `Cancelled` batch's content, approval pair and
 cancel audit are frozen (50031 / 50009). The cancel audit and the ERP check are written only by the
-update that cancels the batch, and `SentAt` is never cleared once set (50032; `trg_JournalEntryBatch_SendOnce`
+update that cancels the batch, the archive audit (`ArchiveReason`, `ArchivedAt`, `ArchivedByUserID`) only by the
+update that archives it, and `SentAt` is never cleared once set (50032; `trg_JournalEntryBatch_SendOnce`
 fires first, so a caller clearing it sees 50030). The send stamp — `SentAt`,
 `SentByUserID`, `SendAttemptCount` — changes only on a send, which must start from `Approved` or `Failed`
 and advance the count by one (50030). A locked entry's lines and their dimension tags are frozen too

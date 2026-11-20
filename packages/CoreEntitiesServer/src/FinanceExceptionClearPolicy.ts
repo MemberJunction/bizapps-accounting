@@ -217,16 +217,17 @@ const REFUSAL_CODES: Record<FinanceExceptionClearRuleKind, string> = {
   Default: 'NOT_AUTHORIZED',
 };
 
-function ruleReason(rule: FinanceExceptionClearRule, typeCode: string): string {
+/** Why this exception needs more than the ordinary clearing right, as a sentence, or '' when it does not. */
+function ruleReason(rule: FinanceExceptionClearRule): string {
   switch (rule.Kind) {
     case 'Unattributed':
-      return "This exception's source record has no attributable creator (unresolved, or created by the system)";
+      return ' The record behind it has no known creator, so it needs a senior reviewer.';
     case 'Escalated':
-      return "This exception's source record was created by someone whose own work is escalated";
+      return ' The record behind it was created by someone whose work needs a senior reviewer.';
     case 'Type':
-      return `Clearing a ${typeCode} exception is limited by type`;
+      return ' This type of exception can be cleared only by specific roles.';
     default:
-      return 'Clearing a finance exception';
+      return '';
   }
 }
 
@@ -240,16 +241,18 @@ function grantedRoleNames(context: FinanceExceptionClearContext, name: string): 
     .filter((n): n is string => typeof n === 'string' && n.length > 0);
 }
 
-/** The refusal for a reviewer who does not hold the rule's right, naming the right and its roles. */
+/**
+ * The refusal for a reviewer who does not hold the rule's right. It names the roles that do, never
+ * the authorization (bc-aidp-next-golive#493); the code says which rule refused.
+ */
 export function FinanceExceptionClearRuleRefusal(
   context: FinanceExceptionClearContext,
   rule: FinanceExceptionClearRule,
-  typeCode: string,
 ): FinanceExceptionClearRefusal {
   const roles = grantedRoleNames(context, rule.AuthorizationName);
-  const heldBy = roles.length > 0 ? ` (granted to: ${roles.join(', ')})` : '';
+  const heldBy = roles.length > 0 ? ` This is limited to: ${roles.join(', ')}.` : '';
   return {
     Code: REFUSAL_CODES[rule.Kind],
-    Message: `${ruleReason(rule, typeCode)}: it needs the ${rule.AuthorizationName} authorization${heldBy}, which you do not hold.`,
+    Message: `You don't have permission to clear this exception.${ruleReason(rule)}${heldBy}`,
   };
 }

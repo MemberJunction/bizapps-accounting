@@ -402,7 +402,7 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
       this.DialogMode = 'view';
     } catch (e) {
       // The save's CompleteMessage arrives here as the thrown message; it can hold database text (#383).
-      this.DialogError = SaveErrorMessage(e instanceof Error ? e.message : String(e), 'The account was not saved. Try again; if it keeps failing, ask an administrator.');
+      this.DialogError = SaveErrorMessage(e instanceof Error ? e.message : String(e), 'The account was not saved. Try again; if it keeps failing, please contact your administrator.');
     } finally {
       this.Saving = false;
       this.cdr.markForCheck();

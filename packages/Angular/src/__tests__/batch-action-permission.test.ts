@@ -33,8 +33,9 @@ describe('MayDecideBatch (Approve / Reject)', () => {
     expect(MayDecideBatch(batch, APPROVER.toLowerCase(), APPROVERS)).toBe(true);
   });
 
-  it('refuses the approver on a batch they built (separation of duties)', () => {
-    expect(MayDecideBatch({ ...batch, BatchedByUserID: APPROVER }, APPROVER, APPROVERS)).toBe(false);
+  it("lets the company's approver decide on a batch they built (the separation-of-duties exception, golive #450)", () => {
+    expect(MayDecideBatch({ ...batch, BatchedByUserID: APPROVER }, APPROVER, APPROVERS)).toBe(true);
+    expect(MayDecideBatch({ ...batch, BatchedByUserID: APPROVER.toLowerCase() }, APPROVER, APPROVERS)).toBe(true);
   });
 
   it('refuses the builder and anyone else', () => {

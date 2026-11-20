@@ -60,11 +60,22 @@ export function MayCancelPendingBatch(batch: PendingCancelBatch, userId: string 
 
 /**
  * Whether the server would record this user's Approve or Reject on a Pending batch (#339): the
- * company's configured approver, and not the user who built the batch (separation of duties). The
- * server check stays the authority; this only decides whether the buttons show.
+ * company's configured approver. Separation of duties refuses the user who built the batch, with one
+ * deliberate exception (golive #450): the company's approver may decide on a batch they built, since
+ * they are its only approver and a batch they built could otherwise never be approved. This mirrors
+ * the server's IsRefusedSelfApproval, which stays the authority; this only decides whether the
+ * buttons show.
  */
 export function MayDecideBatch(batch: DecisionBatch, userId: string | undefined, approvers: CompanyApprovers): boolean {
-  return isOneOf(userId, [approverOf(batch.CompanyID, approvers)]) && !isOneOf(userId, [batch.BatchedByUserID]);
+  const approver = approverOf(batch.CompanyID, approvers);
+  if (!isOneOf(userId, [approver])) return false;
+  return !isRefusedSelfApproval(userId, batch.BatchedByUserID, approver);
+}
+
+/** The builder-is-not-approver rule and its approver exception (golive #450), as the server applies it. */
+function isRefusedSelfApproval(userId: string | undefined, builderUserId: string | null, approver: string | undefined): boolean {
+  if (!isOneOf(userId, [builderUserId])) return false;
+  return !isOneOf(userId, [approver]);
 }
 
 /**

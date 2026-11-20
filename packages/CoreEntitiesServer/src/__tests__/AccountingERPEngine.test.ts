@@ -27,7 +27,7 @@ import { AccountingERPEngine, ERP_POSTING_NOT_READ_BACK, namesMatch } from '../A
 import { FINANCE_EXCEPTION_TYPE_ENTITY } from '../FinanceExceptions.js';
 import { BaseAccountingERPProvider } from '../BaseAccountingERPProvider.js';
 import type { AccountingVerbResult } from '../AccountingVerbRunner.js';
-import type { ErpPostResult } from '../JournalEntryBatchEngine.js';
+import { resolveERPAccount, type ErpPostResult } from '../JournalEntryBatchEngine.js';
 
 const user = { ID: 'user-1', Name: 'Test' } as unknown as UserInfo;
 const COMPANY = 'aaaaaaaa-0000-0000-0000-000000000001';
@@ -382,7 +382,7 @@ describe('AccountingERPEngine.PostJournalBatch', () => {
 
     const result: ErpPostResult = await AccountingERPEngine.Instance.PostJournalBatch(batch, [], user, p);
 
-    expect(result).toEqual({ success: false, error: `Company ${COMPANY} has no active 'QuickBooks' connection, so the batch cannot be sent. Ask an administrator to set one up.` });
+    expect(result).toEqual({ success: false, error: `Company ${COMPANY} has no active 'QuickBooks' connection, so the batch cannot be sent. Please ask your administrator to set one up.` });
     expect(runVerb).not.toHaveBeenCalled();
   });
 
@@ -1495,7 +1495,7 @@ describe('AccountingERPEngine — choosing the posting connection (#256)', () =>
   it('refuses as before when the company has no connection for the target, running only afterPostFailure', async () => {
     const { runVerb, posted, found } = await postAndFind([connection(CI_PROD, 'HubSpot', 'HubSpot')]);
 
-    const error = `Company ${COMPANY} has no active 'BusinessCentral' connection, so the batch cannot be sent. Ask an administrator to set one up.`;
+    const error = `Company ${COMPANY} has no active 'BusinessCentral' connection, so the batch cannot be sent. Please ask your administrator to set one up.`;
     expect(posted).toEqual({ success: false, error });
     expect(found).toEqual({ status: 'Unavailable' });
     expect(runVerb).not.toHaveBeenCalled();
@@ -1858,5 +1858,55 @@ describe('AccountingERPEngine.SyncMasterData — shared master data merges on Co
     } finally {
       logged.mockRestore();
     }
+  });
+});
+
+// A cash account behind a Business Central bank account posts to the bank account; BC books the G/L
+// entry on the account's own number through the bank's posting group.
+describe('AccountingERPEngine — Business Central bank account lines', () => {
+  const BANK_GL = [{ Code: '1000', ExternalSystem: null, ExternalAccountID: null, ExternalBankAccountNumber: 'OPERATING' }];
+
+  beforeEach(() => {
+    vi.spyOn(AccountingEngine.Instance, 'Config').mockResolvedValue();
+  });
+
+  it('sends the bank account number with the G/L number on each line of a bank-mapped account', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }] }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+
+    await AccountingERPEngine.Instance.PostJournalBatch(
+      taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes({ 'MJ_BizApps_Accounting: GL Accounts': BANK_GL })),
+    );
+
+    const sent = (runVerb.mock.calls[0] as unknown as [{ Params: { Lines: Array<{ accountNumber: string; bankAccountNumber?: string }> } }])[0].Params.Lines;
+    expect(sent.map((l) => [l.accountNumber, l.bankAccountNumber])).toEqual([['1000', 'OPERATING'], ['1000', 'OPERATING']]);
+  });
+
+  it('sends no bank account number for an account without one', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }] }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+
+    await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    const sent = (runVerb.mock.calls[0] as unknown as [{ Params: { Lines: Array<Record<string, unknown>> } }])[0].Params.Lines;
+    expect(sent.every((l) => !('bankAccountNumber' in l))).toBe(true);
+  });
+
+  it('matches the posting by G/L number, since BC books a bank line on the account behind the bank', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb([glEntry(100, 0), glEntry(0, 100)]) });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(
+      taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes({ 'MJ_BizApps_Accounting: GL Accounts': BANK_GL })),
+    );
+
+    expect(result).toEqual({ status: 'Found', externalJournalEntryBatchRef: 'BATCH-1' });
+  });
+
+  it('leaves the bank account number off for an ERP other than Business Central', async () => {
+    const views = { 'MJ_BizApps_Accounting: GL Accounts': [{ ...BANK_GL[0], ExternalAccountID: '35' }] };
+
+    const account = await resolveERPAccount('gl-1', 'QuickBooks', user, providerWith(views));
+
+    expect(account).toEqual({ accountNumber: '35' });
   });
 });

@@ -1,5 +1,18 @@
 # @mj-biz-apps/accounting-engine-base
 
+## 0.28.1
+
+### Patch Changes
+
+- 0a22d28: Permission refusals no longer show authorization names or operation names. Building, regenerating, sending and re-dating journal entries, archiving a batch before approval, clearing a finance exception and deciding a manual journal entry each say what the person cannot do and who can (bc-aidp-next-golive#493). Messages that send a person to Finance or an administrator now ask politely ("Please request that Finance…", "Please ask your administrator to…"). `FinanceExceptionClearRuleRefusal` no longer takes the exception's type code.
+  - @mj-biz-apps/accounting-entities@0.28.1
+
+## 0.28.0
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.28.0
+
 ## 0.27.1
 
 ### Patch Changes

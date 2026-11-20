@@ -726,7 +726,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     const auditErrors = (r: { Errors: unknown[] }) => r.Errors.filter(e => getErrorText(e).includes('cannot be set directly'));
     /** A loaded Pending batch: built, and every other audit field loaded empty, as a real Load leaves it. */
     const loadedPending = () => asSaved('Pending', {
-      BatchedAt: builtAt, BatchedByUserID: BUILDER, ApprovedAt: null, ApprovedByUserID: null, ArchivedAt: null, ArchivedByUserID: null,
+      BatchedAt: builtAt, BatchedByUserID: BUILDER, ApprovedAt: null, ApprovedByUserID: null, ArchiveReason: null, ArchivedAt: null, ArchivedByUserID: null,
       CancelledAt: null, CancelledByUserID: null, SentAt: null, SentByUserID: null, ERPNotPostedConfirmedAt: null, ERPNotPostedConfirmedByUserID: null,
     });
 
@@ -736,6 +736,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       ['ApprovedByUserID', 'a1a1a1a1-0000-4000-8000-0000000000a1'],
       ['CancelledByUserID', 'a1a1a1a1-0000-4000-8000-0000000000a1'],
       ['ArchivedAt', new Date()],
+      ['ArchiveReason', 'Written without archiving'],
       ['SentByUserID', 'a1a1a1a1-0000-4000-8000-0000000000a1'],
       ['ERPNotPostedConfirmedByUserID', 'a1a1a1a1-0000-4000-8000-0000000000a1'],
     ])('refuses a change to %s on a saved batch', (field, value) => {
@@ -744,6 +745,14 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       const errors = auditErrors(batch.Validate());
       expect(errors.length).toBe(1);
       expect(getErrorText(errors[0])).toContain(field);
+    });
+
+    it('refuses a rewrite of an Archived batch\'s ArchiveReason: it is the only record of why the batch never posts', () => {
+      asSaved('Archived', { ...archiveAudit });
+      batch.ArchiveReason = 'A different reason';
+      const errors = auditErrors(batch.Validate());
+      expect(errors.length).toBe(1);
+      expect(getErrorText(errors[0])).toContain('ArchiveReason');
     });
 
     it('treats the same values in another form as unchanged: an ID in other letter case, an instant as a string', () => {
