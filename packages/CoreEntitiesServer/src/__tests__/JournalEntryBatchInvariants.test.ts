@@ -14,6 +14,7 @@ import { JournalEntryBatchDispatchServices } from '../JournalEntryBatchDispatchS
 import type { ErpJournalLookup, JournalEntryBatchCancelGate } from '../JournalEntryBatchEngine.js';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
+const SUMMARY_ID = '55555555-0000-4000-8000-000000000001';
 
 describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
   let batch: JournalEntryBatchEntityServer;
@@ -229,7 +230,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
   });
 
   it('a plain save of Pending → Cancelled is refused — only Cancel() takes that edge (#213)', () => {
-    asSaved('Pending', { SummaryJournalEntryID: 'SUM1' });
+    asSaved('Pending', { SummaryJournalEntryID: SUMMARY_ID });
     batch.Status = 'Cancelled';
     const result = batch.Validate();
     expect(result.Success).toBe(false);
@@ -422,21 +423,21 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     afterEach(() => save.mockRestore());
 
     it('Archive() never runs the teardown, and leaves the summary pointer intact', async () => {
-      asSaved('Pending', { SummaryJournalEntryID: 'SUM1' });
+      asSaved('Pending', { SummaryJournalEntryID: SUMMARY_ID });
       await batch.Archive('Conversion cutover — these were posted in the legacy system', USER);
 
       expect(teardown).not.toHaveBeenCalled();
-      expect(batch.SummaryJournalEntryID).toBe('SUM1');
+      expect(batch.SummaryJournalEntryID).toBe(SUMMARY_ID);
       expect(batch.Status).toBe('Archived');
       expect(batch.ArchiveReason).toBe('Conversion cutover — these were posted in the legacy system');
     });
 
     it('Cancel() still runs the teardown — archiving did not change cancelling', async () => {
-      asSaved('Pending', { SummaryJournalEntryID: 'SUM1' });
+      asSaved('Pending', { SummaryJournalEntryID: SUMMARY_ID });
       await batch.Cancel(USER);
 
       expect(teardown).toHaveBeenCalledTimes(1);
-      expect(teardown).toHaveBeenCalledWith('SUM1', USER);
+      expect(teardown).toHaveBeenCalledWith(SUMMARY_ID, USER);
       expect(batch.Status).toBe('Cancelled');
     });
 
@@ -462,7 +463,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     // ─── the approval Task hears about an archive (golive #325) ──────────────
 
     it.each(['Pending', 'Approved', 'Failed'])('Archive() records a %s batch\'s archive on the approval Task, inside its transaction', async (from) => {
-      asSaved(from, { SummaryJournalEntryID: 'SUM1' });
+      asSaved(from, { SummaryJournalEntryID: SUMMARY_ID });
       cancelGate.recordArchive.mockImplementation(async () => { transaction.push('record'); });
       await batch.Archive('  Posted in the legacy system  ', USER);
 
@@ -475,7 +476,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       const load = vi.fn(async () => true);
       batch.Load = load as never;
       cancelGate.recordArchive.mockRejectedValue(new Error('has no linked Person'));
-      asSaved('Approved', { SummaryJournalEntryID: 'SUM1' });
+      asSaved('Approved', { SummaryJournalEntryID: SUMMARY_ID });
 
       await expect(batch.Archive('Posted in the legacy system', USER)).rejects.toThrow('has no linked Person');
       expect(transaction).toEqual(['begin', 'rollback']);
@@ -483,7 +484,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     });
 
     it('Archive() refuses without a context user — the archive is recorded as someone', async () => {
-      asSaved('Pending', { SummaryJournalEntryID: 'SUM1' });
+      asSaved('Pending', { SummaryJournalEntryID: SUMMARY_ID });
       await expect(batch.Archive('Posted in the legacy system')).rejects.toThrow(/no user was given/);
       expect(save).not.toHaveBeenCalled();
       expect(cancelGate.recordArchive).not.toHaveBeenCalled();
@@ -494,27 +495,27 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     it('Cancel() saves Cancelled with the pointer cleared BEFORE releasing — the triggers key on that', async () => {
       const seenAtRelease: Array<{ status: string; pointer: string | null }> = [];
       teardown.mockImplementation(async () => { seenAtRelease.push({ status: batch.Status, pointer: batch.SummaryJournalEntryID }); });
-      asSaved('Approved', { SummaryJournalEntryID: 'SUM1', ApprovedAt: new Date(), ApprovedByUserID: 'U1' });
+      asSaved('Approved', { SummaryJournalEntryID: SUMMARY_ID, ApprovedAt: new Date(), ApprovedByUserID: 'U1' });
 
       await batch.Cancel(USER, { reason: 'Posting date belongs in October' });
 
       expect(save).toHaveBeenCalledTimes(1);
       expect(seenAtRelease).toEqual([{ status: 'Cancelled', pointer: null }]);
-      expect(teardown).toHaveBeenCalledWith('SUM1', { ID: 'U-CANCELLER' });
+      expect(teardown).toHaveBeenCalledWith(SUMMARY_ID, { ID: 'U-CANCELLER' });
       expect(batch.CancelReason).toBe('Posting date belongs in October');
       expect(batch.CancelledByUserID).toBe('U-CANCELLER');
       expect(batch.CancelledAt).toBeInstanceOf(Date);
     });
 
     it.each(['Approved', 'Failed'])('Cancel() refuses a %s batch without a reason', async (from) => {
-      asSaved(from, { SummaryJournalEntryID: 'SUM1' });
+      asSaved(from, { SummaryJournalEntryID: SUMMARY_ID });
       await expect(batch.Cancel(USER, { reason: '  ', confirmNotAlreadyPostedInERP: true })).rejects.toThrow(/reason is required/);
       expect(save).not.toHaveBeenCalled();
       expect(teardown).not.toHaveBeenCalled();
     });
 
     it.each([undefined, false])('Cancel() refuses a Failed batch the ERP cannot vouch for without the confirmation (%s)', async (confirm) => {
-      asSaved('Failed', { SummaryJournalEntryID: 'SUM1' });
+      asSaved('Failed', { SummaryJournalEntryID: SUMMARY_ID });
       await expect(batch.Cancel(USER, { reason: 'Wrong period', confirmNotAlreadyPostedInERP: confirm }))
         .rejects.toThrow(/Confirm in the ERP that document JEB-000001 has not posted/);
       expect(save).not.toHaveBeenCalled();
@@ -522,10 +523,10 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     });
 
     it('Cancel() takes a Failed batch with a reason and the ERP confirmation, and persists the attestation', async () => {
-      asSaved('Failed', { SummaryJournalEntryID: 'SUM1', SentAt: new Date('2026-09-30T12:00:00Z') });
+      asSaved('Failed', { SummaryJournalEntryID: SUMMARY_ID, SentAt: new Date('2026-09-30T12:00:00Z') });
       await batch.Cancel({ ID: 'U-CFO' } as never, { reason: 'Wrong period', confirmNotAlreadyPostedInERP: true });
       expect(batch.Status).toBe('Cancelled');
-      expect(teardown).toHaveBeenCalledWith('SUM1', { ID: 'U-CFO' });
+      expect(teardown).toHaveBeenCalledWith(SUMMARY_ID, { ID: 'U-CFO' });
       expect(batch.ERPNotPostedConfirmedByUserID).toBe('U-CFO');
       expect(batch.ERPNotPostedConfirmedAt).toBeInstanceOf(Date);
       expect(batch.ERPNotPostedBasis).toBe('UserAttested'); // the canceller's word, absent a lookup
@@ -535,13 +536,13 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       const order: string[] = [];
       teardown.mockImplementation(async () => { order.push('release'); });
       cancelGate.recordCancellation.mockImplementation(async () => { order.push('record'); });
-      asSaved('Approved', { SummaryJournalEntryID: 'SUM1' });
+      asSaved('Approved', { SummaryJournalEntryID: SUMMARY_ID });
       await batch.Cancel(USER, { reason: 'Wrong period' });
       expect(order).toEqual(['release', 'record']);
     });
 
     it('Cancel() refuses without a context user — the cancel is authorized as someone', async () => {
-      asSaved('Pending', { SummaryJournalEntryID: 'SUM1' });
+      asSaved('Pending', { SummaryJournalEntryID: SUMMARY_ID });
       await expect(batch.Cancel()).rejects.toThrow(/needs a signed-in user/);
       expect(save).not.toHaveBeenCalled();
       expect(teardown).not.toHaveBeenCalled();
@@ -551,14 +552,14 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       const load = vi.fn(async () => true);
       batch.Load = load as never;
       teardown.mockRejectedValue(new Error('member save failed'));
-      asSaved('Approved', { SummaryJournalEntryID: 'SUM1' });
+      asSaved('Approved', { SummaryJournalEntryID: SUMMARY_ID });
 
       await expect(batch.Cancel(USER, { reason: 'Wrong period' })).rejects.toThrow('member save failed');
       expect(load).toHaveBeenCalledWith('B1');
     });
 
     it('Cancel() needs no ERP confirmation from Approved — an Approved batch was never sent', async () => {
-      asSaved('Approved', { SummaryJournalEntryID: 'SUM1' });
+      asSaved('Approved', { SummaryJournalEntryID: SUMMARY_ID });
       await batch.Cancel(USER, { reason: 'Wrong period' });
       expect(batch.Status).toBe('Cancelled');
     });
@@ -578,7 +579,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     });
 
     it('CancelAfterTeardown() refuses a batch that still points at its summary — the teardown did not run', async () => {
-      asSaved('Pending', { SummaryJournalEntryID: 'SUM1' });
+      asSaved('Pending', { SummaryJournalEntryID: SUMMARY_ID });
       await expect(batch.CancelAfterTeardown()).rejects.toThrow(/still points at its summary/);
       expect(save).not.toHaveBeenCalled();
       expect(batch.Status).toBe('Pending');
@@ -605,7 +606,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     });
 
     it('Archive() stamps ArchivedAt / ArchivedByUserID from the user it acts as (#451)', async () => {
-      asSaved('Pending', { SummaryJournalEntryID: 'SUM1' });
+      asSaved('Pending', { SummaryJournalEntryID: SUMMARY_ID });
       await batch.Archive('Duplicate of JEB-000004', USER);
 
       expect(batch.ArchivedByUserID).toBe('U-CANCELLER');
@@ -615,14 +616,14 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     // ─── who may archive (#448) ───────────────────────────────────────────────
 
     it('Archive() asks the gate who may archive before writing anything', async () => {
-      asSaved('Approved', { SummaryJournalEntryID: 'SUM1' });
+      asSaved('Approved', { SummaryJournalEntryID: SUMMARY_ID });
       await batch.Archive('Posted in the legacy system', USER);
       expect(cancelGate.assertMayArchive).toHaveBeenCalledWith('B1', USER);
     });
 
     it('Archive() writes nothing when the gate refuses the user', async () => {
       cancelGate.assertMayArchive.mockRejectedValue(new Error('may archive it before approval'));
-      asSaved('Pending', { SummaryJournalEntryID: 'SUM1' });
+      asSaved('Pending', { SummaryJournalEntryID: SUMMARY_ID });
 
       await expect(batch.Archive('Posted in the legacy system', USER)).rejects.toThrow('may archive it before approval');
       expect(transaction).toEqual([]);
