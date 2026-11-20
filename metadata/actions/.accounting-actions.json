@@ -150,7 +150,7 @@
             "ValueType": "Scalar",
             "IsArray": false,
             "IsRequired": false,
-            "Description": "When true the run is UNATTENDED (scheduled posting, A-US5/A-US6): the CFO approval Task is waived, ApprovedByUserID is stamped with the context user (the MJ System user under the scheduler), and each batch is approved and dispatched to the ERP in the same run rather than parked in Pending. Requires an explicit EntryTypeCodes include-list and rejects ExcludeEntryTypeCodes — auto-post policy is an include-list, never a blacklist. Defaults to false: the attended path (A-US7) builds only, behind the bizapps-tasks approval gate."
+            "Description": "When true the run is UNATTENDED (scheduled posting, A-US5/A-US6): the CFO approval Task is waived, ApprovedByUserID is stamped with the context user (the MJ System user under the scheduler), and each batch is approved and dispatched to the ERP in the same run rather than parked in Pending. Requires an explicit EntryTypeCodes include-list and rejects ExcludeEntryTypeCodes \u2014 auto-post policy is an include-list, never a blacklist. Defaults to false: the attended path (A-US7) builds only, behind the bizapps-tasks approval gate."
           },
           "primaryKey": {
             "ID": "BA072B0D-046B-43AE-9DF5-8B470B4F735B"
@@ -352,6 +352,54 @@
           },
           "primaryKey": {
             "ID": "996F2184-92AB-4A55-935A-0D583B4613AF"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "fields": {
+      "Name": "Apply Journal Entry Batch Task Decision",
+      "CategoryID": "@lookup:MJ: Action Categories.ID=074DF299-8D1F-438B-B855-8DFF17AE565E",
+      "Description": "The OnComplete and OnReject hook of the Journal Entry Batch Approval task type. When a decision recorded in the Tasks app closes a batch's approval task, approves or cancels the batch on that decision, as the user who decided, with the same approver checks as the Accounting app's decision. A decision that user may not make leaves the batch Pending and reopens the task with a comment. Acts only on a Pending batch whose stamped approval task is the given task.",
+      "Type": "Custom",
+      "DriverClass": "Accounting.ApplyJournalEntryBatchTaskDecision",
+      "IconClass": "fa-solid fa-stamp",
+      "UserPrompt": "Apply the decision on a journal entry batch's approval task to the batch.",
+      "CodeApprovalStatus": "Approved",
+      "Status": "Active"
+    },
+    "primaryKey": {
+      "ID": "B4242C42-1856-4D8D-A5A1-255202B11855"
+    },
+    "relatedEntities": {
+      "MJ: Action Params": [
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "TaskID",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": true,
+            "Description": "The approval task whose decision is applied. The tasks app passes it when it runs the hook."
+          },
+          "primaryKey": {
+            "ID": "67BE3829-F357-4678-9F3E-AE6C9C4E1D3E"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "Outcome",
+            "Type": "Output",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "What happened to the batch: Approved, Cancelled, Refused, NotPending, NoDecision or NotABatchTask."
+          },
+          "primaryKey": {
+            "ID": "1C244C5E-06F3-4A4E-8C4E-2FABF01D9C8A"
           }
         }
       ]

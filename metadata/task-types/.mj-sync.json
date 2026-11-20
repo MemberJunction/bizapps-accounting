@@ -1,0 +1,13 @@
+{
+  "entity": "MJ_BizApps_Tasks: Task Types",
+  "filePattern": "**/.*.json",
+  "pull": {
+    "createNewFileIfNotFound": true,
+    "newFileName": ".accounting-task-types.json",
+    "appendRecordsToExistingFile": true,
+    "updateExistingRecords": true,
+    "ignoreNullFields": true,
+    "ignoreVirtualFields": true,
+    "filter": "Code LIKE 'ACCOUNTING_%'"
+  }
+}
