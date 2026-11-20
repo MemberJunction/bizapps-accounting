@@ -27,6 +27,8 @@ const STATUS_ORDER: Record<mjBizAppsAccountingJournalEntryEntity['Status'], numb
     Pending: 0,
     Batched: 1,
     GLPosted: 2,
+    // Voided leaves the line after Pending (golive #378); the timeline draws its own two steps.
+    Voided: 0,
 };
 
 /**
@@ -56,12 +58,27 @@ export class JournalEntryOverviewPanel extends BaseFormPanel<mjBizAppsAccounting
 
     public get Timeline(): TimelineStep[] {
         const status = this.Record.Status ?? 'Pending';
+        if (status === 'Voided') {
+            return [
+                { Key: 'Pending', Label: 'Pending', Icon: 'fa-solid fa-pen', Done: true, Current: false },
+                { Key: 'Voided', Label: 'Voided', Icon: 'fa-solid fa-ban', Done: true, Current: true },
+            ];
+        }
         const reached = STATUS_ORDER[status] ?? 0;
         return [
             { Key: 'Pending', Label: 'Pending', Icon: 'fa-solid fa-pen', Done: reached >= 0, Current: status === 'Pending' },
             { Key: 'Batched', Label: 'Batched', Icon: 'fa-solid fa-layer-group', Done: reached >= 1, Current: status === 'Batched' },
             { Key: 'GLPosted', Label: 'GL Posted', Icon: 'fa-solid fa-circle-check', Done: reached >= 2, Current: status === 'GLPosted' },
         ];
+    }
+
+    public get IsVoided(): boolean {
+        return this.Record.Status === 'Voided';
+    }
+
+    /** When the entry was voided, formatted like the GL-posted timestamp; '—' before. */
+    public get VoidedAtLabel(): string {
+        return formatJournalTimestamp(this.Record.VoidedAt);
     }
 
     public get AwaitsReview(): boolean {

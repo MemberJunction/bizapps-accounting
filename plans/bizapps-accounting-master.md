@@ -149,7 +149,7 @@ The current decision set. Each is the standing ruling — superseded ancestors l
 | D12 | **Company default accounts = company-level `GLAccountLink` rows.** The five `AccountingCompanyProfile` default-account FK columns are REMOVED ("replaced by 5 rows in the GL account link table", 2026-07-21). There is no system-level default: "GL account defaults start at the company level." Required-role enforcement is parked for later. | 2026-07-21 review. |
 | D13 | **`ChartOfAccountsMapping` is DROPPED** — "an appendage from a prior design… blow it away". ERP account identity lives on `GLAccount` (`ExternalSystem` + `ExternalAccountID`); we are not the source of truth for the ERP's chart. | 2026-07-21 review. |
 | D14 | **Contra-account roles:** `GLAccountRole` includes **Sales Discounts** and **Returns & Allowances**. Classical contra treatment: gross Cr Sales, discount as Dr Sales-Discounts, AR at net; absent a linked discounts account, net into Sales. | 2026-07-21 review. |
-| D15 | **Deferred revenue = REAL forward-dated JEs written at booking.** No schedule tables, no materializer, no daily job (a wake-up job is "fragile — just create them"). A 12-month $1,200 sub → 12 × $100 Dr DefRev / Cr Revenue JEs, each with its own EffectiveDate. Changes/cancellations produce **correcting orders whose entries NET against what's staged** — staged entries are never edited or deleted. | Signed off as the cleaner model. |
+| D15 | **Deferred revenue = REAL forward-dated JEs written at booking.** No schedule tables, no materializer, no daily job (a wake-up job is "fragile — just create them"). A 12-month $1,200 sub → 12 × $100 Dr DefRev / Cr Revenue JEs, each with its own EffectiveDate. Changes/cancellations produce **correcting orders whose entries NET against what's staged** — staged entries are never edited or deleted. **Amended 2026-11-16 (golive #378, #474):** a staged entry still `Pending` in no batch may be **voided** (`Status = Voided`, with who, when and why recorded) instead of offset; only an entry already `Batched` or `GLPosted` is still offset by a reversing entry. Reason: the mirror pairs net to zero only if both halves land in the same batch, and a returned one-year subscription left up to 24 pending entries for finance to review for a sale that no longer exists. A voided entry is never batched, sent or counted, and is never edited or deleted, so the record of what was staged survives. `Accounting.VoidPendingJournalEntries` is the only way in. Mirrored by orders' D14. | Signed off as the cleaner model; void amendment ruled 2026-11-16 (golive #378). |
 | D16 | **All FX (realized + unrealized) is computed and posted UPSTREAM** (Orders/Payments). Accounting keeps only account refs, balance validation, and `vw_FxExposure`. FX overall is deferred until multi-currency activates; the responsibility is **unowned until Payments exists** (flagged, accepted). | Ruled 2026-06-30. |
 | D17 | **Tax calculation is DELEGATED to a third-party engine** (Stripe Tax / Avalara / Vertex class) behind the `TaxCalculationProvider` seam. We (1) send inputs, (2) record what returns. Our tax tables are **snapshot/reference data** — never a rate authority we maintain or sync. | Ruled 2026-07-14. Engine selection + launch timing open (§16). |
 | D18 | **Intercompany: accounting still GENERATES no legs — but it now owns the LOOKUP.** No leg generation, no netting, no settlement here; the emitter (Payments, in bizapps-orders) builds the entries. What changed 2026-07-26: the per-company-pair account mapping lives in THIS repo as `IntercompanyAccountMatch` (BA-D26), because it maps GL accounts and dimensions — accounting's own vocabulary — and every future consumer (AP as well as AR) needs the same answer. The reserved "4 accounts per unordered pair" shape is **superseded** by ordered pairs (BA-D27). **Intercompany legs arise on the PAYMENT side, not at booking** (2026-07-21). | 2026-06-28 → 2026-07-21 → 2026-07-26. |
@@ -328,7 +328,7 @@ __mj_BizAppsAccounting.JournalEntry
   EffectiveDate DATE NOT NULL,           -- the accounting date; NO period FK (D2)
   EntryTypeID UNIQUEIDENTIFIER NOT NULL, -- FK to JournalEntryType (BA-D29): extensible lookup, consumers seed their own rows
                                          -- | 'Refund' | 'Writeoff' | 'Reversal' | 'Manual' | 'JournalEntryBatchSummary' | ...
-  Status NVARCHAR(20) NOT NULL,          -- 'Pending' | 'Batched' | 'GLPosted'
+  Status NVARCHAR(20) NOT NULL,          -- 'Pending' | 'Batched' | 'GLPosted' | 'Voided' (D15 amendment)
   Description NVARCHAR(MAX),
   -- Polymorphic origin (D25): exactly one causal source record; NULL/NULL = manual JE
   LinkedEntityID UNIQUEIDENTIFIER NULL,   -- FK → __mj.Entity (OrderLine | Payment | ...)
@@ -339,7 +339,11 @@ __mj_BizAppsAccounting.JournalEntry
   -- Lifecycle
   JournalEntryBatchID UNIQUEIDENTIFIER NULL FK → JournalEntryBatch,
   GLPostedAt DATETIMEOFFSET NULL,
-  GLReferenceID NVARCHAR(100) NULL
+  GLReferenceID NVARCHAR(100) NULL,
+  -- Void audit (golive #378): all three set when Status = 'Voided', all NULL otherwise
+  VoidReason NVARCHAR(1000) NULL,
+  VoidedAt DATETIMEOFFSET NULL,
+  VoidedByUserID UNIQUEIDENTIFIER NULL FK → __mj.User
 
 __mj_BizAppsAccounting.JournalEntryLine
   ID UNIQUEIDENTIFIER PK,
@@ -506,6 +510,7 @@ batch is approved, and a `Sent` batch is not archived (`trg_JournalEntryBatch_Im
 | `Batched` (unapproved batch) | In a Pending batch — **preliminary, reversible lock**: can't be double-batched, but reject/regenerate frees it. | No (but releasable) |
 | `Batched` (approved batch) | **Locked** for as long as the batch stays approved — through dispatch, retry and posting, and for good if it is archived. A cancel past approval (Approved or Failed; the CFO or the approver, with a reason, and from Failed only once the ERP is known not to hold it — #183/#207) releases it to the candidate pool. | No (releasable only by that cancel) |
 | `GLPosted` | ERP acknowledged the batch. | Only GL-roundtrip fields |
+| `Voided` | Cancelled while still `Pending` in no batch, by a return or cancellation (D15 amendment, golive #378). Never batched, sent to the ERP or counted in a balance; reached only through `Accounting.VoidPendingJournalEntries`. | No — terminal; the entry and its lines are frozen and cannot be deleted |
 
 **Reversals (pen, not pencil):** business-entity reversals emit NEW Pending JEs cross-linked via
 `ReversesJournalEntryID`/`ReversedByJournalEntryID`. Both sides live in the ledger; the net is zero.

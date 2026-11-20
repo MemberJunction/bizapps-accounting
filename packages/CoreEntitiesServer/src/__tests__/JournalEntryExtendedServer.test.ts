@@ -63,7 +63,7 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
       return info;
     };
 
-    jeEntityInfo = createMockEntity(JE_ENTITY, ['ID', 'CompanyID', 'EffectiveDate', 'EntryTypeID', 'Status', 'EntryNumber', 'ReversesJournalEntryID', 'ReversedByJournalEntryID', 'FileID']);
+    jeEntityInfo = createMockEntity(JE_ENTITY, ['ID', 'CompanyID', 'EffectiveDate', 'EntryTypeID', 'Status', 'EntryNumber', 'ReversesJournalEntryID', 'ReversedByJournalEntryID', 'FileID', 'VoidReason', 'VoidedAt', 'VoidedByUserID']);
     jelEntityInfo = createMockEntity(JEL_ENTITY, ['ID', 'JournalEntryID', 'LineNumber', 'GLAccountID', 'DebitAmount', 'CreditAmount', 'Description']);
     const glEntityInfo = createMockEntity(GL_ENTITY, ['ID', 'CompanyID', 'Code', 'IsActive']);
 
@@ -367,6 +367,25 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
       const result = je.Validate();
       expect(result.Success).toBe(false);
       expect(result.Errors.some(e => getErrorText(e).includes('must start as Pending'))).toBe(true);
+    });
+
+    it('a NEW journal entry created directly as Voided fails (golive #378)', () => {
+      je.Status = 'Voided';
+      const result = je.Validate();
+      expect(result.Success).toBe(false);
+      expect(result.Errors.some(e => getErrorText(e).includes('must start as Pending'))).toBe(true);
+    });
+
+    it('the void audit cannot be typed in: only SaveVoided writes it (golive #378)', () => {
+      je.VoidReason = 'made up';
+      je.VoidedByUserID = 'U-1';
+      const result = je.Validate();
+      expect(result.Success).toBe(false);
+      expect(result.Errors.some(e => getErrorText(e).includes('VoidReason, VoidedByUserID cannot be set directly'))).toBe(true);
+    });
+
+    it('SaveVoided refuses an entry that was never saved', async () => {
+      await expect(je.SaveVoided('returned', 'U-1')).rejects.toThrow('Only a saved journal entry is voided');
     });
 
     it('passes validation for a valid, balanced 2-line Journal Entry with matching company GL accounts', () => {

@@ -54,6 +54,7 @@ interface JeCounts {
   pending: number;
   batched: number;
   glPosted: number;
+  voided: number;
   awaiting: number;
 }
 
@@ -153,21 +154,22 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
 
     // NO scheduled-entries count: the ScheduledJournalEntry system was retired (D15) — its count
     // here made the WHOLE dashboard load reject with "entity not found" (red LoadError card).
-    const [thisMonth, pending, batched, glPosted, awaiting] = await Promise.all([
+    const [thisMonth, pending, batched, glPosted, voided, awaiting] = await Promise.all([
       this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`EffectiveDate >= '${monthStart}'`) }),
       this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Pending'`) }),
       this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Batched'`) }),
       this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='GLPosted'`) }),
+      this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Voided'`) }),
       // C.8: a Pending MANUAL entry is sitting behind the CFO gate — it will not be batched.
       this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Pending' AND EntryType='Manual'`) }),
     ]);
 
-    return { thisMonth, pending, batched, glPosted, awaiting };
+    return { thisMonth, pending, batched, glPosted, voided, awaiting };
   }
 
   /**
-   * The status breakdown + the two time-shaped counts. Pending / Batched / GLPosted are the WHOLE
-   * `JournalEntry.Status` value list, so the three together account for every entry in scope.
+   * The status breakdown + the two time-shaped counts. Pending / Batched / GLPosted / Voided are the
+   * WHOLE `JournalEntry.Status` value list, so the four together account for every entry in scope.
    */
   private buildStats(c: JeCounts): DashboardStat[] {
     return [
@@ -188,10 +190,10 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
   /**
    * The pipeline shape, at zero read cost — every segment is a count `loadCounts` already ran.
    *
-   * Pending / Batched / GLPosted is the WHOLE `JournalEntry.Status` value list, which is what makes
-   * this bar honest: the three segments account for every entry in scope, so the proportions are
+   * Pending / Batched / GLPosted / Voided is the WHOLE `JournalEntry.Status` value list (Voided since
+   * golive #378), which is what makes this bar honest: the four segments account for every entry in scope, so the proportions are
    * real shares of a real total rather than three unrelated numbers sharing an axis. If a migration
-   * widens the Status CHECK constraint, a fourth segment belongs here — the value list is the
+   * widens the Status CHECK constraint again, another segment belongs here — the value list is the
    * contract this card depends on.
    *
    * Tones encode the pipeline, not severity: brand (work to do) → info (in flight) → success (done).
@@ -211,6 +213,8 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
             Tooltip: 'Locked into a journal entry batch and on their way to the ERP. Immutable from here (BA trigger).' },
           { Id: 'glposted', Label: 'GL posted', Value: c.glPosted, Tone: 'success',
             Tooltip: 'Confirmed landed in the ERP general ledger — the end of the line for an entry.' },
+          { Id: 'voided', Label: 'Voided', Value: c.voided, Tone: 'warning',
+            Tooltip: 'Cancelled before they were batched, by a return or cancellation. Never batched, never sent to the ERP, never in a balance.' },
         ],
       },
     ];

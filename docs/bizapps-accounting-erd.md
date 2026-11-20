@@ -410,7 +410,7 @@ erDiagram
         uuid CompanyID FK
         date EffectiveDate "future date = staged rev-rec (D15)"
         uuid EntryTypeID FK "JournalEntryType (BA-D29)"
-        string Status "Pending | Batched | GLPosted"
+        string Status "Pending | Batched | GLPosted | Voided"
         string Description
         uuid LinkedEntityID FK "D25 origin pair - __mj.Entity"
         string LinkedRecordID "D25 origin pair - soft by nature"
@@ -420,6 +420,9 @@ erDiagram
         uuid FileID FK
         datetimeoffset GLPostedAt
         string GLReferenceID
+        string VoidReason "set only when Voided (golive #378)"
+        datetimeoffset VoidedAt "set only when Voided"
+        uuid VoidedByUserID FK "set only when Voided - __mj.User"
         decimal PredictedAnomalyProbability "Predictive Studio anomaly probability"
         string PredictedAnomalyRiskBand "Predictive Studio anomaly risk band"
         datetimeoffset PredictedAnomalyScoredAt "Predictive Studio score timestamp"
@@ -749,7 +752,7 @@ erDiagram
         uuid CompanyID FK
         date EffectiveDate "accounting date - NO period FK (D2); future date = staged rev-rec (D15)"
         uuid EntryTypeID FK "JournalEntryType (BA-D29) - consumer-extensible lookup"
-        string Status "Pending | Batched | GLPosted"
+        string Status "Pending | Batched | GLPosted | Voided"
         string Description
         uuid LinkedEntityID FK "D25 origin pair - __mj.Entity"
         string LinkedRecordID "D25 origin pair - soft by nature"
@@ -759,6 +762,9 @@ erDiagram
         uuid FileID FK "nullable - source document"
         datetimeoffset GLPostedAt "GL roundtrip - mutable after lock"
         string GLReferenceID "GL roundtrip"
+        string VoidReason "required when Voided, NULL otherwise (CK_JournalEntry_VoidAudit)"
+        datetimeoffset VoidedAt "required when Voided"
+        uuid VoidedByUserID FK "required when Voided - __mj.User"
         decimal PredictedAnomalyProbability "Predictive Studio anomaly probability"
         string PredictedAnomalyRiskBand "Predictive Studio anomaly risk band"
         datetimeoffset PredictedAnomalyScoredAt "Predictive Studio score timestamp"
