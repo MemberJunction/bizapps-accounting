@@ -496,15 +496,33 @@ describe('BuildJournalEntryBatchesAction', () => {
         expect(autoPostSpy).toHaveBeenCalledWith('CO-1', 'BusinessCentral', expect.objectContaining({ ID: 'SYSTEM-USER' }), expect.anything(), expect.anything());
     });
 
-    it('leaves an attended run by any user unrestricted: it builds behind the CFO approval gate', async () => {
-        vi.spyOn(UserCache.Instance, 'GetSystemUser').mockReturnValue(undefined as never);
-        vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue(['CO-1']);
-        const buildBatchSpy = vi.spyOn(serverEngine, 'buildJournalEntryBatch')
-            .mockImplementation(async (companyId) => buildResult(companyId));
+    // ─── The attended path is restricted to the system user too: a person builds through the
+    //     Finance-gated Accounting.BuildJournalEntryBatch operation, never this action ────────
+    it('refuses an attended run from any user but the system user, before any company is read', async () => {
+        const pendingSpy = vi.spyOn(serverEngine, 'pendingCompanies');
+        const buildBatchSpy = vi.spyOn(serverEngine, 'buildJournalEntryBatch');
         const params = runParams([]);
         params.ContextUser = { ID: 'SOME-OTHER-USER' } as never;
 
-        await new BuildJournalEntryBatchesAction().Run(params);
+        await expect(new BuildJournalEntryBatchesAction().Run(params)).rejects.toThrow(/runs only as the MJ system user/);
+        expect(pendingSpy).not.toHaveBeenCalled();
+        expect(buildBatchSpy).not.toHaveBeenCalled();
+    });
+
+    it('refuses an attended run when the user cache does not hold the system user (fails closed)', async () => {
+        vi.spyOn(UserCache.Instance, 'GetSystemUser').mockReturnValue(undefined as never);
+        const pendingSpy = vi.spyOn(serverEngine, 'pendingCompanies');
+
+        await expect(new BuildJournalEntryBatchesAction().Run(runParams([]))).rejects.toThrow(/runs only as the MJ system user/);
+        expect(pendingSpy).not.toHaveBeenCalled();
+    });
+
+    it('lets the system user make an attended build behind the CFO approval gate', async () => {
+        vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue(['CO-1']);
+        const buildBatchSpy = vi.spyOn(serverEngine, 'buildJournalEntryBatch')
+            .mockImplementation(async (companyId) => buildResult(companyId));
+
+        await new BuildJournalEntryBatchesAction().Run(runParams([]));
 
         expect(buildBatchSpy).toHaveBeenCalledTimes(1);
         expect(buildBatchSpy.mock.calls[0][5]).toBeInstanceOf(serverEngine.TasksAppApprovalGate);

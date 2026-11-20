@@ -1,7 +1,8 @@
 import { LogError, Metadata, type IMetadataProvider, type UserInfo } from '@memberjunction/core';
 import { ActionResultSimple, RunActionParams } from '@memberjunction/actions-base';
 import { BaseAction } from '@memberjunction/actions';
-import { RegisterClass } from '@memberjunction/global';
+import { RegisterClass, UUIDsEqual } from '@memberjunction/global';
+import { UserCache } from '@memberjunction/generic-database-provider';
 import {
   assertAutoPostCaller,
   assertAutoPostPolicy,
@@ -31,7 +32,10 @@ import { AddDays, BusinessTimeZoneEngine, CalendarDayIn, FromCalendarDay, IsBefo
  *
  * Two modes:
  *   - DEFAULT (attended, A-US7): build only, behind the bizapps-tasks CFO approval gate. Batches
- *     land `Pending` and wait for a human decision. Nothing about this path changed.
+ *     land `Pending` and wait for a human decision. Like AutoPost, this path runs only as the MJ
+ *     system user the scheduler resolves — a person builds through the Batches workspace's
+ *     `Accounting.BuildJournalEntryBatch` operation, which checks the Finance role; a person
+ *     running this action would skip that check.
  *   - AutoPost (unattended, A-US5/A-US6): build → approve → dispatch to the ERP per company through
  *     the engine's `autoPostJournalEntryBatch`, which holds the scheduled-posting approval waiver and
  *     its include-list policy (`assertAutoPostPolicy`) and its system-user restriction
@@ -54,6 +58,7 @@ export class BuildJournalEntryBatchesAction extends BaseAction {
     const targetSystem = readParam<JournalEntryBatchTargetSystem>(params, 'TargetSystem') ?? 'BusinessCentral';
     const autoPost = isTrue(readParam<boolean | string>(params, 'AutoPost'));
     if (autoPost) assertAutoPostCaller(user);
+    else assertSystemUser(user);
     await BusinessTimeZoneEngine.Instance.Config(false, user, provider);
     const options = readBatchOptions(params);
     if (autoPost) assertAutoPostPolicy(options);
@@ -69,6 +74,17 @@ export class BuildJournalEntryBatchesAction extends BaseAction {
 function readParam<T>(params: RunActionParams, name: string): T | undefined {
   const value = params.Params.find(p => p.Name === name)?.Value;
   return (value ?? undefined) as T | undefined;
+}
+
+/** Fails closed when the user cache does not hold the system user. */
+function assertSystemUser(contextUser: UserInfo): void {
+  const systemUser = UserCache.Instance.GetSystemUser();
+  if (!systemUser || !contextUser?.ID || !UUIDsEqual(contextUser.ID, systemUser.ID)) {
+    throw new Error(
+      'No batches were built: this action runs only as the MJ system user, which the scheduled build job runs as. ' +
+      'Build a batch from the Batches workspace instead, which checks the Finance role.',
+    );
+  }
 }
 
 /** A scheduled-job Static param arrives JSON-parsed when it can be, and as a raw string when it

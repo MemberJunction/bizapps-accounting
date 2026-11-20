@@ -1022,7 +1022,7 @@ export async function resolveERPAccount(
   const p = resolveProviders(provider);
   const glRes = await p.rv.RunView<GLAccountWireFields>(
     {
-      EntityName: GL_ENTITY, ExtraFilter: `ID='${glAccountId}'`,
+      EntityName: GL_ENTITY, ExtraFilter: `ID=${sqlGuidLiteral(glAccountId, 'resolveERPAccount: GL account id')}`,
       Fields: ['Code', 'ExternalSystem', 'ExternalAccountID', 'ExternalBankAccountNumber'], ResultType: 'simple', BypassCache: true,
     },
     contextUser,
@@ -1858,7 +1858,7 @@ async function postOrFail(
 async function loadSummaryLines(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo, p: Providers): Promise<mjBizAppsAccountingJournalEntryLineEntity[]> {
   if (!batch.SummaryJournalEntryID) return [];
   const res = await p.rv.RunView<mjBizAppsAccountingJournalEntryLineEntity>(
-    { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${batch.SummaryJournalEntryID}'`, OrderBy: 'LineNumber', ResultType: 'entity_object', BypassCache: true, IgnoreMaxRows: true },
+    { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID=${sqlGuidLiteral(batch.SummaryJournalEntryID, 'loadSummaryLines: summary journal entry id')}`, OrderBy: 'LineNumber', ResultType: 'entity_object', BypassCache: true, IgnoreMaxRows: true },
     contextUser,
   );
   // Loud on failure: an empty result here would send the ERP an empty journal.
