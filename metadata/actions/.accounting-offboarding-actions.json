@@ -1,0 +1,88 @@
+[
+  {
+    "fields": {
+      "Name": "Accounting: List Offboarding Holdings",
+      "CategoryID": "@lookup:MJ: Action Categories.Name=Offboarding Holdings",
+      "Description": "Lists what a departing user holds in Accounting: every company profile whose CFO approver is that user. Only a company's own CFO approver may name a successor, so each item is listed as not reassignable, with a note to set a new approver in Company Setup.",
+      "Type": "Custom",
+      "DriverClass": "Accounting.ListOffboardingHoldings",
+      "IconClass": "fa-solid fa-user-minus",
+      "UserPrompt": "List the accounting responsibilities a departing user holds.",
+      "CodeApprovalStatus": "Approved",
+      "Status": "Active"
+    },
+    "primaryKey": {
+      "ID": "0634CEE4-A86B-41E0-8040-61D8BD73F71F"
+    },
+    "relatedEntities": {
+      "MJ: Action Params": [
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "LeaverUserID",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "The departing user's MJ User ID. Give this, LeaverEmployeeID, or both."
+          },
+          "primaryKey": {
+            "ID": "5ED13FA3-5269-434B-A977-BDAFC8BBD5DA"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "LeaverEmployeeID",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "The departing user's MJ Employee ID. Resolved to the users linked to that employee."
+          },
+          "primaryKey": {
+            "ID": "EEECD10B-FA6F-4A42-93A3-B6306688DA4F"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "Holdings",
+            "Type": "Output",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "JSON array of holdings (App, Domain, Kind, KindLabel, EntityName, RecordID, Label, CanReassign, Note). Kind is CFO_APPROVER; CanReassign is always false."
+          },
+          "primaryKey": {
+            "ID": "DF09342D-443D-47FE-8ADF-0746365326B6"
+          }
+        }
+      ],
+      "MJ: Action Result Codes": [
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "ResultCode": "SUCCESS",
+            "IsSuccess": true,
+            "Description": "The leaver resolved; Holdings lists what they hold (possibly nothing)."
+          },
+          "primaryKey": {
+            "ID": "4BC943E6-1984-4469-BF02-D430FA31DA07"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "ResultCode": "INVALID_INPUT",
+            "IsSuccess": false,
+            "Description": "Neither LeaverUserID nor LeaverEmployeeID was given, valid, or matched a user or employee."
+          },
+          "primaryKey": {
+            "ID": "9449AFBA-794D-42A9-A56A-A866C131DBE3"
+          }
+        }
+      ]
+    }
+  }
+]

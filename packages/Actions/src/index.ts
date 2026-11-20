@@ -3,3 +3,4 @@ export * from './BuildJournalEntryBatchesAction';
 export * from './RunERPSyncAction';
 export * from './CreateBusinessCentralJournalEntryWithDimensionsAction';
 export * from './DispatchApprovedJournalEntryBatchesAction';
+export * from './ListOffboardingHoldingsAction';
