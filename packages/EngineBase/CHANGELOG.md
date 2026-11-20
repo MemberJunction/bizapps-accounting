@@ -1,5 +1,17 @@
 # @mj-biz-apps/accounting-engine-base
 
+## 1.0.0
+
+### Minor Changes
+
+- 337333e: Wave 4 performance optimizations: O(1) Map-indexed lookups in AccountingEngineBase and bulk hydration for journal entry batch lock and post.
+
+### Patch Changes
+
+- Updated dependencies [3b8eab9]
+- Updated dependencies [65dd999]
+  - @mj-biz-apps/accounting-entities@1.0.0
+
 ## 0.28.1
 
 ### Patch Changes

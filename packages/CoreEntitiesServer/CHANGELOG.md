@@ -1,5 +1,21 @@
 # @mj-biz-apps/accounting-core-entities-server
 
+## 1.0.0
+
+### Minor Changes
+
+- 65dd999: A GL account can name the Business Central bank account it sits behind (`GLAccount.ExternalBankAccountNumber`). A batch then sends that account's lines to Business Central as Bank Account lines, so they post through the bank ledger, and a cash account with Direct Posting turned off no longer fails the batch. The GL account forms show the field; only Business Central asset accounts can carry it.
+- 337333e: Wave 4 performance optimizations: O(1) Map-indexed lookups in AccountingEngineBase and bulk hydration for journal entry batch lock and post.
+
+### Patch Changes
+
+- 381efc4: Restrict the `Accounting.BuildJournalEntryBatches` (attended path) and `Accounting.RunERPSync` scheduled actions to the MJ system user (failing closed when the user cache does not hold the system user), and route the remaining batch/GL-account `ExtraFilter` UUID interpolations in `JournalEntryBatchEngine` and `JournalEntryBatchEntityServer` through `sqlGuidLiteral`.
+- Updated dependencies [3b8eab9]
+- Updated dependencies [65dd999]
+- Updated dependencies [337333e]
+  - @mj-biz-apps/accounting-entities@1.0.0
+  - @mj-biz-apps/accounting-engine-base@1.0.0
+
 ## 0.28.1
 
 ### Patch Changes
