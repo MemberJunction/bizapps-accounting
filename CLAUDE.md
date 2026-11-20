@@ -109,8 +109,9 @@ git checkout -b my-feature-branch
 ### Branching Model: `next` → `main` Release Flow
 BAC uses a two-tier branching model (matching BCSaaS and MJ):
 
-- **`next`** — integration branch. All feature work merges here.
-- **`main`** — release branch. Only updated by the "Version Packages" PR (`changeset-release/main` → `main`). Pushes to `main` trigger the publish workflow.
+- **`next`** — integration branch, built on MJ Edge. All feature work merges here. It never versions or publishes.
+- **`lts/X.Y`** — release lines, one per MJ minor (see "Release lines" below). Changes reach them by backport from `next`.
+- **`main`** — release branch of the newest line. Only updated by the "Version Packages" PR (`changeset-release/main` → `main`). Pushes to `main` trigger the publish workflow.
 
 **Feature work flow:**
 1. Cut feature branch from `next` (not from `main`): `git checkout next && git pull && git checkout -b <feature-name>`
@@ -121,26 +122,25 @@ BAC uses a two-tier branching model (matching BCSaaS and MJ):
 **Release flow:** the "Version Packages" PR IS the release. Nobody opens a `next` → `main` PR
 and nobody dispatches a publish.
 
-1. `version.yml` fires on every push to `next` and maintains ONE **"Version Packages" PR**
-   (head `changeset-release/main`, base `main`), opened by a GitHub App so its checks run on
+1. `version.yml` fires on every push to a release line and maintains its **"Version Packages" PR**
+   (head `changeset-release/main`, base `main` for the newest line; `changeset-release/lts/X.Y` →
+   `lts/X.Y` for an older one), opened by a GitHub App so its checks run on
    their own: every package bumped, CHANGELOGs generated, `mj-app.json`'s `version` and
    `mjVersionRange` synced (`version:prepare`), and **`pnpm-lock.yaml` refreshed**. PRs into
    `main` run `release-readiness.yml` (the `rr:` checks) and `build.yml`.
 2. Merging it pushes to `main`, which triggers `publish.yml`: it validates, builds, runs
    `changeset publish` over npm OIDC, tags `vX.Y.Z` only if something actually shipped, and then
-   the App opens and merges a `release-back-merge/vX.Y.Z` → `next` PR to carry the release home.
+   the App opens and merges a `release-back-merge/vX.Y.Z` PR into the line `main` follows.
 
 **Rules:**
-- **Never commit directly to `main`.** Always go through `next` first (except for the Version Packages PR itself).
+- **Never commit directly to `main` or a line.** Always go through `next` first, then a `backport lts/X.Y` label (except for the Version Packages PR itself).
 - **Never hand-edit the version bump.** It is `changeset version`'s output, delivered by the
   Version Packages PR. Bumping a package.json by hand desynchronises it from the lockfile —
   `changeset version` rewrites internal dependency ranges and does NOT touch the lockfile,
   which is why the version script refreshes it in the same PR.
-- **Hotfixes that genuinely must bypass `next`** go through a PR to `main`. If the hotfix ships a
-  release, `publish.yml`'s back-merge PR carries it to `next`; if nothing published, open an
-  ordinary `main` → `next` PR yourself straight away.
-- **Never publish by dispatching `publish.yml` on `next`** — the job is guarded to
-  `refs/heads/main` and will not run.
+- **Hotfixes** land on `next` and reach the line by backport, like every other change.
+- **Never publish by dispatching `publish.yml` on `next`** — it releases only from `main` or a
+  line that `release-lines.json` lists as releasing from its own branch.
 
 ---
 
@@ -159,21 +159,25 @@ and nobody dispatches a publish.
   - Run `pnpm install` at the repository root (NOT within the package directory)
   - Never run an install inside individual package directories
 
+## Release lines
+
+`next` is built on MJ Edge and never publishes. Production releases come from release lines (`lts/<MJ major.minor>`), listed in `release-lines.json`. Land every change on `next` first, then add a `backport lts/X.Y` label; a PR that adds a migration needs a label for every open line, or its files listed as edge-only in `release-lines.json`. Never open a PR straight into a line or into `main`. Full rules, publishing and the line cut: [guides/RELEASE_LINES.md](guides/RELEASE_LINES.md).
+
 ## MemberJunction versions — the LTS line AIDP Next runs
 
-AIDP Next runs MemberJunction's 6.1 LTS line, pinned exactly in `aidp-next/package.json`. This repo builds, tests and runs CodeGen against that same version, so what passes here is what runs there (bc-aidp-next-golive#298).
+AIDP Next runs MemberJunction's 6.2 LTS line (6.2.1), pinned exactly in `aidp-next/package.json`. This repo releases from the matching release line, `lts/6.2`, and builds, tests and runs CodeGen against that same version, so what passes here is what runs there (bc-aidp-next-golive#298). On a release line every MJ range, override and `mj-app.json`'s `mjVersionRange` is capped at the line's MJ minor (`>=6.2.1 <6.3.0`); the cut sets them and `lines: mj pin` keeps them there. The caret ranges below describe `next`.
 
-- **Declared ranges.** In a published package, `@memberjunction/*` (and any other app's `@mj-biz-apps/*`) is a **peer** with a caret range, `^6.1.N`, and never appears in `dependencies`: the host installs one copy, and a `~6.1.N` or exact peer makes every 6.2 host install a second 6.1 tree, which splits the ClassFactory. Each peer also has a `devDependencies` entry in the same package: the same caret floor for MJ, `^6.1.N`, where 6.1.N is the version AIDP Next runs, and an exact version for another app's package. The lockfile resolves MJ to that LTS release, so builds, tests and CodeGen run against what AIDP Next runs. Never an edge or prerelease range (`6.1.0-edge.x` sorts *before* 6.1.0 and has none of the LTS fixes). `.github/scripts/check-dependency-model.mjs` enforces this in CI. Packages MJ versions separately (`@memberjunction/connector-*`, `@memberjunction/skyway-*`) keep their own ranges.
-- **Overrides (`overrides:` in `pnpm-workspace.yaml`).** `@memberjunction/core` and `@memberjunction/global` carry the same caret floor as every other MJ range, `^6.1.N` (for example `"^6.1.5"`), so every request in the graph resolves to one copy. Two copies of `core` split the ClassFactory: registrations land in one factory while the resolver reads the other, and nothing errors. Overrides are workspace-local and never published. They do not go under `package.json`'s `pnpm` field: pnpm 10.33 warns that it no longer reads that field, and the field is deprecated. Do not exact-pin sibling `@mj-biz-apps/*` packages here; how the apps declare each other is bc-aidp-next-golive#265.
+- **Declared ranges.** In a published package, `@memberjunction/*` (and any other app's `@mj-biz-apps/*`) is a **peer** with a caret range, `^6.2.N`, and never appears in `dependencies`: the host installs one copy, and a `~6.2.N` or exact peer makes every 6.3 host install a second 6.2 tree, which splits the ClassFactory. Each peer also has a `devDependencies` entry in the same package: the same caret floor for MJ, `^6.2.N`, where 6.2.N is the version AIDP Next runs, and an exact version for another app's package. The lockfile resolves MJ to that LTS release, so builds, tests and CodeGen run against what AIDP Next runs. Never an edge or prerelease range (`6.2.0-edge.x` sorts *before* 6.2.0 and has none of the LTS fixes). `.github/scripts/check-dependency-model.mjs` enforces this in CI. Packages MJ versions separately (`@memberjunction/connector-*`, `@memberjunction/skyway-*`) keep their own ranges.
+- **Overrides (`overrides:` in `pnpm-workspace.yaml`).** `@memberjunction/core` and `@memberjunction/global` carry the same caret floor as every other MJ range, `^6.2.N` (for example `"^6.2.1"`), so every request in the graph resolves to one copy. Two copies of `core` split the ClassFactory: registrations land in one factory while the resolver reads the other, and nothing errors. Overrides are workspace-local and never published. They do not go under `package.json`'s `pnpm` field: pnpm 10.33 warns that it no longer reads that field, and the field is deprecated. Do not exact-pin sibling `@mj-biz-apps/*` packages here; how the apps declare each other is bc-aidp-next-golive#265.
 - **One copy of each.** After any install, `pnpm why @memberjunction/core` must show a single version. A sibling app package that exact-pins an old MJ build brings a second copy in (for example `@mj-biz-apps/common-ng@5.37.0` pinned edge.3 packages); fix it by raising that package's floor, not with more overrides.
-- **Bumping to a new 6.1.N**, when AIDP Next moves: raise every `^6.1.N` floor, in peers, devDependencies and both overrides; `pnpm install`; confirm one copy; `mjVersionRange` in `mj-app.json` follows in the Version Packages PR (`ci/sync-mj-app-version.mjs`); rebuild the database from migrations on MJ core `v6.1.N` and regenerate (below); run the full test suite; add a `patch` changeset; commit the lockfile. If CI then fails on the lockfile although a clean local install works, GitHub is testing the merge with `next`: merge `next` in, run `pnpm install --no-frozen-lockfile`, and commit the lockfile.
-- **Never patch MemberJunction.** No `pnpm patch`, `patchedDependencies`, patch-package or `sed` against `@memberjunction/*` `dist/`. That is AIDP Next's hard rule (`.github/workflows/MJ_PATCH_REGISTER.md` in aidp-next). Fix MJ on its `next` branch and bring the fix to the line with the `backport lts/6.1` label, or with a hand-port PR against `lts/6.1` when the fix can't be isolated; then wait for the patch release.
+- **Bumping to a new 6.2.N**, when AIDP Next moves: raise every `^6.2.N` floor, in peers, devDependencies and both overrides; `pnpm install`; confirm one copy; `mjVersionRange` in `mj-app.json` follows in the Version Packages PR (`ci/sync-mj-app-version.mjs`); rebuild the database from migrations on MJ core `v6.2.N` and regenerate (below); run the full test suite; add a `patch` changeset; commit the lockfile. If CI then fails on the lockfile although a clean local install works, GitHub is testing the merge with `next`: merge `next` in, run `pnpm install --no-frozen-lockfile`, and commit the lockfile.
+- **Never patch MemberJunction.** No `pnpm patch`, `patchedDependencies`, patch-package or `sed` against `@memberjunction/*` `dist/`. That is AIDP Next's hard rule (`.github/workflows/MJ_PATCH_REGISTER.md` in aidp-next). Fix MJ on its `next` branch and bring the fix to the line with the `backport lts/6.2` label, or with a hand-port PR against `lts/6.2` when the fix can't be isolated; then wait for the patch release.
 
 ### CodeGen output must be reproducible from this repo
 
 Generated files are committed, and AIDP Next ships them as they are: it excludes every `__mj_BizApps*` schema from its own CodeGen and installs the published packages. So the committed output has to be what this repo's toolchain produces from its migrations.
 
-- Run CodeGen only with this repo's pinned MJ version, against a database built from migrations (MJ core `v6.1.N`, then the apps this one depends on, then this repo), after `mj sync push` of `metadata/`.
+- Run CodeGen only with this repo's pinned MJ version, against a database built from migrations (MJ core `v6.2.N`, then the apps this one depends on, then this repo), after `mj sync push` of `metadata/`.
 - Set an AI key in your gitignored `.env`: `AI_VENDOR_API_KEY__GeminiLLM` (every CodeGen prompt ranks Gemini first), or `AI_VENDOR_API_KEY__OpenRouterLLM`. Without one, CodeGen silently drops AI-written output: check-constraint `Validate*()` methods, display names, descriptions and form layouts.
 - Never hand-edit generated files, and never paste in generated output from another toolchain or another database. That is how OrderLine lost `OrderHeader`'s `@Field` (bc-aidp-next-golive#295).
 - Review what AI wrote. Validators, names and descriptions are not deterministic between runs.
@@ -438,9 +442,9 @@ that host's MJAPI and Explorer with the host's own launch configurations.
 
 ## GitHub Repository
 - Repository: https://github.com/MemberJunction/bizapps-accounting
-- Default branch: `main` (release branch — publishes on push)
+- Default branch: `main` (release branch of the newest line — publishes on push)
 - Integration branch: `next` (where feature PRs land)
-- Feature PRs target `next`. The only PR into `main` is the bot-maintained Version Packages PR (plus a rare hotfix).
+- Feature PRs target `next`. The only PRs into `main` or a line are the bot-maintained Version Packages and backport PRs.
 - See "Branching Model" section above for the full flow.
 
 ## Purpose
