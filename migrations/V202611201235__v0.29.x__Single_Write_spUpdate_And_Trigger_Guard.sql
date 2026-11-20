@@ -871,7 +871,9 @@ CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateGLAccount]
     @IsSystemSeeded bit = NULL,
     @Description_Clear bit = 0,
     @Description nvarchar(MAX) = NULL,
-    @IsControlAccount bit = NULL
+    @IsControlAccount bit = NULL,
+    @ExternalBankAccountNumber_Clear bit = 0,
+    @ExternalBankAccountNumber nvarchar(20) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -890,6 +892,7 @@ BEGIN
         [IsSystemSeeded] = ISNULL(@IsSystemSeeded, [IsSystemSeeded]),
         [Description] = CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, [Description]) END,
         [IsControlAccount] = ISNULL(@IsControlAccount, [IsControlAccount]),
+        [ExternalBankAccountNumber] = CASE WHEN @ExternalBankAccountNumber_Clear = 1 THEN NULL ELSE ISNULL(@ExternalBankAccountNumber, [ExternalBankAccountNumber]) END,
         [__mj_UpdatedAt] = GETUTCDATE()
     WHERE
         [ID] = @ID
