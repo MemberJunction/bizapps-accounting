@@ -247,7 +247,14 @@ function bothCases(ids: readonly string[]): string[] {
     return [...new Set(ids.flatMap((id) => [id.toLowerCase(), id.toUpperCase()]))];
 }
 
-/** IDs reach here only through uniqueUUIDs or IsValidUUID. */
+/**
+ * IDs reach here only through uniqueUUIDs or IsValidUUID — and that invariant is now ENFORCED
+ * rather than trusted, so a future caller can never interpolate unvalidated text into a filter.
+ */
 function quoteList(ids: readonly string[]): string {
+    const invalid = ids.find((id) => !IsValidUUID(id));
+    if (invalid !== undefined) {
+        throw new Error(`quoteList: '${invalid}' is not a UUID, so it cannot be placed in a SQL filter.`);
+    }
     return ids.map((id) => `'${id}'`).join(', ');
 }

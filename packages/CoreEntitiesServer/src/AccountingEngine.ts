@@ -22,6 +22,8 @@ import { DatabaseProviderBase, IMetadataProvider, LogError, UserInfo } from '@me
 import { BaseSingleton } from '@memberjunction/global';
 import {
   AccountingEngineBase,
+  FirstOpenDay,
+  IsInClosedBooks,
   runDraftPipeline,
   type CreateJournalEntriesInput,
   type CreateJournalEntriesResult,
@@ -31,7 +33,7 @@ import {
   type JournalEntryDraft,
   type NormalizedLine,
 } from '@mj-biz-apps/accounting-engine-base';
-import { FromCalendarDay } from '@mj-biz-apps/common-entities';
+import { FromCalendarDay, ToCalendarDay } from '@mj-biz-apps/common-entities';
 import { loadEffectiveDay, requireDateBound } from './BusinessDay.js';
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 
@@ -215,13 +217,32 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       return this.writeFailure(`The journal entry was not saved: entry type '${draft.EntryType}' was removed while the entry was being saved. Try again.`, undefined);
     }
 
+    // Closed-books floor at CREATION (#316): the redate operation refuses MOVING an entry into a
+    // closed month, and the batch build refuses a closed POSTING date — but a NEW entry could
+    // still be dated into a closed month, silently changing every subledger view keyed on
+    // EffectiveDate for a month finance has closed. Same rule, enforced at the same tier as the
+    // redate guard; a late-arriving booking (e.g. a replayed payment webhook) surfaces this as a
+    // typed refusal the caller holds-and-flags, never a silent backdated write.
+    const companyID = normalized[0].CompanyID;
+    const effectiveDay = await loadEffectiveDay(draft.EffectiveDate, EFFECTIVE_DATE_CONTEXT, contextUser, provider, companyID);
+    const closedThrough = ToCalendarDay(this.Base.BooksClosedThroughFor(companyID));
+    if (closedThrough && IsInClosedBooks(effectiveDay, closedThrough)) {
+      return {
+        Success: false,
+        Errors: [{
+          Code: 'EFFECTIVE_DATE_CLOSED_BOOKS',
+          Message: `The journal entry was not saved: its effective date ${effectiveDay} is in a month finance has closed ` +
+            `(the books are closed through ${closedThrough}). Date it ${FirstOpenDay(closedThrough)} or later, ` +
+            `or request that Finance reopen the month.`,
+        }],
+      };
+    }
+
     const je = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, contextUser);
     je.NewRecord();
-    je.CompanyID = normalized[0].CompanyID;
+    je.CompanyID = companyID;
     // The business day the caller meant, held as UTC midnight; `new Date()` of a date-time kept its UTC day (#427).
-    je.EffectiveDate = FromCalendarDay(
-      await loadEffectiveDay(draft.EffectiveDate, EFFECTIVE_DATE_CONTEXT, contextUser, provider, je.CompanyID),
-    );
+    je.EffectiveDate = FromCalendarDay(effectiveDay);
     je.EntryTypeID = entryType.ID;
     je.Status = 'Pending';
     je.Description = draft.Description ?? null;
