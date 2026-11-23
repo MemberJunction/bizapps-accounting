@@ -134,6 +134,12 @@
           <input class="mj-input" type="text" [(ngModel)]="Draft.ExternalAccountID" maxlength="100" placeholder="That system’s identifier" aria-label="External account ID" />
         </label>
 
+        <label class="gla-field">
+          <span class="gla-field__label">Business Central bank account</span>
+          <input class="mj-input" type="text" [(ngModel)]="Draft.ExternalBankAccountNumber" maxlength="20" placeholder="Bank account No., e.g. OPERATING" aria-label="Business Central bank account" />
+          <span class="gla-help">For a cash account behind a BC bank account. Batches post its lines to this bank account instead of the G/L account.</span>
+        </label>
+
         <label class="gla-field gla-field--wide">
           <span class="gla-field__label">Description</span>
           <textarea class="mj-textarea" rows="2" [(ngModel)]="Draft.Description" aria-label="Description"></textarea>

@@ -1,0 +1,38 @@
+-- =============================================================================
+-- PostgreSQL counterpart of V202611201235__v0.29.x__Single_Write_spUpdate_And_Trigger_Guard.sql
+-- =============================================================================
+-- Nothing to change on PostgreSQL. PostgreSQL already saves a record in one
+-- write; this file only keeps the two migration sets in step.
+--
+-- WHAT THE T-SQL FILE DOES
+--
+-- It regenerates the spUpdate* procedures so they set [__mj_UpdatedAt] in the
+-- UPDATE itself, and wraps each trgUpdate* trigger in
+-- IF NOT UPDATE([__mj_UpdatedAt]). On SQL Server trgUpdate* is an AFTER UPDATE
+-- trigger that runs a second UPDATE on the row to stamp __mj_UpdatedAt, so
+-- every BaseEntity.Save() wrote the row twice. With the change, a save writes
+-- once and the trigger stamps only UPDATEs that leave __mj_UpdatedAt out.
+-- spUpdateGLAccount is regenerated with ExternalBankAccountNumber
+-- (V202611131600), so that column keeps saving.
+--
+-- WHY POSTGRESQL NEEDS NONE OF IT
+--
+-- MJ's PostgreSQL CodeGen stamps __mj_UpdatedAt with a BEFORE UPDATE row
+-- trigger that assigns NEW."__mj_UpdatedAt" in place and returns NEW
+-- (PostgreSQLCodeGenProvider.generateTimestampTrigger). There is no second
+-- UPDATE, so every UPDATE is already one write, with or without the column in
+-- its SET list. MJ core's PostgreSQL counterpart of its own single-write
+-- migration (V202611121645__v6.3.x) is empty for the same reason.
+--
+-- This repository's migrations-pg chain creates neither the spUpdate*
+-- functions nor the __mj_UpdatedAt triggers for these tables: the converter
+-- skips T-SQL procedures and triggers (the earlier files carry them as SKIPPED
+-- comments), and CodeGen generates them on PostgreSQL from the current table
+-- columns. ExternalBankAccountNumber therefore needs no carrying over here
+-- either. The GRANT EXECUTE statements in the T-SQL file re-grant what the
+-- earlier PostgreSQL files already grant.
+--
+-- Runs once, in order, after V202611131600.
+-- =============================================================================
+
+SET search_path TO "__mj_BizAppsAccounting", public;
