@@ -1,5 +1,5 @@
 import { BaseEntity, EntitySaveOptions, EntityDeleteOptions, CompositeKey, ValidationResult, ValidationErrorInfo, ValidationErrorType, Metadata, ProviderType, DatabaseProviderBase, RunView } from "@memberjunction/core";
-import { RegisterClass } from "@memberjunction/global";
+import { RegisterClass, UUIDsEqual } from "@memberjunction/global";
 import { z } from "zod";
 
 export const loadModule = () => {
@@ -1329,7 +1329,7 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entry Types (vwJournalEntryTypes.ID)
         * * Description: The JournalEntryType classifying this entry (issue #24, BA-D29). Accounting seeds its own ledger-mechanics types; consuming apps seed their domain types as rows.`),
-    Status: z.union([z.literal('Batched'), z.literal('GLPosted'), z.literal('Pending')]).describe(`
+    Status: z.union([z.literal('Batched'), z.literal('GLPosted'), z.literal('Pending'), z.literal('Voided')]).describe(`
         * * Field Name: Status
         * * Display Name: Status
         * * SQL Data Type: nvarchar(20)
@@ -1339,7 +1339,8 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
     *   * Batched
     *   * GLPosted
     *   * Pending
-        * * Description: Lifecycle state: Pending | Batched | GLPosted (BA-D6). Locked after Batched; only GLPosted transition and GL-roundtrip fields may change.`),
+    *   * Voided
+        * * Description: Lifecycle state: Pending | Batched | GLPosted | Voided (BA-D6). Locked after Batched; only GLPosted transition and GL-roundtrip fields may change. Voided is terminal and reached only from Pending in no batch: the entry never reaches a batch, the ERP or a balance, and it and its lines are frozen.`),
     Description: z.string().nullable().describe(`
         * * Field Name: Description
         * * Display Name: Description
@@ -1453,6 +1454,22 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
         * * Description: The user who approved the manual entry: never ApprovalRequestedByUserID. Set together with ApprovedAt.`),
+    VoidReason: z.string().nullable().describe(`
+        * * Field Name: VoidReason
+        * * Display Name: Void Reason
+        * * SQL Data Type: nvarchar(1000)
+        * * Description: Why this entry was voided instead of posted. Required when Status = Voided and empty otherwise (CK_JournalEntry_VoidAudit).`),
+    VoidedAt: z.date().nullable().describe(`
+        * * Field Name: VoidedAt
+        * * Display Name: Voided At
+        * * SQL Data Type: datetimeoffset
+        * * Description: When the entry was voided. Required when Status = Voided and empty otherwise.`),
+    VoidedByUserID: z.string().nullable().describe(`
+        * * Field Name: VoidedByUserID
+        * * Display Name: Voided By User
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+        * * Description: User who voided the entry. Required when Status = Voided and empty otherwise.`),
     Company: z.string().describe(`
         * * Field Name: Company
         * * Display Name: Company Name
@@ -1493,6 +1510,50 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Field Name: ApprovedByUser
         * * Display Name: Approved By User
         * * SQL Data Type: nvarchar(100)`),
+    VoidedByUser: z.string().nullable().describe(`
+        * * Field Name: VoidedByUser
+        * * Display Name: Voided By User
+        * * SQL Data Type: nvarchar(100)`),
+    RootReversesJournalEntryID: z.string().nullable().describe(`
+        * * Field Name: RootReversesJournalEntryID
+        * * Display Name: Root Reverses Journal Entry
+        * * SQL Data Type: uniqueidentifier`),
+    ReversesJournalEntryIDDepth: z.number().nullable().describe(`
+        * * Field Name: ReversesJournalEntryIDDepth
+        * * Display Name: Reverses Journal Entry Depth
+        * * SQL Data Type: int`),
+    ReversesJournalEntryIDPath: z.string().nullable().describe(`
+        * * Field Name: ReversesJournalEntryIDPath
+        * * Display Name: Reverses Journal Entry Path
+        * * SQL Data Type: nvarchar(MAX)`),
+    ReversesJournalEntryIDIsLeaf: z.boolean().nullable().describe(`
+        * * Field Name: ReversesJournalEntryIDIsLeaf
+        * * Display Name: Reverses Journal Entry Is Leaf
+        * * SQL Data Type: bit`),
+    ReversesJournalEntryIDChildCount: z.number().nullable().describe(`
+        * * Field Name: ReversesJournalEntryIDChildCount
+        * * Display Name: Reverses Journal Entry Child Count
+        * * SQL Data Type: int`),
+    RootReversedByJournalEntryID: z.string().nullable().describe(`
+        * * Field Name: RootReversedByJournalEntryID
+        * * Display Name: Root Reversed By Journal Entry
+        * * SQL Data Type: uniqueidentifier`),
+    ReversedByJournalEntryIDDepth: z.number().nullable().describe(`
+        * * Field Name: ReversedByJournalEntryIDDepth
+        * * Display Name: Reversed By Journal Entry Depth
+        * * SQL Data Type: int`),
+    ReversedByJournalEntryIDPath: z.string().nullable().describe(`
+        * * Field Name: ReversedByJournalEntryIDPath
+        * * Display Name: Reversed By Journal Entry Path
+        * * SQL Data Type: nvarchar(MAX)`),
+    ReversedByJournalEntryIDIsLeaf: z.boolean().nullable().describe(`
+        * * Field Name: ReversedByJournalEntryIDIsLeaf
+        * * Display Name: Reversed By Journal Entry Is Leaf
+        * * SQL Data Type: bit`),
+    ReversedByJournalEntryIDChildCount: z.number().nullable().describe(`
+        * * Field Name: ReversedByJournalEntryIDChildCount
+        * * Display Name: Reversed By Journal Entry Child Count
+        * * SQL Data Type: int`),
     AnomalyOutcome: z.string().describe(`
         * * Field Name: AnomalyOutcome
         * * Display Name: Anomaly Outcome
@@ -2414,6 +2475,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     * * CompanyCode: The company code must be uppercase, contain only alphanumeric characters, underscores, or hyphens, and be between 2 and 20 characters in length.
     * * FiscalYearStartDay: The fiscal year start day must be a valid day of the month, between 1 and 31.
     * * FiscalYearStartMonth: The fiscal year start month must be a valid calendar month between 1 (January) and 12 (December).
+    * * ManualJournalEntryApprovalThreshold: Manual journal entry approval threshold cannot be negative; it must be zero or greater if specified.
     * * Table-Level: A company cannot be set as its own parent company. This prevents circular parent-child relationships in the accounting company hierarchy.
     * @public
     * @method
@@ -2424,6 +2486,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
         this.ValidateCompanyCodeFormatAndLength(result);
         this.ValidateFiscalYearStartDayRange(result);
         this.ValidateFiscalYearStartMonthRange(result);
+        this.ValidateManualJournalEntryApprovalThresholdNonNegative(result);
         this.ValidateParentAccountingCompanyIDNotSelfReferencing(result);
         result.Success = result.Success && (result.Errors.length === 0);
 
@@ -2489,13 +2552,30 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     }
 
     /**
+    * Manual journal entry approval threshold cannot be negative; it must be zero or greater if specified.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateManualJournalEntryApprovalThresholdNonNegative(result: ValidationResult) {
+    	if (this.ManualJournalEntryApprovalThreshold != null && this.ManualJournalEntryApprovalThreshold < 0) {
+    		result.Errors.push(new ValidationErrorInfo(
+    			"ManualJournalEntryApprovalThreshold",
+    			"Manual journal entry approval threshold must be greater than or equal to 0.",
+    			this.ManualJournalEntryApprovalThreshold,
+    			ValidationErrorType.Failure
+    		));
+    	}
+    }
+
+    /**
     * A company cannot be set as its own parent company. This prevents circular parent-child relationships in the accounting company hierarchy.
     * @param result - the ValidationResult object to add any errors or warnings to
     * @public
     * @method
     */
     public ValidateParentAccountingCompanyIDNotSelfReferencing(result: ValidationResult) {
-    	if (this.ParentAccountingCompanyID != null && this.ParentAccountingCompanyID === this.ID) {
+    	if (this.ParentAccountingCompanyID != null && UUIDsEqual(this.ParentAccountingCompanyID, this.ID)) {
     		result.Errors.push(new ValidationErrorInfo(
     			"ParentAccountingCompanyID",
     			"A company cannot be its own parent company.",
@@ -3213,25 +3293,19 @@ export class mjBizAppsAccountingAccountingEngineExtensionEntity extends BaseEnti
         this.Set('Configuration', value);
     }
 
-    private _ConfigurationObject_cached: mjBizAppsAccountingAccountingEngineExtensionEntity_IAccountingEngineExtensionConfiguration | null | undefined = undefined;
-    private _ConfigurationObject_lastRaw: string | null = null;
     /**
-    * Typed accessor for Configuration — returns parsed JSON as mjBizAppsAccountingAccountingEngineExtensionEntity_IAccountingEngineExtensionConfiguration.
-    * Uses lazy parsing with cache invalidation when the underlying raw value changes.
+    * Typed accessor for Configuration — a live view of the parsed JSON as mjBizAppsAccountingAccountingEngineExtensionEntity_IAccountingEngineExtensionConfiguration.
+    * Edits made through it, at any depth (`obj.a.b = 1`, `arr.push(x)`, `delete obj.k`), update the
+    * underlying Configuration field, so it becomes dirty and Save() persists them. If the raw value changes by
+    * any other route (Load, Set, revert) the next read re-parses, and objects obtained earlier are
+    * detached: writing through one throws. To clone, structuredClone or postMessage the value use
+    * ToPlainJSON() from @memberjunction/core.
     */
     get ConfigurationObject(): mjBizAppsAccountingAccountingEngineExtensionEntity_IAccountingEngineExtensionConfiguration | null {
-        const raw = this.Configuration;
-        if (raw !== this._ConfigurationObject_lastRaw) {
-            this._ConfigurationObject_cached = raw ? JSON.parse(raw) : null;
-            this._ConfigurationObject_lastRaw = raw;
-        }
-        return this._ConfigurationObject_cached!;
+        return this.GetJSONFieldObject<mjBizAppsAccountingAccountingEngineExtensionEntity_IAccountingEngineExtensionConfiguration>('Configuration');
     }
     set ConfigurationObject(value: mjBizAppsAccountingAccountingEngineExtensionEntity_IAccountingEngineExtensionConfiguration | null) {
-        const raw = value ? JSON.stringify(value) : null;
-        this.Configuration = raw;
-        this._ConfigurationObject_cached = value;
-        this._ConfigurationObject_lastRaw = raw;
+        this.SetJSONFieldObject<mjBizAppsAccountingAccountingEngineExtensionEntity_IAccountingEngineExtensionConfiguration>('Configuration', value);
     }
 
     /**
@@ -5420,7 +5494,7 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
     * @method
     */
     public ValidateParentGLAccountIDNotEqualToID(result: ValidationResult) {
-    	if (this.ParentGLAccountID != null && this.ParentGLAccountID === this.ID) {
+    	if (this.ParentGLAccountID != null && UUIDsEqual(this.ParentGLAccountID, this.ID)) {
     		result.Errors.push(new ValidationErrorInfo(
     			"ParentGLAccountID",
     			"A GL account cannot be its own parent account.",
@@ -5932,7 +6006,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchEntity extends BaseEntit
     * @method
     */
     public ValidateDueToAndDueFromGLAccountsAreDifferent(result: ValidationResult) {
-    	if (this.DueToGLAccountID === this.DueFromGLAccountID) {
+    	if (UUIDsEqual(this.DueToGLAccountID, this.DueFromGLAccountID)) {
     		result.Errors.push(new ValidationErrorInfo(
     			"DueToGLAccountID",
     			"The Due To GL Account cannot be the same as the Due From GL Account.",
@@ -5970,7 +6044,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchEntity extends BaseEntit
     * @method
     */
     public ValidateSourceCompanyNotEqualToTargetCompany(result: ValidationResult) {
-    	if (this.SourceCompanyID && this.TargetCompanyID && this.SourceCompanyID === this.TargetCompanyID) {
+    	if (this.SourceCompanyID && this.TargetCompanyID && UUIDsEqual(this.SourceCompanyID, this.TargetCompanyID)) {
     		result.Errors.push(new ValidationErrorInfo(
     			"TargetCompanyID",
     			"The target company must be different from the source company.",
@@ -6198,6 +6272,56 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
         Sequence: { Field: 'LineNumber', From: 1 },
   });
 
+
+  /**
+   * Retrieves all descendant records in the ReversesJournalEntryID hierarchy under this record using a single RunView query.
+   * @param maxDepth Optional maximum relative depth to retrieve.
+   * @returns Array of descendant entity instances ordered by hierarchy depth.
+   */
+  public async GetReversesJournalEntryIDDescendants<T extends BaseEntity = this>(maxDepth?: number): Promise<T[]> {
+    return this.GetDescendants<T>({ parentFieldName: 'ReversesJournalEntryID', maxDepth });
+  }
+
+  /**
+   * Retrieves all ancestor records in the ReversesJournalEntryID hierarchy from the top-level root down to this record using a single RunView query.
+   * @returns Array of ancestor entity instances ordered from root down to parent.
+   */
+  public async GetReversesJournalEntryIDAncestors<T extends BaseEntity = this>(): Promise<T[]> {
+    return this.GetAncestors<T>('ReversesJournalEntryID');
+  }
+
+  /**
+   * Retrieves all direct child records in the ReversesJournalEntryID hierarchy of this record using a single RunView query.
+   * @returns Array of direct child entity instances.
+   */
+  public async GetReversesJournalEntryIDChildren<T extends BaseEntity = this>(): Promise<T[]> {
+    return this.GetChildren<T>('ReversesJournalEntryID');
+  }
+
+  /**
+   * Retrieves all descendant records in the ReversedByJournalEntryID hierarchy under this record using a single RunView query.
+   * @param maxDepth Optional maximum relative depth to retrieve.
+   * @returns Array of descendant entity instances ordered by hierarchy depth.
+   */
+  public async GetReversedByJournalEntryIDDescendants<T extends BaseEntity = this>(maxDepth?: number): Promise<T[]> {
+    return this.GetDescendants<T>({ parentFieldName: 'ReversedByJournalEntryID', maxDepth });
+  }
+
+  /**
+   * Retrieves all ancestor records in the ReversedByJournalEntryID hierarchy from the top-level root down to this record using a single RunView query.
+   * @returns Array of ancestor entity instances ordered from root down to parent.
+   */
+  public async GetReversedByJournalEntryIDAncestors<T extends BaseEntity = this>(): Promise<T[]> {
+    return this.GetAncestors<T>('ReversedByJournalEntryID');
+  }
+
+  /**
+   * Retrieves all direct child records in the ReversedByJournalEntryID hierarchy of this record using a single RunView query.
+   * @returns Array of direct child entity instances.
+   */
+  public async GetReversedByJournalEntryIDChildren<T extends BaseEntity = this>(): Promise<T[]> {
+    return this.GetChildren<T>('ReversedByJournalEntryID');
+  }
     /**
     * Loads the MJ_BizApps_Accounting: Journal Entries record from the database
     * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Journal Entries record.
@@ -6217,25 +6341,96 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
 
     /**
     * Validate() method override for MJ_BizApps_Accounting: Journal Entries entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
+    * * Table-Level: Ensures that approval details are complete: approval date, approving user, and approval level must all be provided together when an entry is approved, or all remain empty if not approved.
+    * * Table-Level: Approval level and requesting user must either both be provided or both be empty, ensuring that approval requirements always record who requested the approval.
+    * * Table-Level: Journal entries that are assigned to a batch and have an approval level specified must have an approval date recorded.
     * * Table-Level: If a record's status is set to 'GLPosted', a GL Posted Date must be provided to record when the transaction was posted.
-    * * Table-Level: A journal entry must either be in 'Pending' status or be associated with a journal entry batch. Journal entries with any other status are required to have a batch assigned.
+    * * Table-Level: Journal entries must belong to a journal entry batch unless their status is Pending or Voided.
     * * Table-Level: Both the Linked Entity and Linked Record must be provided together, or both must be left empty, to ensure a complete link reference.
     * * Table-Level: A journal entry cannot be reversed by itself. The reversing journal entry must be a different record to prevent self-referential errors.
     * * Table-Level: A journal entry cannot reverse itself. The reversed journal entry reference must be different from the journal entry's own ID.
+    * * Table-Level: Voided journal entries cannot be assigned to a journal entry batch.
+    * * Table-Level: Voided records must include a void reason, voided date, and the user who voided the record, while non-voided records must have all void-related fields left blank.
     * @public
     * @method
     * @override
     */
     public override Validate(): ValidationResult {
         const result = super.Validate();
+        this.ValidateApprovalDetails(result);
+        this.ValidateApprovalLevelAndRequestedByUserID(result);
+        this.ValidateApprovalLevelBatchAndApprovedAt(result);
         this.ValidateGLPostedAtWhenStatusIsGLPosted(result);
-        this.ValidateJournalEntryBatchIDRequiredWhenNotPending(result);
+        this.ValidateJournalEntryBatchIDForStatus(result);
         this.ValidateLinkedEntityAndRecordBothOrNeither(result);
         this.ValidateReversedByJournalEntryIDNotEqualToID(result);
         this.ValidateReversesJournalEntryIDNotEqualToID(result);
+        this.ValidateStatusAndJournalEntryBatchID(result);
+        this.ValidateVoidFieldsForStatus(result);
         result.Success = result.Success && (result.Errors.length === 0);
 
         return result;
+    }
+
+    /**
+    * Ensures that approval details are complete: approval date, approving user, and approval level must all be provided together when an entry is approved, or all remain empty if not approved.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateApprovalDetails(result: ValidationResult): void {
+    	const hasApprovedAt = this.ApprovedAt != null;
+    	const hasApprovedByUserID = this.ApprovedByUserID != null;
+    	const hasApprovalLevel = this.ApprovalLevel != null && this.ApprovalLevel.trim().length > 0;
+    
+    	const isUnapproved = !hasApprovedAt && !hasApprovedByUserID;
+    	const isFullyApproved = hasApprovedAt && hasApprovedByUserID && hasApprovalLevel;
+    
+    	if (!isUnapproved && !isFullyApproved) {
+    		result.Errors.push(new ValidationErrorInfo(
+    			"ApprovedAt",
+    			"When approving an entry, approval timestamp, approving user, and approval level must all be specified. If not approved, approval timestamp and approving user must be blank.",
+    			this.ApprovedAt,
+    			ValidationErrorType.Failure
+    		));
+    	}
+    }
+
+    /**
+    * Approval level and requesting user must either both be provided or both be empty, ensuring that approval requirements always record who requested the approval.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateApprovalLevelAndRequestedByUserID(result: ValidationResult) {
+    	const hasApprovalLevel = this.ApprovalLevel != null && this.ApprovalLevel.trim().length > 0;
+    	const hasRequestedByUser = this.ApprovalRequestedByUserID != null;
+    
+    	if ((hasApprovalLevel && !hasRequestedByUser) || (!hasApprovalLevel && hasRequestedByUser)) {
+    		result.Errors.push(new ValidationErrorInfo(
+    			"ApprovalLevel",
+    			"Approval level and the user requesting approval must both be provided together, or both be left blank.",
+    			this.ApprovalLevel,
+    			ValidationErrorType.Failure
+    		));
+    	}
+    }
+
+    /**
+    * Journal entries that are assigned to a batch and have an approval level specified must have an approval date recorded.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateApprovalLevelBatchAndApprovedAt(result: ValidationResult) {
+    	if (this.ApprovalLevel != null && this.JournalEntryBatchID != null && this.ApprovedAt == null) {
+    		result.Errors.push(new ValidationErrorInfo(
+    			"ApprovedAt",
+    			"An approval date is required for batched journal entries that have an approval level specified.",
+    			this.ApprovedAt,
+    			ValidationErrorType.Failure
+    		));
+    	}
     }
 
     /**
@@ -6256,16 +6451,16 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     }
 
     /**
-    * A journal entry must either be in 'Pending' status or be associated with a journal entry batch. Journal entries with any other status are required to have a batch assigned.
+    * Journal entries must belong to a journal entry batch unless their status is Pending or Voided.
     * @param result - the ValidationResult object to add any errors or warnings to
     * @public
     * @method
     */
-    public ValidateJournalEntryBatchIDRequiredWhenNotPending(result: ValidationResult) {
-    	if (this.Status !== "Pending" && this.JournalEntryBatchID == null) {
+    public ValidateJournalEntryBatchIDForStatus(result: ValidationResult) {
+    	if (this.Status !== 'Voided' && this.Status !== 'Pending' && this.JournalEntryBatchID == null) {
     		result.Errors.push(new ValidationErrorInfo(
     			"JournalEntryBatchID",
-    			"A Journal Entry Batch ID is required for journal entries that are not in 'Pending' status.",
+    			"Journal Entry Batch is required unless the entry status is Pending or Voided.",
     			this.JournalEntryBatchID,
     			ValidationErrorType.Failure
     		));
@@ -6299,7 +6494,7 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * @method
     */
     public ValidateReversedByJournalEntryIDNotEqualToID(result: ValidationResult) {
-    	if (this.ReversedByJournalEntryID != null && this.ReversedByJournalEntryID === this.ID) {
+    	if (this.ReversedByJournalEntryID != null && UUIDsEqual(this.ReversedByJournalEntryID, this.ID)) {
     		result.Errors.push(new ValidationErrorInfo(
     			"ReversedByJournalEntryID",
     			"A journal entry cannot be reversed by itself. Please select a different journal entry.",
@@ -6316,13 +6511,63 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * @method
     */
     public ValidateReversesJournalEntryIDNotEqualToID(result: ValidationResult) {
-    	if (this.ReversesJournalEntryID != null && this.ReversesJournalEntryID === this.ID) {
+    	if (this.ReversesJournalEntryID != null && UUIDsEqual(this.ReversesJournalEntryID, this.ID)) {
     		result.Errors.push(new ValidationErrorInfo(
     			"ReversesJournalEntryID",
     			"A journal entry cannot reverse itself. The Reverses Journal Entry ID must be different from the Journal Entry ID.",
     			this.ReversesJournalEntryID,
     			ValidationErrorType.Failure
     		));
+    	}
+    }
+
+    /**
+    * Voided journal entries cannot be assigned to a journal entry batch.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateStatusAndJournalEntryBatchID(result: ValidationResult) {
+    	if (this.Status === 'Voided' && this.JournalEntryBatchID != null) {
+    		result.Errors.push(new ValidationErrorInfo(
+    			"JournalEntryBatchID",
+    			"A voided journal entry cannot be associated with a journal entry batch.",
+    			this.JournalEntryBatchID,
+    			ValidationErrorType.Failure
+    		));
+    	}
+    }
+
+    /**
+    * Voided records must include a void reason, voided date, and the user who voided the record, while non-voided records must have all void-related fields left blank.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateVoidFieldsForStatus(result: ValidationResult) {
+    	const isVoided = this.Status === 'Voided';
+    	const hasVoidReason = this.VoidReason != null && this.VoidReason.trim().length > 0;
+    	const hasVoidedAt = this.VoidedAt != null;
+    	const hasVoidedBy = this.VoidedByUserID != null;
+    
+    	if (isVoided) {
+    		if (!hasVoidReason || !hasVoidedAt || !hasVoidedBy) {
+    			result.Errors.push(new ValidationErrorInfo(
+    				"Status",
+    				"Voided entries must specify a void reason, date voided, and the user who voided the record.",
+    				this.Status,
+    				ValidationErrorType.Failure
+    			));
+    		}
+    	} else {
+    		if (this.VoidReason != null || hasVoidedAt || hasVoidedBy) {
+    			result.Errors.push(new ValidationErrorInfo(
+    				"Status",
+    				"Entries that are not voided cannot have a void reason, voided date, or voided by user.",
+    				this.Status,
+    				ValidationErrorType.Failure
+    			));
+    		}
     	}
     }
 
@@ -6404,12 +6649,13 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     *   * Batched
     *   * GLPosted
     *   * Pending
-    * * Description: Lifecycle state: Pending | Batched | GLPosted (BA-D6). Locked after Batched; only GLPosted transition and GL-roundtrip fields may change.
+    *   * Voided
+    * * Description: Lifecycle state: Pending | Batched | GLPosted | Voided (BA-D6). Locked after Batched; only GLPosted transition and GL-roundtrip fields may change. Voided is terminal and reached only from Pending in no batch: the entry never reaches a batch, the ERP or a balance, and it and its lines are frozen.
     */
-    get Status(): 'Batched' | 'GLPosted' | 'Pending' {
+    get Status(): 'Batched' | 'GLPosted' | 'Pending' | 'Voided' {
         return this.Get('Status');
     }
-    set Status(value: 'Batched' | 'GLPosted' | 'Pending') {
+    set Status(value: 'Batched' | 'GLPosted' | 'Pending' | 'Voided') {
         this.Set('Status', value);
     }
 
@@ -6673,6 +6919,46 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     }
 
     /**
+    * * Field Name: VoidReason
+    * * Display Name: Void Reason
+    * * SQL Data Type: nvarchar(1000)
+    * * Description: Why this entry was voided instead of posted. Required when Status = Voided and empty otherwise (CK_JournalEntry_VoidAudit).
+    */
+    get VoidReason(): string | null {
+        return this.Get('VoidReason');
+    }
+    set VoidReason(value: string | null) {
+        this.Set('VoidReason', value);
+    }
+
+    /**
+    * * Field Name: VoidedAt
+    * * Display Name: Voided At
+    * * SQL Data Type: datetimeoffset
+    * * Description: When the entry was voided. Required when Status = Voided and empty otherwise.
+    */
+    get VoidedAt(): Date | null {
+        return this.Get('VoidedAt');
+    }
+    set VoidedAt(value: Date | null) {
+        this.Set('VoidedAt', value);
+    }
+
+    /**
+    * * Field Name: VoidedByUserID
+    * * Display Name: Voided By User
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+    * * Description: User who voided the entry. Required when Status = Voided and empty otherwise.
+    */
+    get VoidedByUserID(): string | null {
+        return this.Get('VoidedByUserID');
+    }
+    set VoidedByUserID(value: string | null) {
+        this.Set('VoidedByUserID', value);
+    }
+
+    /**
     * * Field Name: Company
     * * Display Name: Company Name
     * * SQL Data Type: nvarchar(50)
@@ -6760,6 +7046,105 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     */
     get ApprovedByUser(): string | null {
         return this.Get('ApprovedByUser');
+    }
+
+    /**
+    * * Field Name: VoidedByUser
+    * * Display Name: Voided By User
+    * * SQL Data Type: nvarchar(100)
+    */
+    get VoidedByUser(): string | null {
+        return this.Get('VoidedByUser');
+    }
+
+    /**
+    * * Field Name: RootReversesJournalEntryID
+    * * Display Name: Root Reverses Journal Entry
+    * * SQL Data Type: uniqueidentifier
+    */
+    get RootReversesJournalEntryID(): string | null {
+        return this.Get('RootReversesJournalEntryID');
+    }
+
+    /**
+    * * Field Name: ReversesJournalEntryIDDepth
+    * * Display Name: Reverses Journal Entry Depth
+    * * SQL Data Type: int
+    */
+    get ReversesJournalEntryIDDepth(): number | null {
+        return this.Get('ReversesJournalEntryIDDepth');
+    }
+
+    /**
+    * * Field Name: ReversesJournalEntryIDPath
+    * * Display Name: Reverses Journal Entry Path
+    * * SQL Data Type: nvarchar(MAX)
+    */
+    get ReversesJournalEntryIDPath(): string | null {
+        return this.Get('ReversesJournalEntryIDPath');
+    }
+
+    /**
+    * * Field Name: ReversesJournalEntryIDIsLeaf
+    * * Display Name: Reverses Journal Entry Is Leaf
+    * * SQL Data Type: bit
+    */
+    get ReversesJournalEntryIDIsLeaf(): boolean | null {
+        return this.Get('ReversesJournalEntryIDIsLeaf');
+    }
+
+    /**
+    * * Field Name: ReversesJournalEntryIDChildCount
+    * * Display Name: Reverses Journal Entry Child Count
+    * * SQL Data Type: int
+    */
+    get ReversesJournalEntryIDChildCount(): number | null {
+        return this.Get('ReversesJournalEntryIDChildCount');
+    }
+
+    /**
+    * * Field Name: RootReversedByJournalEntryID
+    * * Display Name: Root Reversed By Journal Entry
+    * * SQL Data Type: uniqueidentifier
+    */
+    get RootReversedByJournalEntryID(): string | null {
+        return this.Get('RootReversedByJournalEntryID');
+    }
+
+    /**
+    * * Field Name: ReversedByJournalEntryIDDepth
+    * * Display Name: Reversed By Journal Entry Depth
+    * * SQL Data Type: int
+    */
+    get ReversedByJournalEntryIDDepth(): number | null {
+        return this.Get('ReversedByJournalEntryIDDepth');
+    }
+
+    /**
+    * * Field Name: ReversedByJournalEntryIDPath
+    * * Display Name: Reversed By Journal Entry Path
+    * * SQL Data Type: nvarchar(MAX)
+    */
+    get ReversedByJournalEntryIDPath(): string | null {
+        return this.Get('ReversedByJournalEntryIDPath');
+    }
+
+    /**
+    * * Field Name: ReversedByJournalEntryIDIsLeaf
+    * * Display Name: Reversed By Journal Entry Is Leaf
+    * * SQL Data Type: bit
+    */
+    get ReversedByJournalEntryIDIsLeaf(): boolean | null {
+        return this.Get('ReversedByJournalEntryIDIsLeaf');
+    }
+
+    /**
+    * * Field Name: ReversedByJournalEntryIDChildCount
+    * * Display Name: Reversed By Journal Entry Child Count
+    * * SQL Data Type: int
+    */
+    get ReversedByJournalEntryIDChildCount(): number | null {
+        return this.Get('ReversedByJournalEntryIDChildCount');
     }
 
     /**

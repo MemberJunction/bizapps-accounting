@@ -147,7 +147,7 @@ has no `Save()` override. Three first-save behaviors were retired:
 *(Period generation was REMOVED 2026-07-06 — periods live in the ERP, CH-1.)*
 
 <a id="je-lifecycle"></a>
-### 5.2 JE lifecycle (Pending → Batched → GLPosted) — updated 2026-07-06
+### 5.2 JE lifecycle (Pending → Batched → GLPosted, or Pending → Voided) — updated 2026-11-16
 JEs are **single-company** (D3: header `CompanyID`; every line's GL account belongs to it).
 The front door for external callers is **`Accounting.CreateJournalEntry`** (§2) — its pipeline
 validates shape/entry type/accounts/dimensions, merges duplicate lines (debits ordered first),
@@ -156,6 +156,13 @@ refuses a draft that spans companies, checks balance, and writes atomically. Hoo
   swapped, back-referenced both ways, dated the later of today's business day and the original's
   `EffectiveDate`.
 - **W9** attachment validation — a non-null `FileID` must reference an existing `__mj.File`.
+- **Void** (golive #378, D15 amendment) — `SaveVoided(reason, userID)` moves a saved, Pending,
+  unbatched entry to the terminal `Voided` status and stamps `VoidReason` / `VoidedAt` /
+  `VoidedByUserID`. Called only by `Accounting.VoidPendingJournalEntries`, all or nothing, in the
+  caller's transaction. Database floor: `CK_JournalEntry_VoidAudit`, `CK_JournalEntry_VoidedHasNoBatch`,
+  and `trg_JournalEntry_VoidRules` (50040 only from Pending, 50041 frozen, 50042 no delete) with
+  `trg_JEL_VoidedFrozen` (50043) and `trg_JELD_VoidedFrozen` (50044). Batch builds, the ERP send and
+  balances select Pending / Batched / GLPosted by name, so a voided entry is never among them.
 - **F1** `validateJournalEntry()` — retired 2026-07-24: its rules run on every save, in
   `JournalEntryEntity.Validate()` (two-line minimum, balance) and
   `JournalEntryEntityServer.ValidateAsync()` (GL accounts exist, are active and belong to the JE's company).

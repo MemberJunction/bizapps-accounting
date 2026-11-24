@@ -693,7 +693,7 @@ export async function buildJournalEntryBatchFromExplicitIds(
   if (stale.length > 0) {
     throw new JournalEntryBatchFromViewError(
       `The batch was not built: ${stale.length} selected entr${stale.length === 1 ? 'y is' : 'ies are'} no longer Pending ` +
-      `(batched or posted since the preview): ${stale.join(', ')}. Refresh the preview and rebuild.`,
+      `(batched, posted or voided since the preview): ${stale.join(', ')}. Refresh the preview and rebuild.`,
     );
   }
   await assertOnOrAfterPostingStart(rows, contextUser, p);
@@ -828,7 +828,9 @@ function dropAwaitingApproval(ids: string[], viewRows: Array<{ ID: string; Appro
 
 /**
  * PURE classification of a view's JE rows: Pending → batchable; GLPosted/Batched → excluded when
- * the (default-on) filter allows overlap, else a loud reject; any other status → always reject.
+ * the (default-on) filter allows overlap, else a loud reject; Voided → always excluded, since a voided
+ * entry is never batched and a view listing one is not a mistake (golive #378); any other status →
+ * always reject.
  * Deterministic + no I/O so it is unit-testable without a live view.
  */
 export function classifyViewEntries(
@@ -844,6 +846,7 @@ export function classifyViewEntries(
     if (r.Status === 'Pending') pending.push(r.ID);
     else if (r.Status === 'GLPosted') (excludePosted ? excluded : rejected).push(`${r.ID} (posted)`);
     else if (r.Status === 'Batched') (excludeLocked ? excluded : rejected).push(`${r.ID} (locked)`);
+    else if (r.Status === 'Voided') excluded.push(`${r.ID} (voided)`);
     else rejected.push(`${r.ID} (${r.Status})`);
   }
   return { pending, rejected, excluded };

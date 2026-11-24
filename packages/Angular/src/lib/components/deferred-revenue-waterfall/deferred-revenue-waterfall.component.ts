@@ -405,12 +405,16 @@ function toCents(amount: number): number {
  * A reversal itself never shows: its lines swap the original's sides, and the waterfall reads one side
  * as a positive amount. An original whose reversal's day is not known yet is left out, as before #430,
  * until `loadReversalDays` answers.
+ *
+ * A voided entry never shows either: it was cancelled before it left the subledger, so it recognizes
+ * nothing, on any day (golive #378).
  */
 function isStanding(
     je: mjBizAppsAccountingJournalEntryEntity,
     reversalDays: Map<string, string>,
     today: string,
 ): boolean {
+    if (je.Status === 'Voided') return false;
     if (je.ReversesJournalEntryID != null) return false;
     if (je.ReversedByJournalEntryID == null) return true;
     const reversalDay = reversalDays.get(je.ReversedByJournalEntryID.toLowerCase());

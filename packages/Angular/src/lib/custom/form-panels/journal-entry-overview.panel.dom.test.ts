@@ -56,4 +56,18 @@ describe('JournalEntryOverviewPanel — "Build a batch…" needs the batch-opera
     expect(html).toMatch(/@if \(MayBuild\) \{\s*<button[^>]*\(click\)="OpenBatchBuilder\(\)"/);
     expect(html).toMatch(/\}\s*<span class="mja-je-ov-fact__hint">Not yet batched\.<\/span>/);
   });
+
+  it('draws a voided entry as Pending then Voided, never on the way to the GL (golive #378)', () => {
+    signIn(false);
+    const panel = TestBed.createComponent(JournalEntryOverviewPanel).componentInstance;
+    (panel as unknown as { Record: { Status: string } }).Record = { Status: 'Voided' };
+    expect(panel.IsVoided).toBe(true);
+    expect(panel.Timeline.map(s => [s.Key, s.Done, s.Current])).toEqual([['Pending', true, false], ['Voided', true, true]]);
+  });
+
+  it('offers no batch build on a voided entry', () => {
+    const html = readFileSync(join(__dirname, 'journal-entry-overview.panel.html'), 'utf8');
+    expect(html).toMatch(/@else if \(IsVoided\) \{\s*<span class="mja-je-ov-fact__hint">Voided; never batched\.<\/span>/);
+  });
 });
+

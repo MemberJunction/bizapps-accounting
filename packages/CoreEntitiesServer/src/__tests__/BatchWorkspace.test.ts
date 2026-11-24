@@ -58,6 +58,13 @@ describe('classifyViewEntries (view snapshot → batchable / excluded / rejected
     expect(out.excluded).toEqual([]);
   });
 
+  it('a voided entry is always excluded, never batched, whatever the filters (golive #378)', () => {
+    for (const options of [{}, { excludePosted: false, excludeLocked: false }]) {
+      const out = classifyViewEntries([{ ID: 'v1', Status: 'Voided' }], options);
+      expect(out).toEqual({ pending: [], rejected: [], excluded: ['v1 (voided)'] });
+    }
+  });
+
   it('an unknown status is ALWAYS a reject regardless of filters', () => {
     const out = classifyViewEntries([{ ID: 'x1', Status: 'Cancelled' }]);
     expect(out.rejected).toEqual(['x1 (Cancelled)']);

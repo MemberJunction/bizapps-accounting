@@ -89,10 +89,17 @@ const ORIGIN_PAIR_FIELDS = ['LinkedEntityID', 'LinkedRecordID'] as const;
  * and the entry would look ERP-posted without ever being batched, approved, or dispatched.
  */
 const JE_LEGAL_TRANSITIONS: Record<string, ReadonlyArray<string>> = {
-  Pending: ['Pending', 'Batched'],
+  Pending: ['Pending', 'Batched', 'Voided'],
   Batched: ['Batched', 'GLPosted', 'Pending'],
   GLPosted: ['GLPosted'],
+  Voided: ['Voided'],
 };
+
+/**
+ * The void audit (golive #378). Written only by `SaveVoided`, in the save that moves a Pending entry to
+ * Voided; CK_JournalEntry_VoidAudit and trg_JournalEntry_VoidRules are the database floor under this rule.
+ */
+const VOID_FIELDS = ['VoidReason', 'VoidedAt', 'VoidedByUserID'] as const;
 
 @RegisterClass(BaseEntity, JE_ENTITY)
 export class JournalEntryEntityServer extends JournalEntryEntity {
@@ -122,6 +129,12 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
    * EffectiveDate (golive #448). Server-only, like `writableApprovalFields`: no client save sets it.
    */
   private effectiveDateRedateInProgress = false;
+
+  /**
+   * True only while `SaveVoided` saves: the one save that may move an entry to Voided and write the
+   * void audit (golive #378). Server-only, like `effectiveDateRedateInProgress`.
+   */
+  private voidInProgress = false;
 
   /**
    * Whether the save in progress may change this saved entry's EffectiveDate: only the re-date
@@ -290,6 +303,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
         }
       }
     }
+    for (const message of this.voidProblems()) fail(message);
 
     // Manual-entry approval (golive #353, PR #463 review): the approval columns are written only by
     // this entity's approval routing and the decision path. Typed in by anyone else — e.g. the
@@ -615,8 +629,64 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     }
   }
 
-  /** The lines are deleted with the entry, so the standalone-line approval guard lets them go. */
+  /**
+   * Void this saved, Pending, unbatched entry (golive #378): the ONLY save that may set Status to
+   * Voided or write the void audit. Called by `Accounting.VoidPendingJournalEntries` after it has
+   * checked every entry it names. A voided entry never reaches a batch, the ERP or a balance, and
+   * nothing about it changes again.
+   */
+  public async SaveVoided(reason: string, voidedByUserID: string): Promise<boolean> {
+    if (!this.IsSaved) throw new Error('Only a saved journal entry is voided; an entry that was never saved needs no void.');
+    if (this.Status !== 'Pending' || this.JournalEntryBatchID) {
+      throw new Error(`Journal entry ${this.EntryNumber} is ${this.JournalEntryBatchID ? 'in a batch' : this.Status}, so it can no longer be voided. Reverse it instead.`);
+    }
+    if (!reason || reason.trim().length === 0) throw new Error(`Journal entry ${this.EntryNumber} was not voided: a void needs a reason.`);
+    if (!voidedByUserID) throw new Error(`Journal entry ${this.EntryNumber} was not voided: a void must name the user who voided it.`);
+    this.Status = 'Voided';
+    this.VoidReason = reason.trim();
+    this.VoidedAt = new Date();
+    this.VoidedByUserID = voidedByUserID;
+    const previous = this.voidInProgress;
+    this.voidInProgress = true;
+    try {
+      return await this.Save();
+    } finally {
+      this.voidInProgress = previous;
+    }
+  }
+
+  /**
+   * Why this save breaks the void rules, one sentence each; empty when it does not. Only `SaveVoided`
+   * may move an entry to Voided or write its audit, and a Voided entry never changes again.
+   */
+  private voidProblems(): string[] {
+    const problems: string[] = [];
+    const oldStatus = this.IsSaved ? (this.GetFieldByName('Status')?.OldValue as string | undefined) : undefined;
+    if (oldStatus === 'Voided' && this.Dirty) {
+      problems.push(`Journal entry ${this.EntryNumber} is voided and cannot be changed. Book a new entry if the amount is still owed.`);
+      return problems;
+    }
+    if (this.voidInProgress) return problems;
+    if (this.IsSaved && this.Status === 'Voided' && oldStatus !== 'Voided') {
+      problems.push('A journal entry is voided only through Accounting.VoidPendingJournalEntries, which records who voided it and why.');
+    }
+    const written = VOID_FIELDS.filter(f =>
+      this.IsSaved ? this.GetFieldByName(f)?.Dirty === true : this.Get(f) !== null && this.Get(f) !== undefined,
+    );
+    if (written.length > 0) {
+      problems.push(`${written.join(', ')} cannot be set directly. They are written when the entry is voided.`);
+    }
+    return problems;
+  }
+
+  /**
+   * The lines are deleted with the entry, so the standalone-line approval guard lets them go. A voided
+   * entry is never deleted: it is the record of what was staged and why it was voided (trg 50042).
+   */
   public override async Delete(options?: EntityDeleteOptions): Promise<boolean> {
+    if (this.Status === 'Voided') {
+      throw new Error(`Journal entry ${this.EntryNumber} is voided and cannot be deleted: it is the record of what was staged and why it was voided.`);
+    }
     return this.withLinesSavedThroughEntry(() => super.Delete(options));
   }
 

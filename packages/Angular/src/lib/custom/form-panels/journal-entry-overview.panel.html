@@ -23,6 +23,12 @@
                             }
                         }
                     </div>
+                    @if (IsVoided) {
+                        <p class="mja-je-ov-note mja-je-ov-note--pad">
+                            Voided {{ VoidedAtLabel }} by {{ Record.VoidedByUser || 'unknown user' }}: {{ Record.VoidReason }}
+                            It was never batched, is not sent to the ERP and counts in no balance.
+                        </p>
+                    }
                     @if (AwaitsReview) {
                         <p class="mja-je-ov-note mja-je-ov-note--pad">
                             Awaiting review — the CFO gate is not yet in force; a Pending manual entry can still be batched.
@@ -53,6 +59,8 @@
                                         (click)="OpenBatch()">
                                         {{ Record.JournalEntryBatch || 'Open batch' }}
                                     </button>
+                                } @else if (IsVoided) {
+                                    <span class="mja-je-ov-fact__hint">Voided; never batched.</span>
                                 } @else {
                                     @if (MayBuild) {
                                         <button type="button" class="mja-je-link" (click)="OpenBatchBuilder()">

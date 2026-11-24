@@ -158,6 +158,7 @@ export class AccountingClearFinanceExceptionOperation extends BaseRemotableOpera
     public readonly ExecutionMode = 'Sync' as const;
     public readonly RequiredScope = "accounting:write";
     public readonly RequiresSystemUser = false;
+    public readonly ContractFingerprint = "ro_fp_27f6250fb4f360dc";
 }
 
 // ============================================================
@@ -174,6 +175,7 @@ export class AccountingGetFinanceExceptionTypesOperation extends BaseRemotableOp
     public readonly ExecutionMode = 'Sync' as const;
     public readonly RequiredScope = "accounting:read";
     public readonly RequiresSystemUser = false;
+    public readonly ContractFingerprint = "ro_fp_988655b84ff3b492";
 }
 
 // ============================================================
@@ -190,5 +192,6 @@ export class AccountingRaiseFinanceExceptionsOperation extends BaseRemotableOper
     public readonly ExecutionMode = 'Sync' as const;
     public readonly RequiredScope = "accounting:write";
     public readonly RequiresSystemUser = true;
+    public readonly ContractFingerprint = "ro_fp_5f877c8b6cca2910";
 }
 
