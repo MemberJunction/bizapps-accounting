@@ -31,7 +31,7 @@
 }
 
 <div class="dim-cols">
-  <aside class="dim-master" aria-label="Dimensions">
+  <aside class="dim-master" aria-label="Dimensions" data-mj-tour-anchor="accounting.dimensions.master">
     @for (d of FilteredDimensions; track d.ID) {
       <button type="button" class="dim-item" [class.dim-item--active]="d.ID === SelectedID" (click)="Select(d.ID)" [title]="d.ID">
         <span class="dim-item__code">{{ d.Code }}</span>

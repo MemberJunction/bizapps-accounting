@@ -1,0 +1,55 @@
+[
+  {
+    "fields": {
+      "Name": "General Ledger & Close Mastery",
+      "PathKey": "accounting.essentials",
+      "Description": "End-to-end BizApps Accounting curriculum covering company setup, chart of accounts, subledger batch dispatch, manual accruals, and fiscal period close.",
+      "ApplicationID": "@lookup:MJ: Applications.Name=Accounting",
+      "Status": "Active",
+      "Configuration": {
+        "AllowSkipOptional": true,
+        "ShowNextConcreteStep": true
+      }
+    },
+    "primaryKey": {
+      "ID": "B03CD7F8-9A25-4500-B7BE-E28E59163368"
+    },
+    "relatedEntities": {
+      "MJ: Tour Learning Path Tour Links": [
+        {
+          "fields": {
+            "TourID": "@lookup:MJ: Tours.TourKey=accounting.setup-coa",
+            "Sequence": 1,
+            "IsRequired": true,
+            "TourLearningPathID": "@parent:ID"
+          },
+          "primaryKey": {
+            "ID": "79D68C72-A7CB-4033-9437-1529DF609A79"
+          }
+        },
+        {
+          "fields": {
+            "TourID": "@lookup:MJ: Tours.TourKey=accounting.journal-batches",
+            "Sequence": 2,
+            "IsRequired": true,
+            "TourLearningPathID": "@parent:ID"
+          },
+          "primaryKey": {
+            "ID": "2839122A-6729-4524-A3BF-04894DE45FC8"
+          }
+        },
+        {
+          "fields": {
+            "TourID": "@lookup:MJ: Tours.TourKey=accounting.periods-exceptions",
+            "Sequence": 3,
+            "IsRequired": true,
+            "TourLearningPathID": "@parent:ID"
+          },
+          "primaryKey": {
+            "ID": "26B55752-3BB1-4A1E-B6AC-99DE264C84CA"
+          }
+        }
+      ]
+    }
+  }
+]
