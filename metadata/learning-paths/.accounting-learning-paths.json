@@ -15,13 +15,13 @@
       "ID": "B03CD7F8-9A25-4500-B7BE-E28E59163368"
     },
     "relatedEntities": {
-      "MJ: Learning Path Tours": [
+      "MJ: Tour Learning Path Tour Links": [
         {
           "fields": {
-            "LearningPathID": "@parent:ID",
             "TourID": "@lookup:MJ: Tours.TourKey=accounting.setup-coa",
             "Sequence": 1,
-            "IsRequired": true
+            "IsRequired": true,
+            "TourLearningPathID": "@parent:ID"
           },
           "primaryKey": {
             "ID": "79D68C72-A7CB-4033-9437-1529DF609A79"
@@ -29,10 +29,10 @@
         },
         {
           "fields": {
-            "LearningPathID": "@parent:ID",
             "TourID": "@lookup:MJ: Tours.TourKey=accounting.journal-batches",
             "Sequence": 2,
-            "IsRequired": true
+            "IsRequired": true,
+            "TourLearningPathID": "@parent:ID"
           },
           "primaryKey": {
             "ID": "2839122A-6729-4524-A3BF-04894DE45FC8"
@@ -40,10 +40,10 @@
         },
         {
           "fields": {
-            "LearningPathID": "@parent:ID",
             "TourID": "@lookup:MJ: Tours.TourKey=accounting.periods-exceptions",
             "Sequence": 3,
-            "IsRequired": true
+            "IsRequired": true,
+            "TourLearningPathID": "@parent:ID"
           },
           "primaryKey": {
             "ID": "26B55752-3BB1-4A1E-B6AC-99DE264C84CA"
