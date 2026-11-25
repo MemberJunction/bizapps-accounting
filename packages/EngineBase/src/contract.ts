@@ -65,6 +65,7 @@ export type JEErrorCode =
   | 'DIMENSION_VALUE_UNKNOWN'
   | 'UNBALANCED'
   | 'MULTI_COMPANY_DRAFT'
+  | 'EFFECTIVE_DATE_CLOSED_BOOKS'
   | 'INTERNAL_ERROR';
 
 export interface JEValidationError {
