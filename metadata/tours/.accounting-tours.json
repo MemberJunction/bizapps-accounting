@@ -355,7 +355,16 @@
             "TourID": "@parent:ID",
             "FromStepID": "593DB660-57CD-411D-9283-31824C23ED8B",
             "ToStepID": "53E1BA86-6C8E-4E34-A392-9574818F1BD5",
-            "Condition": "Choice:auto-subledger",
+            "Condition": {
+              "logic": "and",
+              "filters": [
+                {
+                  "field": "lastChoiceKey",
+                  "operator": "eq",
+                  "value": "auto-subledger"
+                }
+              ]
+            },
             "Label": "Automated Subledger Batches",
             "Priority": 100,
             "Sequence": 1,
@@ -370,7 +379,16 @@
             "TourID": "@parent:ID",
             "FromStepID": "593DB660-57CD-411D-9283-31824C23ED8B",
             "ToStepID": "2B35C1FF-D398-4E0C-8B54-3DC8E6A5CB63",
-            "Condition": "Choice:manual-accrual",
+            "Condition": {
+              "logic": "and",
+              "filters": [
+                {
+                  "field": "lastChoiceKey",
+                  "operator": "eq",
+                  "value": "manual-accrual"
+                }
+              ]
+            },
             "Label": "Manual Accruals & Reversing Entries",
             "Priority": 90,
             "Sequence": 2,
