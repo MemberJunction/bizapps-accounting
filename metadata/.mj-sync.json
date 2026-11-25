@@ -25,7 +25,10 @@
     "authorizations",
     "roles",
     "entity-permissions",
-    "authorization-roles"
+    "authorization-roles",
+    "tours",
+    "learning-paths",
+    "tour-publications"
   ],
   "sqlLogging": {
     "enabled": true,

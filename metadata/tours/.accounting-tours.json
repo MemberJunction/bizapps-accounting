@@ -1,0 +1,567 @@
+[
+  {
+    "fields": {
+      "Name": "Company Books, Chart of Accounts & Dimensions",
+      "TourKey": "accounting.setup-coa",
+      "Description": "Configure accounting company profiles and CFO approvers, explore hierarchical GL accounts and account roles, and organize reporting dimensions.",
+      "ApplicationID": "@lookup:MJ: Applications.Name=Accounting",
+      "RunInAuthenticatedHosts": true,
+      "Status": "Draft",
+      "EstimatedMinutes": 3,
+      "Priority": 90,
+      "DefaultGuideMode": "Visual",
+      "AllowAgentActions": false,
+      "Goal": {
+        "Type": "Navigation",
+        "Application": "Accounting",
+        "Description": "User reviews Company Setup, Chart of Accounts, GL Account Roles, and Reporting Dimensions."
+      },
+      "StartLocation": {
+        "Application": "Accounting",
+        "NavItem": "AccountingOverviewResource"
+      }
+    },
+    "primaryKey": {
+      "ID": "1B432625-025D-4849-B40D-63F47CEB4B08"
+    },
+    "relatedEntities": {
+      "MJ: Tour Steps": [
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "StepKey": "setup-coa-welcome",
+            "Sequence": 1,
+            "StepTypeID": "@lookup:MJ: Tour Step Types.Name=Modal",
+            "Title": "Welcome to BizApps Accounting",
+            "Body": "Manage your AR subsidiary ledger, balanced journal entries, multi-currency books, and ERP-ready batch dispatch from one workspace.",
+            "Configuration": {
+              "Variant": "welcome",
+              "PrimaryButtonText": "Explore Books & COA",
+              "ShowProgress": true
+            },
+            "Placement": "Center",
+            "Mode": "Show",
+            "Completion": {
+              "Type": "NextButton"
+            },
+            "OnMissing": "Center",
+            "IsOptional": false
+          },
+          "primaryKey": {
+            "ID": "A88AD5F9-40FA-42B1-ADEB-34713653AAF0"
+          }
+        },
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "StepKey": "company-cfo-setup",
+            "Sequence": 2,
+            "StepTypeID": "@lookup:MJ: Tour Step Types.Name=Spotlight",
+            "Title": "Company Profiles & CFO Approver",
+            "Body": "Open **Company Setup** to review each company's Company Code, Functional and Reporting Currencies, Fiscal Year Start, and **CFO Approver** — a batch can only be built and approved once its company has an assigned CFO.",
+            "Configuration": {
+              "ShowProgress": true
+            },
+            "Anchor": {
+              "Strategy": "Registered",
+              "Key": "accounting.company-setup.cfo"
+            },
+            "Placement": "Bottom",
+            "Mode": "Guide",
+            "Completion": {
+              "Type": "NextButton"
+            },
+            "OnMissing": "Center",
+            "IsOptional": false
+          },
+          "primaryKey": {
+            "ID": "833AD3D0-F8FC-40E2-8B98-4A01D26CFF4F"
+          }
+        },
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "StepKey": "coa-roles-dimensions",
+            "Sequence": 3,
+            "StepTypeID": "@lookup:MJ: Tour Step Types.Name=Spotlight",
+            "Title": "Chart of Accounts, Roles & Dimensions",
+            "Body": "Browse each company's hierarchical **Chart of Accounts** by account type, assign **GL Account Roles** so automated subledger postings resolve the right accounts, and configure **Reporting Dimensions** for department, project, or cost-center tagging.",
+            "Configuration": {
+              "ShowProgress": true
+            },
+            "Anchor": {
+              "Strategy": "Registered",
+              "Key": "accounting.coa.filters"
+            },
+            "Placement": "Bottom",
+            "Mode": "Guide",
+            "Completion": {
+              "Type": "NextButton"
+            },
+            "OnMissing": "Center",
+            "IsOptional": false
+          },
+          "primaryKey": {
+            "ID": "EC186A00-68ED-46BD-BCDC-81562DFF5E71"
+          }
+        },
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "StepKey": "setup-coa-summary",
+            "Sequence": 4,
+            "StepTypeID": "@lookup:MJ: Tour Step Types.Name=Modal",
+            "Title": "Books & Dimensions Ready",
+            "Body": "With companies, CFO approvers, GL accounts, and dimensions configured, you are ready to post journal entries and dispatch subledger batches to your ERP.",
+            "Configuration": {
+              "Variant": "summary",
+              "PrimaryButtonText": "Next: Batches & Posting",
+              "NextTourKey": "accounting.journal-batches",
+              "LearningPathKey": "accounting.essentials",
+              "ShowProgress": true
+            },
+            "Placement": "Center",
+            "Mode": "Show",
+            "Completion": {
+              "Type": "NextButton"
+            },
+            "OnMissing": "Center",
+            "IsOptional": false
+          },
+          "primaryKey": {
+            "ID": "DD7E6A8E-3144-44BD-ACBE-C91B72412433"
+          }
+        }
+      ],
+      "MJ: Tour Triggers": [
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "TriggerType": "FirstVisit",
+            "Configuration": {
+              "Application": "Accounting"
+            },
+            "Delivery": "Offer",
+            "CooldownDays": 30,
+            "Priority": 90,
+            "Status": "Active"
+          },
+          "primaryKey": {
+            "ID": "3F9C9C90-2024-45D8-930F-59E3AE61B7B3"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "fields": {
+      "Name": "Subledger Batch Dispatch & Journal Posting",
+      "TourKey": "accounting.journal-batches",
+      "Description": "Learn how subledger batches gather balanced journal entries for CFO approval and ERP dispatch, or explore manual accruals and reversing schedules.",
+      "ApplicationID": "@lookup:MJ: Applications.Name=Accounting",
+      "RunInAuthenticatedHosts": true,
+      "Status": "Draft",
+      "EstimatedMinutes": 4,
+      "Priority": 85,
+      "DefaultGuideMode": "Visual",
+      "AllowAgentActions": false,
+      "Goal": {
+        "Type": "Navigation",
+        "Application": "Accounting",
+        "Description": "User explores automated subledger batch dispatch or manual accrual and reversing journal workflows."
+      },
+      "StartLocation": {
+        "Application": "Accounting",
+        "NavItem": "BatchesResource"
+      }
+    },
+    "primaryKey": {
+      "ID": "CE83D8E7-0C62-4A5E-A194-9556FD83E19E"
+    },
+    "relatedEntities": {
+      "MJ: Tour Steps": [
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "StepKey": "batches-welcome",
+            "Sequence": 1,
+            "StepTypeID": "@lookup:MJ: Tour Step Types.Name=Modal",
+            "Title": "Subledger Batch Dispatch & Journal Posting",
+            "Body": "BizApps Accounting groups balanced journal entries into auditable batches for CFO approval and ERP dispatch, while supporting manual accruals and auto-reversing entries.",
+            "Configuration": {
+              "Variant": "welcome",
+              "PrimaryButtonText": "Explore Posting & Batches",
+              "ShowProgress": true
+            },
+            "Placement": "Center",
+            "Mode": "Show",
+            "Completion": {
+              "Type": "NextButton"
+            },
+            "OnMissing": "Center",
+            "IsOptional": false
+          },
+          "primaryKey": {
+            "ID": "A076CC75-4E27-4A3A-A928-7EE393238D82"
+          }
+        },
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "StepKey": "batch-dispatch-intake",
+            "Sequence": 2,
+            "StepTypeID": "@lookup:MJ: Tour Step Types.Name=Spotlight",
+            "Title": "Subledger Intake & Batch Dispatch",
+            "Body": "In **JE Batch Approvals** (`BatchDispatchDashboard`), inspect each batch's entry count, **Total Debits**, **Total Credits**, approval status, and target ERP system before approving or dispatching.",
+            "Configuration": {
+              "ShowProgress": true
+            },
+            "Anchor": {
+              "Strategy": "Registered",
+              "Key": "accounting.batches.dispatch-header"
+            },
+            "Placement": "Bottom",
+            "Mode": "Guide",
+            "Completion": {
+              "Type": "NextButton"
+            },
+            "OnMissing": "Center",
+            "IsOptional": false
+          },
+          "primaryKey": {
+            "ID": "3530D0C6-A946-42F6-B34A-B363EFE5E16B"
+          }
+        },
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "StepKey": "posting-workflow-choice",
+            "Sequence": 3,
+            "StepTypeID": "@lookup:MJ: Tour Step Types.Name=Choice",
+            "Title": "Choose a Journal Posting Workflow",
+            "Body": "Select whether you want to inspect automated subledger batch rules or manual accrual and reversing schedules.",
+            "Configuration": {
+              "Question": "Which posting workflow would you like to focus on?",
+              "Options": [
+                {
+                  "Key": "auto-subledger",
+                  "Label": "Automated Subledger Batches",
+                  "Description": "Post validated order, payment, and receivable batches automatically."
+                },
+                {
+                  "Key": "manual-accrual",
+                  "Label": "Manual Accruals & Reversing Entries",
+                  "Description": "Draft balanced journal entries with approval routing and auto-reversals."
+                }
+              ]
+            },
+            "Placement": "Center",
+            "Mode": "Guide",
+            "Completion": {
+              "Type": "NextButton"
+            },
+            "OnMissing": "Center",
+            "IsOptional": false
+          },
+          "primaryKey": {
+            "ID": "593DB660-57CD-411D-9283-31824C23ED8B"
+          }
+        },
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "StepKey": "auto-subledger-rules",
+            "Sequence": 4,
+            "StepTypeID": "@lookup:MJ: Tour Step Types.Name=Spotlight",
+            "Title": "Posting: Subledger Batch Rules & Audit",
+            "Body": "Validated order, payment, and AR subledger entries are locked into numbered batches. Use **Approve** / **Reject**, **Regenerate** to re-gather candidates, **Archive** to close without sending, or **Dispatch** to record the **ExternalJournalEntryBatchRef**.",
+            "Configuration": {
+              "ShowProgress": true
+            },
+            "Anchor": {
+              "Strategy": "NavItem",
+              "DriverClass": "BatchesResource"
+            },
+            "Placement": "Bottom",
+            "Mode": "Guide",
+            "Completion": {
+              "Type": "NextButton"
+            },
+            "OnMissing": "Center",
+            "IsOptional": false
+          },
+          "primaryKey": {
+            "ID": "53E1BA86-6C8E-4E34-A392-9574818F1BD5"
+          }
+        },
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "StepKey": "manual-accrual-reversals",
+            "Sequence": 5,
+            "StepTypeID": "@lookup:MJ: Tour Step Types.Name=Spotlight",
+            "Title": "Posting: Manual Journals & Reversing Schedules",
+            "Body": "Draft multi-currency manual journal entries with balanced debit/credit lines, attach dimension tags, and configure automatic **Reversing** schedules so period-end accruals unwind cleanly on the first day of the next period.",
+            "Configuration": {
+              "ShowProgress": true
+            },
+            "Anchor": {
+              "Strategy": "NavItem",
+              "DriverClass": "JournalEntriesCategoryResource"
+            },
+            "Placement": "Bottom",
+            "Mode": "Guide",
+            "Completion": {
+              "Type": "NextButton"
+            },
+            "OnMissing": "Center",
+            "IsOptional": false
+          },
+          "primaryKey": {
+            "ID": "2B35C1FF-D398-4E0C-8B54-3DC8E6A5CB63"
+          }
+        },
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "StepKey": "batches-summary",
+            "Sequence": 6,
+            "StepTypeID": "@lookup:MJ: Tour Step Types.Name=Modal",
+            "Title": "Batch & Journal Posting Summary",
+            "Body": "Every posted batch and manual journal keeps full line-level provenance and ERP dispatch status. Continue to Fiscal Period Close to learn how closed months and posting start dates protect finalized periods.",
+            "Configuration": {
+              "Variant": "summary",
+              "PrimaryButtonText": "Next: Period Close & Exceptions",
+              "NextTourKey": "accounting.periods-exceptions",
+              "LearningPathKey": "accounting.essentials",
+              "ShowProgress": true
+            },
+            "Placement": "Center",
+            "Mode": "Show",
+            "Completion": {
+              "Type": "NextButton"
+            },
+            "OnMissing": "Center",
+            "IsOptional": false
+          },
+          "primaryKey": {
+            "ID": "5FB86058-00A9-45C8-8989-7ED9A3DE0A5B"
+          }
+        }
+      ],
+      "MJ: Tour Step Paths": [
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "FromStepID": "593DB660-57CD-411D-9283-31824C23ED8B",
+            "ToStepID": "53E1BA86-6C8E-4E34-A392-9574818F1BD5",
+            "Condition": "Choice:auto-subledger",
+            "Label": "Automated Subledger Batches",
+            "Priority": 100,
+            "Sequence": 1,
+            "IsDefault": false
+          },
+          "primaryKey": {
+            "ID": "629A0B97-2829-49AC-945D-195E08DE4F69"
+          }
+        },
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "FromStepID": "593DB660-57CD-411D-9283-31824C23ED8B",
+            "ToStepID": "2B35C1FF-D398-4E0C-8B54-3DC8E6A5CB63",
+            "Condition": "Choice:manual-accrual",
+            "Label": "Manual Accruals & Reversing Entries",
+            "Priority": 90,
+            "Sequence": 2,
+            "IsDefault": false
+          },
+          "primaryKey": {
+            "ID": "D7C25C70-B413-4857-BD9F-3295C0C919AC"
+          }
+        },
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "FromStepID": "593DB660-57CD-411D-9283-31824C23ED8B",
+            "ToStepID": "53E1BA86-6C8E-4E34-A392-9574818F1BD5",
+            "Condition": null,
+            "Label": "Default: Automated Subledger Batches",
+            "Priority": 0,
+            "Sequence": 3,
+            "IsDefault": true
+          },
+          "primaryKey": {
+            "ID": "2F1F18A8-BA1C-40AB-A126-620DCC104F8E"
+          }
+        },
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "FromStepID": "53E1BA86-6C8E-4E34-A392-9574818F1BD5",
+            "ToStepID": "5FB86058-00A9-45C8-8989-7ED9A3DE0A5B",
+            "Condition": null,
+            "Label": "Continue to Summary",
+            "Priority": 10,
+            "Sequence": 1,
+            "IsDefault": true
+          },
+          "primaryKey": {
+            "ID": "B0A1198F-F63D-4D2D-A856-18123F9B8603"
+          }
+        },
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "FromStepID": "2B35C1FF-D398-4E0C-8B54-3DC8E6A5CB63",
+            "ToStepID": "5FB86058-00A9-45C8-8989-7ED9A3DE0A5B",
+            "Condition": null,
+            "Label": "Continue to Summary",
+            "Priority": 10,
+            "Sequence": 1,
+            "IsDefault": true
+          },
+          "primaryKey": {
+            "ID": "BC38D6A0-9215-42B2-B721-80E9077109EB"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "fields": {
+      "Name": "Fiscal Period Close, Approvals & Finance Exceptions",
+      "TourKey": "accounting.periods-exceptions",
+      "Description": "Enforce books-closed dates and posting start dates across companies, review manual entries in the approval queue, and clear finance exceptions before close.",
+      "ApplicationID": "@lookup:MJ: Applications.Name=Accounting",
+      "RunInAuthenticatedHosts": true,
+      "Status": "Draft",
+      "EstimatedMinutes": 3,
+      "Priority": 80,
+      "DefaultGuideMode": "Visual",
+      "AllowAgentActions": false,
+      "Goal": {
+        "Type": "Navigation",
+        "Application": "Accounting",
+        "Description": "User reviews Fiscal Periods, Posting Start Dates, and JE Approvals / Finance Exceptions."
+      },
+      "StartLocation": {
+        "Application": "Accounting",
+        "NavItem": "PeriodsResource"
+      }
+    },
+    "primaryKey": {
+      "ID": "6283686A-3E4C-4EBA-A05D-468CC057B481"
+    },
+    "relatedEntities": {
+      "MJ: Tour Steps": [
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "StepKey": "periods-welcome",
+            "Sequence": 1,
+            "StepTypeID": "@lookup:MJ: Tour Step Types.Name=Modal",
+            "Title": "Fiscal Period Close & Exceptions",
+            "Body": "Protect closed ERP months from late postings, control posting cutover dates, and resolve review items before feeding downstream FP&A cash plans.",
+            "Configuration": {
+              "Variant": "welcome",
+              "PrimaryButtonText": "Explore Period Close",
+              "ShowProgress": true
+            },
+            "Placement": "Center",
+            "Mode": "Show",
+            "Completion": {
+              "Type": "NextButton"
+            },
+            "OnMissing": "Center",
+            "IsOptional": false
+          },
+          "primaryKey": {
+            "ID": "45DE4785-7B6D-4C8F-8B4C-53AF4A6E6622"
+          }
+        },
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "StepKey": "fiscal-month-close",
+            "Sequence": 2,
+            "StepTypeID": "@lookup:MJ: Tour Step Types.Name=Spotlight",
+            "Title": "Closing Fiscal Months & Posting Start Dates",
+            "Body": "Use **Periods** to advance each company's **Books closed through** date once the ERP closes a month, or set a **Posting start date** so entries dated earlier stay out of future batches.",
+            "Configuration": {
+              "ShowProgress": true
+            },
+            "Anchor": {
+              "Strategy": "Registered",
+              "Key": "accounting.periods.header"
+            },
+            "Placement": "Bottom",
+            "Mode": "Guide",
+            "Completion": {
+              "Type": "NextButton"
+            },
+            "OnMissing": "Center",
+            "IsOptional": false
+          },
+          "primaryKey": {
+            "ID": "E91CCF1E-14D4-4707-BFF4-BB0FB6B942E7"
+          }
+        },
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "StepKey": "je-approvals-exceptions",
+            "Sequence": 3,
+            "StepTypeID": "@lookup:MJ: Tour Step Types.Name=Spotlight",
+            "Title": "JE Review Queue & Finance Exceptions",
+            "Body": "Inspect manual journal entries in the review queue (`ApprovalsResource`) and clear **Finance Exceptions** — such as unbalanced lines, missing GL account role mappings, or closed-period conflicts — before closing the books.",
+            "Configuration": {
+              "ShowProgress": true
+            },
+            "Anchor": {
+              "Strategy": "NavItem",
+              "DriverClass": "ApprovalsResource"
+            },
+            "Placement": "Bottom",
+            "Mode": "Guide",
+            "Completion": {
+              "Type": "NextButton"
+            },
+            "OnMissing": "Center",
+            "IsOptional": false
+          },
+          "primaryKey": {
+            "ID": "BA607A07-A5DB-4FA3-9138-84A8D5DA8283"
+          }
+        },
+        {
+          "fields": {
+            "TourID": "@parent:ID",
+            "StepKey": "periods-summary",
+            "Sequence": 4,
+            "StepTypeID": "@lookup:MJ: Tour Step Types.Name=Modal",
+            "Title": "Accounting Close & FP&A Handoff",
+            "Body": "Closed periods and reconciled subledger balances feed straight into **FP&A** cash flow forecasts and opening cash balances. Continue to FP&A when you are ready to model 13-week liquidity.",
+            "Configuration": {
+              "Variant": "summary",
+              "PrimaryButtonText": "Next: Cash Flow Forecasting",
+              "NextTourKey": "fpna.cash-flow-forecasts",
+              "LearningPathKey": "accounting.essentials",
+              "ShowProgress": true
+            },
+            "Placement": "Center",
+            "Mode": "Show",
+            "Completion": {
+              "Type": "NextButton"
+            },
+            "OnMissing": "Center",
+            "IsOptional": false
+          },
+          "primaryKey": {
+            "ID": "54697E06-554C-4F93-A01F-279AC5A0F8D2"
+          }
+        }
+      ]
+    }
+  }
+]
