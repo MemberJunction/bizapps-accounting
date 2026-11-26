@@ -11,7 +11,7 @@ import {
 } from '@mj-biz-apps/accounting-entities';
 import { JournalEntryBatchDispatchClient, JournalEntryBatchDecision } from './journal-entry-batch-dispatch.client';
 import { BatchAction, BatchActionDialogState } from './batch-action-dialog/batch-action-dialog.state';
-import { CompanyApprovers, IsErpAcceptedFailedBatch, LoadCompanyApprovers, MayArchiveBatch, MayCancelApprovedBatch, MayCancelPendingBatch, MayDecideBatch } from './batch-action-permission';
+import { CompanyApprovers, IsErpAcceptedFailedBatch, LoadCompanyApproversFromEngine, MayArchiveBatch, MayCancelApprovedBatch, MayCancelPendingBatch, MayDecideBatch } from './batch-action-permission';
 
 /** The generated batch Status union (rule 2c: derived, never hand-copied). */
 type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
@@ -414,12 +414,17 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
       rv.RunView<mjBizAppsAccountingJournalEntryBatchEntity>(
         {
           EntityName: BATCH_ENTITY,
+          Fields: [
+            'ID', 'JournalEntryBatchNumber', 'Status', 'TargetSystem', 'TotalEntries',
+            'TotalDebits', 'TotalCredits', 'ExternalJournalEntryBatchRef', 'ErrorMessage',
+            'ArchiveReason', 'CancelReason', 'CompanyID', 'BatchedByUserID', 'ApprovedByUserID',
+          ],
           OrderBy: 'BatchedAt DESC',
           ResultType: 'simple',
         },
         this.contextUser(),
       ),
-      LoadCompanyApprovers(rv, this.contextUser()),
+      LoadCompanyApproversFromEngine(this.ProviderToUse, this.contextUser()),
     ]);
     this.companyApprovers = approvers;
     if (!res.Success) {

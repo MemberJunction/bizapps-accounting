@@ -424,15 +424,34 @@ that host's MJAPI and Explorer with the host's own launch configurations.
 
 ---
 
-## Performance Best Practices
+## Performance Best Practices — 5-Rule BizApps Performance & Caching Standard
 
-### Batch Database Operations
-- Use `RunViews` (plural) instead of multiple `RunView` calls
-- Group related queries together in a single batch operation
+All code in `bizapps-accounting` (Angular, EngineBase, CoreEntitiesServer, Server, Actions) **MUST** follow the **5-Rule BizApps Performance & Caching Standard**:
 
-### Avoid Per-Item Queries in Loops
-- **NEVER** make RunView calls inside loops
-- Load all data once, then process client-side
+1. **`BaseEngine` (`BaseSingleton` + `@RegisterForStartup`) for bounded reference/taxonomy metadata.**
+   - Cache bounded, low-churn reference/configuration tables in `AccountingEngineBase` (`@mj-biz-apps/accounting-engine-base`) and expose O(1) lazy Map lookups (`GLAccountByID`, `CompanyProfileByID`, `CurrencyByCode`, `DimensionByID`, `FinanceExceptionTypeByCode`, `TaxAuthorityByCode`, `TaxJurisdictionByCode`, etc.).
+   - Never issue per-page or per-request `RunView`s for cached reference entities (`Accounting Company Profiles`, `GL Accounts`, `GL Account Roles`, `GL Account Links`, `Dimensions`, `Dimension Values`, `Currencies`, `Journal Entry Types`, `Accounting Engine Extensions`, `Finance Exception Types`, `Tax Authorities`, `Tax Jurisdictions`, `Tax Rates`, `Company Tax Nexus`). Call `await AccountingEngineBase.Instance.Config(false, user, provider)` and read synchronously from the engine.
+   - Never override `AdditionalLoading` on `AccountingEngineBase` so `BaseEngine` immediate-mutation cache updates remain active.
+
+2. **Multi-provider & impersonation safety.**
+   - Override `ProviderToUse` on `BaseEngine` subclasses (`this._activeProvider ?? Metadata.Provider`) and record the active provider in `Config(...)`.
+   - Track the loaded user on client (`ProviderType.Network`) providers and force a refresh whenever the effective user changes (impersonation / account switch) or `InvalidateCache()` is called; expose `IsConfiguredForUser(userId)`.
+   - **Never** force a reload on server (`ProviderType.Database`) providers when `contextUser` varies per request — the server holds shared multi-user reference metadata.
+   - Set `CacheLocal: true` ONLY on global, non-RLS reference entities. Any entity with Row-Level Security (RLS) filters **MUST** set `CacheLocal: false`.
+   - Keep `GetConfigData(...)` on engine getters (so `PermissionConstrainedError` surfaces rather than silently serving `[]`), and gate optional ad-hoc component/service `RunView`s on `EntityInfo.GetUserPermisions(user)?.CanRead`.
+
+3. **Mandatory `rv.RunViews([...])` single-request batching.**
+   - Never issue `Promise.all([rv.RunView(...), rv.RunView(...)])` or sequential independent `await rv.RunView(...)` waterfalls. Combine all independent reads into a single `rv.RunViews([...], contextUser)` batch call.
+   - Always construct `RunView` via `RunView.FromMetadataProvider(this.ProviderToUse)` (or the injected `IRunViewProvider` on the server) — never bare `new RunView()` when a provider is available.
+   - Default to `ResultType: 'simple'` with narrow `Fields` whenever entity mutation (`.Save()`/`.Delete()`) is not required.
+   - **NEVER** issue `RunView` calls inside loops — collect all IDs first and batch with `ID IN (...)` (chunked to <=500 IDs for large sets).
+
+4. **`ConversationEngine`-style bounded container caching ONLY.**
+   - Never cache unbounded transactional tables (`Journal Entries`, `Journal Entry Lines`, `Journal Entry Batches`, `Journal Entry Line Dimensions`, `Finance Exceptions`, `Tax Liabilities`, `Currency Spot Rates`, sequence tables) globally in `BaseEngine`, and never globally cache arbitrary `ExtraFilter` SQL views.
+   - If transient client-side caching is needed for a bounded container/session view, scope it to that bounded container with explicit invalidation.
+
+5. **RLS-safe two-step entity reads.**
+   - Never embed raw SQL subqueries against RLS-filtered `vw*` base views inside `ExtraFilter` (subqueries bypass or break entity-level RLS composition). Perform a two-step entity read (resolve parent/lookup IDs via `AccountingEngineBase` or a first `RunView`, then query the target entity with `ForeignKeyID IN (...)`).
 
 ### Use View Fields Instead of Lookups
 - Most MJ views include denormalized fields from related entities

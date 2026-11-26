@@ -69,9 +69,35 @@ export class GLAccountLinkEntityServer extends mjBizAppsAccountingGLAccountLinkE
         return;
       }
     }
-    if (await this.roleIsMany(this.GLAccountRoleID)) return;
-
-    const myCompanyId = await this.companyOfAccount(this.GLAccountID);
+    const [roleRes, accountRes] = await (this.ProviderToUse as unknown as IRunViewProvider).RunViews(
+      [
+        {
+          EntityName: ROLE_ENTITY,
+          ExtraFilter: `ID=${sqlGuidLiteral(this.GLAccountRoleID, 'GLAccountLinkEntityServer.checkNoAmbiguousTie')}`,
+          Fields: ['Cardinality'],
+          MaxRows: 1,
+          ResultType: 'simple',
+          BypassCache: true,
+        },
+        {
+          EntityName: GL_ENTITY,
+          ExtraFilter: `ID=${sqlGuidLiteral(this.GLAccountID, 'GLAccountLinkEntityServer.checkNoAmbiguousTie')}`,
+          Fields: ['CompanyID'],
+          MaxRows: 1,
+          ResultType: 'simple',
+          BypassCache: true,
+        },
+      ],
+      this.ContextCurrentUser,
+    );
+    if (!roleRes?.Success) {
+      throw new Error(`Could not read account role ${this.GLAccountRoleID}: ${roleRes?.ErrorMessage ?? 'unknown error'}`);
+    }
+    if (((roleRes.Results?.[0] as { Cardinality?: string } | undefined)?.Cardinality ?? 'One') === 'Many') return;
+    if (!accountRes?.Success) {
+      throw new Error(`Could not find the company of GL account ${this.GLAccountID}: ${accountRes?.ErrorMessage ?? 'unknown error'}`);
+    }
+    const myCompanyId = (accountRes.Results?.[0] as { CompanyID?: string } | undefined)?.CompanyID ?? null;
     if (!myCompanyId) return; // a missing account is the FK's job to reject
 
     const startedAt = this.StartedAt ? new Date(this.StartedAt).toISOString() : null;
@@ -92,10 +118,16 @@ export class GLAccountLinkEntityServer extends mjBizAppsAccountingGLAccountLinkE
       throw new Error(`Could not check for a conflicting active account link: ${res.ErrorMessage ?? 'unknown error'}`);
     }
 
-    // Same StartedAt is only a TIE when the sibling's account belongs to MY company (derived
-    // through the GLAccount FK) — per-company links for a shared record are the supported case.
-    for (const sibling of res.Results ?? []) {
-      const siblingCompanyId = await this.companyOfAccount(sibling.GLAccountID);
+    const siblings = res.Results ?? [];
+    if (siblings.length === 0) return;
+
+    // Same StartedAt is only a TIE when a sibling's account belongs to MY company (derived
+    // through the GLAccount FK) — load every distinct sibling account in ONE batched query.
+    const siblingAccountIds = [...new Set(siblings.map((s) => s.GLAccountID).filter((id) => isSqlGuid(id)))];
+    if (siblingAccountIds.length === 0) return;
+    const companyByAccountId = await this.companiesOfAccounts(siblingAccountIds);
+    for (const sibling of siblings) {
+      const siblingCompanyId = companyByAccountId.get(sibling.GLAccountID.toLowerCase());
       if (siblingCompanyId && siblingCompanyId.toLowerCase() === myCompanyId.toLowerCase()) {
         fail(
           `Another active link already exists for this record, role and company with the same start date ` +
@@ -108,43 +140,26 @@ export class GLAccountLinkEntityServer extends mjBizAppsAccountingGLAccountLinkE
     }
   }
 
-  /**
-   * Many-cardinality roles (BankAccount) are allowed N Active same-window links.
-   * Fail closed: a role-read error throws rather than skipping the One-role guard.
-   * Missing Cardinality (should not happen after BA-D34) is treated as One.
-   */
-  private async roleIsMany(roleId: string): Promise<boolean> {
+  /** The company each GL account belongs to, loaded in a single batched query. */
+  private async companiesOfAccounts(glAccountIds: string[]): Promise<Map<string, string>> {
+    const inList = glAccountIds
+      .map((id) => sqlGuidLiteral(id, 'GLAccountLinkEntityServer.companiesOfAccounts'))
+      .join(',');
     const provider = this.ProviderToUse as unknown as IRunViewProvider;
-    const res = await provider.RunView<{ Cardinality: string }>(
+    const res = await provider.RunView<{ ID: string; CompanyID: string }>(
       {
-        EntityName: ROLE_ENTITY,
-        ExtraFilter: `ID=${sqlGuidLiteral(roleId, 'GLAccountLinkEntityServer.roleIsMany')}`,
-        Fields: ['Cardinality'],
-        MaxRows: 1,
+        EntityName: GL_ENTITY,
+        ExtraFilter: `ID IN (${inList})`,
+        Fields: ['ID', 'CompanyID'],
         ResultType: 'simple',
         BypassCache: true,
       },
       this.ContextCurrentUser,
     );
     if (!res.Success) {
-      throw new Error(
-        `Could not read account role ${roleId}: ${res.ErrorMessage ?? 'unknown error'}`,
-      );
+      throw new Error(`Could not find the companies of GL accounts: ${res.ErrorMessage ?? 'unknown error'}`);
     }
-    return (res.Results?.[0]?.Cardinality ?? 'One') === 'Many';
-  }
-
-  /** The company a GL account belongs to — the link's derived company (no denormalized column). */
-  private async companyOfAccount(glAccountId: string): Promise<string | null> {
-    const provider = this.ProviderToUse as unknown as IRunViewProvider;
-    const res = await provider.RunView<{ CompanyID: string }>(
-      { EntityName: GL_ENTITY, ExtraFilter: `ID=${sqlGuidLiteral(glAccountId, 'GLAccountLinkEntityServer.companyOfAccount')}`, Fields: ['CompanyID'], MaxRows: 1, ResultType: 'simple', BypassCache: true },
-      this.ContextCurrentUser,
-    );
-    if (!res.Success) {
-      throw new Error(`Could not find the company of GL account ${glAccountId}: ${res.ErrorMessage ?? 'unknown error'}`);
-    }
-    return res.Results?.[0]?.CompanyID ?? null;
+    return new Map((res.Results ?? []).map((row) => [row.ID.toLowerCase(), row.CompanyID]));
   }
 }
 

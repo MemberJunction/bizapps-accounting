@@ -728,38 +728,45 @@ export class AccountingOverviewPageComponent implements OnInit {
         this.cdr.markForCheck();
 
         try {
-            const rv = new RunView();
-            const [batchesResult, jeCountResult, jeSamples] = await Promise.all([
-                rv.RunView<RecentBatchRow>({
-                    EntityName: BATCH_ENTITY,
-                    OrderBy: 'PostingDate DESC, JournalEntryBatchNumber DESC',
-                    ResultType: 'simple',
-                    MaxRows: 50,
-                }),
-                new RunView().RunView<{ ID: string }>({
-                    EntityName: JE_ENTITY,
-                    ExtraFilter: "Status = 'Pending'",
-                    ResultType: 'simple',
-                    MaxRows: 1,
-                }),
-                new RunView().RunView<{ EffectiveDate: string }>({
-                    EntityName: JE_ENTITY,
-                    ResultType: 'simple',
-                    MaxRows: 1500,
-                }),
-            ]);
+            const provider = Metadata.Provider;
+            const rv = RunView.FromMetadataProvider(provider);
+            const [batchesResult, jeCountResult, jeSamples] = await rv.RunViews(
+                [
+                    {
+                        EntityName: BATCH_ENTITY,
+                        OrderBy: 'PostingDate DESC, JournalEntryBatchNumber DESC',
+                        ResultType: 'simple',
+                        MaxRows: 50,
+                    },
+                    {
+                        EntityName: JE_ENTITY,
+                        ExtraFilter: "Status = 'Pending'",
+                        Fields: ['ID'],
+                        ResultType: 'simple',
+                        MaxRows: 1,
+                    },
+                    {
+                        EntityName: JE_ENTITY,
+                        Fields: ['EffectiveDate'],
+                        ResultType: 'simple',
+                        MaxRows: 1500,
+                    },
+                ],
+                provider?.CurrentUser,
+            );
 
-            if (batchesResult.Success && batchesResult.Results) {
-                this.RecentBatches = batchesResult.Results;
-                this.computeBatchMetrics(batchesResult.Results);
+            if (batchesResult?.Success && batchesResult.Results) {
+                const recentBatches = batchesResult.Results as RecentBatchRow[];
+                this.RecentBatches = recentBatches;
+                this.computeBatchMetrics(recentBatches);
             }
 
-            if (jeCountResult.Success) {
+            if (jeCountResult?.Success) {
                 this.KPIs.PendingJournalEntries = jeCountResult.TotalRowCount ?? 1192;
             }
 
-            if (jeSamples.Success && jeSamples.Results) {
-                this.computeMonthlyBars(jeSamples.Results);
+            if (jeSamples?.Success && jeSamples.Results) {
+                this.computeMonthlyBars(jeSamples.Results as Array<{ EffectiveDate: string }>);
             }
         } catch {
             // fallback mock periods if runview fails

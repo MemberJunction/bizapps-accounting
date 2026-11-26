@@ -49,7 +49,7 @@
  *   CALLERS: JournalEntryEntityServer.Save · JournalEntryLineEntityServer ·
  *            JournalEntryLineDimensionEntityServer · ManualJournalEntryOperations
  */
-import { DatabaseProviderBase, EntityPermissionType, IMetadataProvider, IRunViewProvider, LogError, UserInfo } from '@memberjunction/core';
+import { DatabaseProviderBase, EntityPermissionType, IMetadataProvider, IRunViewProvider, LogError, RunViewParams, RunViewResult, UserInfo } from '@memberjunction/core';
 import { UUIDsEqual } from '@memberjunction/global';
 import { IsApprovalOutcome, TaskOrchestrationService, type TaskDecisionOutcomeCode } from '@mj-biz-apps/tasks-core';
 import type { mjBizAppsTasksTaskEntity, mjBizAppsTasksTaskTypeEntity } from '@mj-biz-apps/tasks-entities';
@@ -268,6 +268,14 @@ export class ManualJournalEntryApprovalService {
    * changed in its amounts, accounts, date or company. Most entries (every booking-path entry)
    * leave on the first check without a query.
    */
+  private async runViewsBatch(queries: RunViewParams[], contextUser: UserInfo): Promise<RunViewResult[]> {
+    const vp = this.viewProvider;
+    if (typeof vp.RunViews === 'function') {
+      return vp.RunViews(queries, contextUser);
+    }
+    return Promise.all(queries.map(q => vp.RunView(q, contextUser)));
+  }
+
   public async PlanForSave(je: JournalEntryEntityServer, contextUser: UserInfo): Promise<ManualJournalEntrySaveAction | null> {
     if (je.Status !== 'Pending') return null;
     if (!IsManualJournalEntry(je)) return null;
@@ -284,8 +292,11 @@ export class ManualJournalEntryApprovalService {
 
     const lines = je.Lines.Items;
     const totalDebits = Math.round(lines.reduce((sum, l) => sum + (l.DebitAmount ?? 0), 0) * 100) / 100;
-    const touchesControlAccount = await this.touchesControlAccount(lines.map(l => l.GLAccountID), contextUser);
-    const roleHolders = policy.ApproverRoleID ? await this.loadActiveRoleHolders(policy.ApproverRoleID, contextUser) : [];
+    const { touchesControlAccount, roleHolders } = await this.loadControlAndRoleHolders(
+      lines.map(l => l.GLAccountID),
+      policy.ApproverRoleID,
+      contextUser,
+    );
 
     const plan = RouteManualJournalEntryApproval({
       TotalDebits: totalDebits,
@@ -295,6 +306,78 @@ export class ManualJournalEntryApprovalService {
       RoleHolderUserIDs: roleHolders,
     });
     return { Action: 'Raise', Plan: plan };
+  }
+
+  /**
+   * Batch the independent GL-account control check and UserRole lookup in ONE RunViews round-trip,
+   * then resolve active users for any role holders found.
+   */
+  private async loadControlAndRoleHolders(
+    glAccountIds: string[],
+    roleId: string | null,
+    contextUser: UserInfo,
+  ): Promise<{ touchesControlAccount: boolean; roleHolders: string[] }> {
+    const validGlIds = uniqueIds(glAccountIds.filter(id => isSqlGuid(id)));
+    const queries: RunViewParams[] = [];
+    const glIdx = validGlIds.length > 0 ? queries.length : -1;
+    if (glIdx >= 0) {
+      queries.push({
+        EntityName: GL_ENTITY,
+        ExtraFilter: `ID IN (${validGlIds.map(id => sqlGuidLiteral(id, 'ManualJournalEntryApproval.touchesControlAccount')).join(',')})`,
+        Fields: ['ID', 'IsControlAccount'],
+        ResultType: 'simple',
+        BypassCache: true,
+      });
+    }
+    const roleIdx = roleId ? queries.length : -1;
+    if (roleIdx >= 0 && roleId) {
+      queries.push({
+        EntityName: USER_ROLE_ENTITY,
+        ExtraFilter: `RoleID=${sqlGuidLiteral(roleId, 'ManualJournalEntryApproval.loadActiveRoleHolders')}`,
+        Fields: ['UserID'],
+        ResultType: 'simple',
+        BypassCache: true,
+      });
+    }
+    if (queries.length === 0) return { touchesControlAccount: false, roleHolders: [] };
+
+    const results = await this.runViewsBatch(queries, contextUser);
+
+    let touchesControlAccount = false;
+    if (glIdx >= 0) {
+      const glRes = results[glIdx];
+      if (!glRes?.Success) {
+        throw new Error(`Could not check the entry's GL accounts for control accounts: ${glRes?.ErrorMessage ?? 'unknown error'}`);
+      }
+      touchesControlAccount = ((glRes.Results ?? []) as Array<{ ID: string; IsControlAccount: boolean }>).some(r => !!r.IsControlAccount);
+    }
+
+    let roleHolders: string[] = [];
+    if (roleIdx >= 0) {
+      const roleRes = results[roleIdx];
+      if (!roleRes?.Success) {
+        throw new Error(`Could not read who holds the manual-entry approver role: ${roleRes?.ErrorMessage ?? 'unknown error'}`);
+      }
+      const userIds = uniqueIds(((roleRes.Results ?? []) as Array<{ UserID: string }>).map(r => r.UserID).filter(id => isSqlGuid(id)));
+      if (userIds.length > 0) {
+        const userRes = await this.viewProvider.RunView<{ ID: string; IsActive: boolean }>(
+          {
+            EntityName: USER_ENTITY,
+            ExtraFilter: `ID IN (${userIds.map(id => sqlGuidLiteral(id, 'ManualJournalEntryApproval.loadActiveRoleHolders')).join(',')})`,
+            Fields: ['ID', 'IsActive'],
+            ResultType: 'simple',
+            BypassCache: true,
+          },
+          contextUser,
+        );
+        if (!userRes.Success) {
+          throw new Error(`Could not read the manual-entry approvers' user records: ${userRes.ErrorMessage ?? 'unknown error'}`);
+        }
+        roleHolders = (userRes.Results ?? []).filter(u => !!u.IsActive).map(u => u.ID);
+      }
+    }
+
+    return { touchesControlAccount, roleHolders };
   }
 
   /**
@@ -317,54 +400,6 @@ export class ManualJournalEntryApprovalService {
     if (!entryTypeId) return false;
     const type = await LookupJournalEntryTypeByID(entryTypeId, contextUser, this.provider);
     return !!type?.IsJournalEntryBatchSummary;
-  }
-
-  /** Whether any of these GL accounts is a control account. Malformed ids are left to the entry's own validation. */
-  private async touchesControlAccount(glAccountIds: string[], contextUser: UserInfo): Promise<boolean> {
-    const ids = uniqueIds(glAccountIds.filter(id => isSqlGuid(id)));
-    if (ids.length === 0) return false;
-    const res = await this.viewProvider.RunView<{ ID: string; IsControlAccount: boolean }>(
-      {
-        EntityName: GL_ENTITY,
-        ExtraFilter: `ID IN (${ids.map(id => sqlGuidLiteral(id, 'ManualJournalEntryApproval.touchesControlAccount')).join(',')})`,
-        Fields: ['ID', 'IsControlAccount'],
-        ResultType: 'simple',
-        BypassCache: true,
-      },
-      contextUser,
-    );
-    // Loud: treating a failed read as "no control account" would route a control entry below the CFO.
-    if (!res.Success) throw new Error(`Could not check the entry's GL accounts for control accounts: ${res.ErrorMessage ?? 'unknown error'}`);
-    return (res.Results ?? []).some(r => !!r.IsControlAccount);
-  }
-
-  /** The active users holding this role. */
-  private async loadActiveRoleHolders(roleId: string, contextUser: UserInfo): Promise<string[]> {
-    const roleRes = await this.viewProvider.RunView<{ UserID: string }>(
-      {
-        EntityName: USER_ROLE_ENTITY,
-        ExtraFilter: `RoleID=${sqlGuidLiteral(roleId, 'ManualJournalEntryApproval.loadActiveRoleHolders')}`,
-        Fields: ['UserID'],
-        ResultType: 'simple',
-        BypassCache: true,
-      },
-      contextUser,
-    );
-    if (!roleRes.Success) throw new Error(`Could not read who holds the manual-entry approver role: ${roleRes.ErrorMessage ?? 'unknown error'}`);
-    const userIds = uniqueIds((roleRes.Results ?? []).map(r => r.UserID).filter(id => isSqlGuid(id)));
-    if (userIds.length === 0) return [];
-    const userRes = await this.viewProvider.RunView<{ ID: string; IsActive: boolean }>(
-      {
-        EntityName: USER_ENTITY,
-        ExtraFilter: `ID IN (${userIds.map(id => sqlGuidLiteral(id, 'ManualJournalEntryApproval.loadActiveRoleHolders')).join(',')})`,
-        Fields: ['ID', 'IsActive'],
-        ResultType: 'simple',
-        BypassCache: true,
-      },
-      contextUser,
-    );
-    if (!userRes.Success) throw new Error(`Could not read the manual-entry approvers' user records: ${userRes.ErrorMessage ?? 'unknown error'}`);
-    return (userRes.Results ?? []).filter(u => !!u.IsActive).map(u => u.ID);
   }
 
   // ─── Task writes (called inside JournalEntryEntityServer.Save's transaction) ───────────────────

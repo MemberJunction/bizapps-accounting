@@ -1,6 +1,6 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, EventEmitter, inject, OnInit, OnDestroy, Output, ViewChild } from '@angular/core';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
-import { RunView, RunViewParams } from '@memberjunction/core';
+import { Metadata, RunView, RunViewParams } from '@memberjunction/core';
 import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-entity-viewer';
 import { mjBizAppsAccountingJournalEntryBatchEntityType } from '@mj-biz-apps/accounting-entities';
 import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
@@ -185,11 +185,15 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   private async refreshStats(filter: string): Promise<void> {
     const token = ++this.statsToken;
     try {
-      const rv = new RunView();
-      const results = await rv.RunViews([
-        this.countParams(filter),
-        ...STATUSES.map((s) => this.countParams(andFilters(filter, `Status='${s}'`))),
-      ]);
+      const provider = Metadata.Provider;
+      const rv = RunView.FromMetadataProvider(provider);
+      const results = await rv.RunViews(
+        [
+          this.countParams(filter),
+          ...STATUSES.map((s) => this.countParams(andFilters(filter, `Status='${s}'`))),
+        ],
+        provider?.CurrentUser,
+      );
       if (token !== this.statsToken) return;
 
       this.TotalCount = results[0]?.Success ? (results[0].TotalRowCount ?? 0) : null;

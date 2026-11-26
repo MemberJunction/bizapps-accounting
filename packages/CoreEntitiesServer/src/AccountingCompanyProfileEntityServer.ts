@@ -180,7 +180,7 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
   }
 
   private async loadExistingGLAccountCodes(companyId: string): Promise<Set<string>> {
-    const rv = new RunView();
+    const rv = new RunView(this.ProviderToUse as unknown as IRunViewProvider);
     const result = await rv.RunView<mjBizAppsAccountingGLAccountEntity>(
       {
         EntityName: 'MJ_BizApps_Accounting: GL Accounts',

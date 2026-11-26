@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CompositeKey, Metadata, RunView } from '@memberjunction/core';
 import { NormalizeUUID } from '@memberjunction/global';
-import { UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
+import { AccountingEngineBase, UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { NavigationService } from '@memberjunction/ng-shared';
 import { MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
@@ -1575,36 +1575,49 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.cdr.markForCheck();
 
         try {
-            const rv = new RunView();
-            const [batchRes, jeRes, profileRes] = await Promise.all([
-                rv.RunView<BatchItem>({
-                    EntityName: BATCH_ENTITY,
-                    OrderBy: 'PostingDate DESC, JournalEntryBatchNumber DESC',
-                    ResultType: 'simple',
-                    MaxRows: 500,
-                }),
-                new RunView().RunView<{ ID: string }>({
-                    EntityName: JE_ENTITY,
-                    ExtraFilter: "Status = 'Pending'",
-                    ResultType: 'simple',
-                    MaxRows: 1,
-                }),
-                rv.RunView<CompanyProfileRow>({
-                    EntityName: 'MJ_BizApps_Accounting: Accounting Company Profiles',
-                    Fields: ['ID', 'Name', 'ApprovalCFOUserID'],
-                    OrderBy: 'Name ASC',
-                    ResultType: 'simple',
-                }),
+            const provider = Metadata.Provider;
+            const user = provider?.CurrentUser;
+            const rv = RunView.FromMetadataProvider(provider);
+            const [[batchRes, jeRes], profiles] = await Promise.all([
+                rv.RunViews(
+                    [
+                        {
+                            EntityName: BATCH_ENTITY,
+                            OrderBy: 'PostingDate DESC, JournalEntryBatchNumber DESC',
+                            ResultType: 'simple',
+                            MaxRows: 500,
+                        },
+                        {
+                            EntityName: JE_ENTITY,
+                            ExtraFilter: "Status = 'Pending'",
+                            Fields: ['ID'],
+                            ResultType: 'simple',
+                            MaxRows: 1,
+                        },
+                    ],
+                    user,
+                ),
+                AccountingEngineBase.Instance.Config(false, user, provider)
+                    .then(() =>
+                        [...AccountingEngineBase.Instance.CompanyProfiles]
+                            .sort((a, b) => (a.Name ?? '').localeCompare(b.Name ?? ''))
+                            .map((p): CompanyProfileRow => ({
+                                ID: p.ID,
+                                Name: p.Name,
+                                ApprovalCFOUserID: p.ApprovalCFOUserID,
+                            })),
+                    )
+                    .catch((): CompanyProfileRow[] => []),
             ]);
-            this.applyCompanyProfiles(profileRes.Success ? profileRes.Results ?? [] : []);
+            this.applyCompanyProfiles(profiles);
 
-            if (batchRes.Success && batchRes.Results) {
-                this.Batches = batchRes.Results;
+            if (batchRes?.Success && batchRes.Results) {
+                this.Batches = batchRes.Results as BatchItem[];
                 this.computeStageCounts();
                 this.applyFilters();
             }
 
-            if (jeRes.Success) {
+            if (jeRes?.Success) {
                 this.PendingJECount = jeRes.TotalRowCount ?? 0;
             }
         } catch {

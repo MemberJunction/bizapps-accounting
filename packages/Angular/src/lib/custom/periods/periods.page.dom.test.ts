@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { AuthorizationInfo, IMetadataProvider, Metadata, RunView, UserInfo } from '@memberjunction/core';
+import { AuthorizationInfo, IMetadataProvider, Metadata, UserInfo } from '@memberjunction/core';
 import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
-import { BOOKS_CLOSED_THROUGH_SET_AUTH, POSTING_START_DATE_SET_AUTH } from '@mj-biz-apps/accounting-engine-base';
+import { AccountingEngineBase, BOOKS_CLOSED_THROUGH_SET_AUTH, POSTING_START_DATE_SET_AUTH } from '@mj-biz-apps/accounting-engine-base';
 import { PeriodsPageComponent } from './periods.page';
 import { JournalEntryBatchDispatchClient, PreviewJournalEntryBatchResult } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
-import { useBusinessClock, viewResult } from '../../../__tests__/support/business-clock';
+import { useBusinessClock } from '../../../__tests__/support/business-clock';
 
 /**
  * Periods (bc-aidp-next-golive#447): each company's books-closed and posting start dates, the
@@ -68,7 +68,8 @@ describe('PeriodsPageComponent (DOM)', () => {
   });
 
   async function render(row: ReturnType<typeof profile>): Promise<ComponentFixture<PeriodsPageComponent>> {
-    vi.spyOn(RunView.prototype, 'RunView').mockResolvedValue(viewResult([row as unknown as Profile]));
+    vi.spyOn(AccountingEngineBase.Instance, 'Config').mockResolvedValue(undefined);
+    vi.spyOn(AccountingEngineBase.Instance, 'CompanyProfiles', 'get').mockReturnValue([row as unknown as Profile]);
     const fixture = TestBed.createComponent(PeriodsPageComponent);
     fixture.detectChanges();
     await fixture.whenStable();

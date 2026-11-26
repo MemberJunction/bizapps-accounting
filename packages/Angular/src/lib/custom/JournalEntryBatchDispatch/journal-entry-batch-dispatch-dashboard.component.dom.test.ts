@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { IMetadataProvider, RunView, RunViewParams, UserInfo } from '@memberjunction/core';
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { BatchOperatorCatalog } from '../../../__tests__/support/batch-operator';
-import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
+import type { mjBizAppsAccountingAccountingCompanyProfileEntity, mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import { JournalEntryBatchDispatchDashboardComponent } from './journal-entry-batch-dispatch-dashboard.component';
 import { JournalEntryBatchDispatchModule } from './journal-entry-batch-dispatch.module';
 import { JournalEntryBatchDispatchClient, DispatchJournalEntryBatchResult, CancelJournalEntryBatchResult } from './journal-entry-batch-dispatch.client';
@@ -18,7 +19,6 @@ type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const BATCH_NUMBER = 'JEB-TEST-0001';
-const COMPANY_PROFILE_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const COMPANY_ID = '00000000-0000-0000-0000-0000000000c1';
 const BUILDER_USER_ID = '00000000-0000-0000-0000-0000000000b1';
 const APPROVER_USER_ID = '00000000-0000-0000-0000-0000000000a1';
@@ -27,6 +27,20 @@ const OTHER_USER_ID = '00000000-0000-0000-0000-0000000000f1';
 const APPROVED_BY_USER_ID = '00000000-0000-0000-0000-0000000000d1';
 /** The MJ system user, which the nightly job builds as. */
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-0000000000e1';
+
+/** Stub AccountingEngineBase company profiles for approver lookups in this spec. */
+function stubEngineProfiles(
+  profiles: Array<{ ID: string; ApprovalCFOUserID: string | null }> | null,
+): void {
+  if (profiles === null) {
+    vi.spyOn(AccountingEngineBase.Instance, 'Config').mockRejectedValue(new Error('read refused'));
+    return;
+  }
+  vi.spyOn(AccountingEngineBase.Instance, 'Config').mockResolvedValue(undefined);
+  vi.spyOn(AccountingEngineBase.Instance, 'CompanyProfiles', 'get').mockReturnValue(
+    profiles as unknown as mjBizAppsAccountingAccountingCompanyProfileEntity[],
+  );
+}
 
 /** A provider signed in as `userId`; every read is stubbed at `RunView.prototype`. */
 /** Signed in as `userId`; the batch-operator grant (#448) goes to `operators`, or to every user when omitted. */
@@ -74,6 +88,7 @@ describe('JournalEntryBatchDispatchDashboardComponent — first dispatch outcome
   beforeEach(async () => {
     listedStatus = 'Approved';
     batchReads = 0;
+    stubEngineProfiles([]);
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
       if (p.EntityName !== BATCH_ENTITY) return viewResult([], 0);
       batchReads++;
@@ -169,6 +184,7 @@ describe('JournalEntryBatchDispatchDashboardComponent — cancelling a Failed ba
   let unconfirmedAnswer: CancelJournalEntryBatchResult | null;
 
   beforeEach(async () => {
+    stubEngineProfiles([]);
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
       p.EntityName === BATCH_ENTITY ? viewResult([{ ...batchRow('Failed'), ApprovedByUserID: APPROVED_BY_USER_ID }]) : viewResult([], 0),
     );
@@ -273,6 +289,7 @@ describe('JournalEntryBatchDispatchDashboardComponent — a refused cancel reloa
   beforeEach(async () => {
     listedStatus = 'Failed';
     batchReads = 0;
+    stubEngineProfiles([]);
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
       if (p.EntityName !== BATCH_ENTITY) return viewResult([], 0);
       batchReads++;
@@ -335,9 +352,9 @@ describe('JournalEntryBatchDispatchDashboardComponent — a Pending batch (goliv
   let decisionCalls: Array<{ Decision: string; Notes: string | undefined }>;
 
   beforeEach(async () => {
+    stubEngineProfiles([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
       if (p.EntityName === BATCH_ENTITY) return viewResult([batchRow('Pending')]);
-      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
       return viewResult([], 0);
     });
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'GetApprovalState').mockResolvedValue({ Success: true, Approved: false });
@@ -445,9 +462,9 @@ describe('JournalEntryBatchDispatchDashboardComponent — a Pending batch (goliv
  */
 describe('JournalEntryBatchDispatchDashboardComponent — the reason dialog (#405, DOM)', () => {
   beforeEach(async () => {
+    stubEngineProfiles([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
       if (p.EntityName === BATCH_ENTITY) return viewResult([batchRow('Pending')]);
-      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
       return viewResult([], 0);
     });
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'GetApprovalState').mockResolvedValue({ Success: true, Approved: false });
@@ -491,6 +508,7 @@ describe('JournalEntryBatchDispatchDashboardComponent — a failed archive reloa
   beforeEach(async () => {
     listedStatus = 'Pending';
     batchReads = 0;
+    stubEngineProfiles([]);
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
       if (p.EntityName !== BATCH_ENTITY) return viewResult([], 0);
       batchReads++;
@@ -534,9 +552,9 @@ describe('JournalEntryBatchDispatchDashboardComponent — who sees Cancel on a P
 
   beforeEach(async () => {
     builtBy = BUILDER_USER_ID;
+    stubEngineProfiles([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
       if (p.EntityName === BATCH_ENTITY) return viewResult([{ ...batchRow('Pending'), BatchedByUserID: builtBy }]);
-      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
       return viewResult([], 0);
     });
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'GetApprovalState').mockResolvedValue({ Success: true, Approved: false });
@@ -605,13 +623,14 @@ describe('JournalEntryBatchDispatchDashboardComponent — who sees Approve, Reje
   beforeEach(async () => {
     listed = batchRow('Pending');
     profilesRead = true;
+    vi.spyOn(AccountingEngineBase.Instance, 'Config').mockImplementation(async () => {
+      if (!profilesRead) throw new Error('read refused');
+    });
+    vi.spyOn(AccountingEngineBase.Instance, 'CompanyProfiles', 'get').mockReturnValue([
+      { ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID } as unknown as mjBizAppsAccountingAccountingCompanyProfileEntity,
+    ]);
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
       if (p.EntityName === BATCH_ENTITY) return viewResult([listed]);
-      if (p.EntityName === COMPANY_PROFILE_ENTITY) {
-        return profilesRead
-          ? viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }])
-          : { ...viewResult([]), Success: false, ErrorMessage: 'read refused' };
-      }
       return viewResult([], 0);
     });
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'GetApprovalState').mockResolvedValue({ Success: true, Approved: false });
@@ -690,9 +709,9 @@ describe('JournalEntryBatchDispatchDashboardComponent — a Pending card reads a
 
   beforeEach(async () => {
     status = 'Pending';
+    stubEngineProfiles([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
       if (p.EntityName === BATCH_ENTITY) return viewResult([batchRow(status)]);
-      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
       return viewResult([], 0);
     });
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'GetApprovalState').mockResolvedValue({ Success: true, Approved: false, Reason: GATE_REASON });

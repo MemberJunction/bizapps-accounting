@@ -461,13 +461,14 @@ export class JournalEntryBatchOverviewComponent implements OnInit, OnChanges {
         this.IsLoading = true;
 
         try {
-            const rv = new RunView();
+            const rv = RunView.FromMetadataProvider(Metadata.Provider);
             const res = await rv.RunView<Record<string, unknown>>({
                 EntityName: 'MJ_BizApps_Accounting: Journal Entries',
                 ExtraFilter: `JournalEntryBatchID = '${this.Record.ID}'`,
+                Fields: ['ID', 'EntryNumber', 'EffectiveDate', 'Description', 'Status'],
                 OrderBy: 'EntryNumber ASC',
                 MaxRows: 20,
-                ResultType: 'simple'
+                ResultType: 'simple',
             });
 
             if (res?.Success && res.Results) {

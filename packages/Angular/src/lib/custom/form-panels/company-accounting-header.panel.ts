@@ -2,7 +2,8 @@ import { Component, OnInit, ChangeDetectorRef, inject } from '@angular/core';
 import { RegisterClassEx } from '@memberjunction/global';
 import { BaseFormPanel } from '@memberjunction/ng-base-forms';
 import { UserInfoEngine, MJCompanyEntity } from '@memberjunction/core-entities';
-import { RunView } from '@memberjunction/core';
+import { Metadata } from '@memberjunction/core';
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
 
 const COMPANY_ACCOUNTING_HERO_CSS = `
@@ -289,23 +290,19 @@ export class CompanyAccountingHeaderPanel extends BaseFormPanel<MJCompanyEntity>
         if (!this.Record?.ID) return;
 
         try {
-            const rv = new RunView();
-            const res = await rv.RunView<Record<string, unknown>>({
-                EntityName: 'MJ_BizApps_Accounting: Accounting Company Profiles',
-                ExtraFilter: `ID = '${this.Record.ID}'`,
-                ResultType: 'simple'
-            });
+            const provider = Metadata.Provider;
+            await AccountingEngineBase.Instance.Config(false, provider?.CurrentUser, provider);
+            const p = AccountingEngineBase.Instance.CompanyProfileByID(this.Record.ID);
 
-            if (res?.Success && res.Results?.[0]) {
-                const p = res.Results[0];
-                this.CompanyCode = String(p['CompanyCode'] || '');
-                this.CurrencyCode = String(p['FunctionalCurrencyCode'] || 'USD');
-                this.LegalStructure = String(p['LegalStructureType'] || p['EntityType'] || 'Corporation');
-                this.Jurisdiction = String(p['JurisdictionCountry'] || 'US');
-                this.TaxID = String(p['FederalTaxID'] || '');
-                this.TimeZone = String(p['OperatingTimeZone'] || BusinessTimeZoneEngine.Instance.Zone);
-                const m = Number(p['FiscalYearStartMonth'] || 1);
-                const d = Number(p['FiscalYearStartDay'] || 1);
+            if (p) {
+                this.CompanyCode = p.CompanyCode || '';
+                this.CurrencyCode = p.FunctionalCurrencyCode || 'USD';
+                this.LegalStructure = p.LegalStructureType || p.EntityType || 'Corporation';
+                this.Jurisdiction = p.JurisdictionCountry || 'US';
+                this.TaxID = p.FederalTaxID || '';
+                this.TimeZone = p.OperatingTimeZone || BusinessTimeZoneEngine.Instance.Zone;
+                const m = Number(p.FiscalYearStartMonth || 1);
+                const d = Number(p.FiscalYearStartDay || 1);
                 const date = new Date(2026, m - 1, d);
                 this.FiscalYearStart = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                 this.cdr.detectChanges();

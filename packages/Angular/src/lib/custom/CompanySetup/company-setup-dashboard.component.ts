@@ -5,6 +5,7 @@ import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { RegisterClass } from '@memberjunction/global';
 import { CompositeKey, Metadata, RunView } from '@memberjunction/core';
 import { ResourceData } from '@memberjunction/core-entities';
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
 import { createdRecordId } from './created-record-id';
 import { SaveErrorMessage } from '../shared/save-error-message';
@@ -123,25 +124,39 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
   }
 
   private async loadCompanies(): Promise<void> {
-    const rv = new RunView();
-    const [companies, users] = await rv.RunViews([
-      {
-        EntityName: COMPANY_PROFILE_ENTITY,
-        Fields: [
-          'ID', 'Name', 'CompanyCode', 'EntityType', 'LegalStructureType',
-          'FunctionalCurrencyCode', 'ReportingCurrencyCode', 'FiscalYearStartMonth', 'FiscalYearStartDay', 'IsActive',
-          'ApprovalCFOUserID', 'ApprovalCFOUser',
-        ],
-        OrderBy: 'Name ASC',
-        MaxRows: 1000,
-        ResultType: 'simple',
-      },
-      { EntityName: USER_ENTITY, Fields: ['ID', 'Name'], OrderBy: 'Name ASC', MaxRows: 500, ResultType: 'simple' },
+    const provider = this.ProviderToUse;
+    const user = provider.CurrentUser;
+    const userEntityInfo = provider.EntityByName?.(USER_ENTITY);
+    const canReadUsers = !userEntityInfo || !user || (userEntityInfo.GetUserPermisions(user)?.CanRead ?? false);
+    const rv = RunView.FromMetadataProvider(provider);
+
+    const [, users] = await Promise.all([
+      AccountingEngineBase.Instance.Config(false, user, provider),
+      canReadUsers
+        ? rv.RunView<{ ID: string; Name: string }>(
+            { EntityName: USER_ENTITY, Fields: ['ID', 'Name'], OrderBy: 'Name ASC', MaxRows: 500, ResultType: 'simple' },
+            user,
+          )
+        : Promise.resolve({ Success: true, Results: [] as Array<{ ID: string; Name: string }> }),
     ]);
-    if (!companies.Success) throw new Error(companies.ErrorMessage ?? 'Could not load companies. Refresh the page to try again.');
-    this.Companies = (companies.Results ?? []) as CompanyProfileRow[];
-    this.Users = ((users.Results ?? []) as Array<{ ID: string; Name: string }>)
-      .map(u => ({ ID: u.ID, Name: u.Name }));
+
+    this.Companies = [...AccountingEngineBase.Instance.CompanyProfiles]
+      .sort((a, b) => (a.Name ?? '').localeCompare(b.Name ?? ''))
+      .map((p): CompanyProfileRow => ({
+        ID: p.ID,
+        Name: p.Name,
+        CompanyCode: p.CompanyCode,
+        EntityType: p.EntityType,
+        LegalStructureType: p.LegalStructureType,
+        FunctionalCurrencyCode: p.FunctionalCurrencyCode,
+        ReportingCurrencyCode: p.ReportingCurrencyCode,
+        FiscalYearStartMonth: p.FiscalYearStartMonth,
+        FiscalYearStartDay: p.FiscalYearStartDay,
+        IsActive: p.IsActive,
+        ApprovalCFOUserID: p.ApprovalCFOUserID,
+        ApprovalCFOUser: p.ApprovalCFOUser,
+      }));
+    this.Users = (users.Results ?? []).map(u => ({ ID: u.ID, Name: u.Name }));
     this._selectedID = this.Companies.length > 0 ? this.Companies[0].ID : null;
   }
 

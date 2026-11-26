@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { IMetadataProvider, Metadata, RunView, RunViewParams, UserInfo } from '@memberjunction/core';
-import type { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
+import { IMetadataProvider, Metadata, RunView, UserInfo } from '@memberjunction/core';
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import type { mjBizAppsAccountingAccountingCompanyProfileEntity, mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import { DispatchStatusPageComponent } from './dispatch-status.page';
 import { AccountingShellModule } from '../shell.module';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
@@ -24,7 +25,6 @@ import { entityObject, installStubProvider, stubEntityInfo } from '../../../../_
  * The page's grid is not under test, so its template is replaced; the cancel flow is component state.
  */
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
-const COMPANY_PROFILE_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const BATCH_NUMBER = 'JEB-TEST-0207';
 const COMPANY_ID = '00000000-0000-0000-0000-0000000000c1';
 const APPROVER_USER_ID = '00000000-0000-0000-0000-0000000000a1';
@@ -54,12 +54,14 @@ function signInAs(userId: string): void {
 
 /** Answer the approver read: the company's approver, or a failed read. */
 function stubApproverRead(succeeds = true): void {
-  vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
-    if (p.EntityName !== COMPANY_PROFILE_ENTITY) return viewResult([], 0);
-    return succeeds
-      ? viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }])
-      : { ...viewResult([]), Success: false, ErrorMessage: 'read refused' };
-  });
+  if (succeeds) {
+    vi.spyOn(AccountingEngineBase.Instance, 'Config').mockResolvedValue(undefined);
+    vi.spyOn(AccountingEngineBase.Instance, 'CompanyProfiles', 'get').mockReturnValue([
+      { ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID } as unknown as mjBizAppsAccountingAccountingCompanyProfileEntity,
+    ]);
+  } else {
+    vi.spyOn(AccountingEngineBase.Instance, 'Config').mockRejectedValue(new Error('read refused'));
+  }
 }
 
 /** Configure the page with its grid template removed; the cancel flow is component state. */

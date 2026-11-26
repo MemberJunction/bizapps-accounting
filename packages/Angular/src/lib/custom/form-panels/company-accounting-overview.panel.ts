@@ -439,13 +439,14 @@ export class CompanyAccountingOverviewComponent implements OnInit, OnChanges {
         this.IsLoading = true;
 
         try {
-            const rv = new RunView();
+            const rv = RunView.FromMetadataProvider(Metadata.Provider);
             const res = await rv.RunView<Record<string, unknown>>({
                 EntityName: 'MJ_BizApps_Accounting: Journal Entry Batches',
                 ExtraFilter: `CompanyID = '${this.Record.ID}'`,
+                Fields: ['ID', 'JournalEntryBatchNumber', 'PostingDate', 'TotalDebits', 'Status', 'TargetSystem'],
                 OrderBy: 'PostingDate DESC',
                 MaxRows: 10,
-                ResultType: 'simple'
+                ResultType: 'simple',
             });
 
             if (res?.Success && res.Results) {

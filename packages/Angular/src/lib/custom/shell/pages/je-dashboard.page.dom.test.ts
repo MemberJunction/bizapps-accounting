@@ -33,13 +33,14 @@ describe('JeDashboardPageComponent — "Entries this month" window (DOM)', () =>
     // which window was queried, not just that some query ran. Matched by substring: the company
     // scope wraps and joins clauses, and that composition is not what this spec is about.
     countFilters = [];
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
-      // The page writes plain-string filters; a PlatformSQL filter would not be this page's.
-      const filter = typeof p.ExtraFilter === 'string' ? p.ExtraFilter : '';
-      countFilters.push(filter);
-      return viewResult([], filter.includes(MONTH_CLAUSE) ? MONTH_COUNT : 0);
-    });
-    vi.spyOn(RunView.prototype, 'RunViews').mockImplementation(async (ps: RunViewParams[]) => ps.map(() => viewResult([], 0)));
+    vi.spyOn(RunView.prototype, 'RunViews').mockImplementation(async (ps: RunViewParams[]) =>
+      ps.map((p) => {
+        // The page writes plain-string filters; a PlatformSQL filter would not be this page's.
+        const filter = typeof p.ExtraFilter === 'string' ? p.ExtraFilter : '';
+        if (p.MaxRows === 1) countFilters.push(filter);
+        return viewResult([], p.MaxRows === 1 && filter.includes(MONTH_CLAUSE) ? MONTH_COUNT : 0);
+      }),
+    );
 
     // Declared directly with its template's dependencies rather than through ShellModule, whose
     // circular import leaves module symbols undefined when entered from a spec. CompanyScopeService

@@ -259,11 +259,15 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
   private async refreshStats(filter: string): Promise<void> {
     const token = ++this.statsToken;
     try {
-      const rv = new RunView();
-      const results = await rv.RunViews([
-        this.countParams(filter),
-        ...STATUSES.map((s) => this.countParams(andFilters(filter, `Status='${s}'`))),
-      ]);
+      const provider = Metadata.Provider;
+      const rv = RunView.FromMetadataProvider(provider);
+      const results = await rv.RunViews(
+        [
+          this.countParams(filter),
+          ...STATUSES.map((s) => this.countParams(andFilters(filter, `Status='${s}'`))),
+        ],
+        provider?.CurrentUser,
+      );
       // A slower earlier batch must never repaint over a newer one's numbers.
       if (token !== this.statsToken) return;
 

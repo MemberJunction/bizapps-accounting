@@ -2,6 +2,7 @@ import { Component, ChangeDetectionStrategy, ChangeDetectorRef, Input, Output, E
 import { RunView, RunViewParams, CompositeKey } from '@memberjunction/core';
 import { NormalizeUUID } from '@memberjunction/global';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { MJStatBadgeVariant } from '@memberjunction/ng-ui-components';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
@@ -354,11 +355,24 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
 
     const queries: RunViewParams[] = [];
     const slots: { dims?: number; accounts?: number; batch?: number; related?: number } = {};
+    const cachedAccounts = new Map<string, GLAccountRow>();
+    const missingAccountIDs: string[] = [];
     if (lineIDs.length > 0) {
       slots.dims = queries.length;
       queries.push(this.dimensionQuery(lineIDs));
-      slots.accounts = queries.length;
-      queries.push(this.accountQuery(accountIDs));
+      const engine = AccountingEngineBase.Instance;
+      for (const accId of accountIDs) {
+        const hit = engine.Loaded ? engine.GLAccountByID(accId) : undefined;
+        if (hit) {
+          cachedAccounts.set(NormalizeUUID(hit.ID), { ID: hit.ID, Code: hit.Code, Name: hit.Name, AccountType: hit.AccountType });
+        } else {
+          missingAccountIDs.push(accId);
+        }
+      }
+      if (missingAccountIDs.length > 0) {
+        slots.accounts = queries.length;
+        queries.push(this.accountQuery(missingAccountIDs));
+      }
     }
     if (header.JournalEntryBatchID) {
       slots.batch = queries.length;
@@ -372,7 +386,12 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
     const results = queries.length > 0 ? await this.runView().RunViews(queries, this.contextUser()) : [];
 
     const dims = slots.dims === undefined ? new Map<string, string[]>() : this.foldDimensions(results[slots.dims]?.Results ?? []);
-    const accounts = slots.accounts === undefined ? new Map<string, GLAccountRow>() : this.indexAccounts(results[slots.accounts]?.Results ?? []);
+    const accounts = new Map(cachedAccounts);
+    if (slots.accounts !== undefined) {
+      for (const [k, v] of this.indexAccounts(results[slots.accounts]?.Results ?? [])) {
+        accounts.set(k, v);
+      }
+    }
     this.Lines = rawLines.map((l) => this.toDetailLine(l, accounts, dims));
 
     if (slots.batch !== undefined) {

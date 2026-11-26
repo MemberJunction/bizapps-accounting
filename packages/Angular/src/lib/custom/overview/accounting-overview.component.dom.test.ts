@@ -38,12 +38,14 @@ describe('AccountingOverviewPageComponent — DATE columns read as the stored da
   useBusinessClock(WEST_OF_UTC);
 
   beforeEach(() => {
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
-      if (p.EntityName === BATCH_ENTITY) return viewResult([BATCH]);
-      if (p.EntityName === JE_ENTITY && p.ExtraFilter) return viewResult([], 0); // the Pending count
-      if (p.EntityName === JE_ENTITY) return viewResult(ENTRY_SAMPLES);
-      return viewResult([], 0);
-    });
+    vi.spyOn(RunView.prototype, 'RunViews').mockImplementation(async (ps: RunViewParams[]) =>
+      ps.map((p) => {
+        if (p.EntityName === BATCH_ENTITY) return viewResult([BATCH]);
+        if (p.EntityName === JE_ENTITY && p.ExtraFilter) return viewResult([], 0); // the Pending count
+        if (p.EntityName === JE_ENTITY) return viewResult(ENTRY_SAMPLES);
+        return viewResult([], 0);
+      }),
+    );
   });
 
   async function render(): Promise<ComponentFixture<AccountingOverviewPageComponent>> {
@@ -80,8 +82,8 @@ describe('AccountingOverviewPageComponent — Build Batch needs the batch-operat
   const USER_ID = '00000000-0000-0000-0000-0000000000a1';
 
   beforeEach(() => {
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
-      p.EntityName === BATCH_ENTITY ? viewResult([BATCH]) : viewResult([], 0),
+    vi.spyOn(RunView.prototype, 'RunViews').mockImplementation(async (ps: RunViewParams[]) =>
+      ps.map((p) => (p.EntityName === BATCH_ENTITY ? viewResult([BATCH]) : viewResult([], 0))),
     );
   });
 
