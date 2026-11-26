@@ -54,7 +54,7 @@
  *   ENTITY (gated): 'MJ_BizApps_Accounting: Journal Entry Batches'
  *   DOC:    JournalEntryBatchEngine.ts (JournalEntryBatchApprovalGate seam) · plan §S1 (CFO-approval workflow gate)
  */
-import { IMetadataProvider, IRunViewProvider, LogError, UserInfo } from '@memberjunction/core';
+import { IMetadataProvider, IRunViewProvider, LogError, RunViewParams, RunViewResult, UserInfo } from '@memberjunction/core';
 import { UUIDsEqual } from '@memberjunction/global';
 import { UserCanOperateJournalEntryBatches } from '@mj-biz-apps/accounting-engine-base';
 import { ToCalendarDay } from '@mj-biz-apps/common-entities';
@@ -678,22 +678,34 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     return entity.ID;
   }
 
+  private async runViewsBatch(queries: RunViewParams[], contextUser: UserInfo): Promise<RunViewResult[]> {
+    const vp = this.viewProvider;
+    if (typeof vp.RunViews === 'function') {
+      return vp.RunViews(queries, contextUser);
+    }
+    return Promise.all(queries.map(q => vp.RunView(q, contextUser)));
+  }
+
   /**
    * The Task's terminal decisions of the given kind: approvals (Approved/ApprovedWithConditions) or
-   * rejections (any other terminal outcome). WHO made an approval is checked by the caller
-   * (approvalRefusal for a send); a rejection counts from anyone who could record it, because
-   * recordDecision only accepts one from the CFO and a forged rejection can only stop a send.
+   * rejections (any other terminal outcome). Batches decisions and terminal outcomes in ONE RunViews
+   * round-trip instead of two sequential queries.
    */
   private async terminalDecisions(taskId: string, kind: 'Approval' | 'Rejection', contextUser: UserInfo): Promise<mjBizAppsTasksTaskDecisionEntity[]> {
     requireSqlGuid(taskId, 'TasksAppApprovalGate.terminalDecisions');
-    const decRes = await this.viewProvider.RunView<mjBizAppsTasksTaskDecisionEntity>(
-      { EntityName: TASK_DECISION_ENTITY, ExtraFilter: `TaskID='${taskId}'`, ResultType: 'entity_object', BypassCache: true },
+    const [decRes, outcomeRes] = await this.runViewsBatch(
+      [
+        { EntityName: TASK_DECISION_ENTITY, ExtraFilter: `TaskID='${taskId}'`, ResultType: 'entity_object', BypassCache: true },
+        { EntityName: TASK_DECISION_OUTCOME_ENTITY, ExtraFilter: `IsTerminal=1`, ResultType: 'entity_object', BypassCache: true },
+      ],
       contextUser,
     );
-    if (!decRes.Success) throw new Error(`Could not read the decisions on approval task ${taskId}: ${decRes.ErrorMessage ?? 'unknown error'}`);
-    const decisions = decRes.Results ?? [];
+    if (!decRes?.Success) throw new Error(`Could not read the decisions on approval task ${taskId}: ${decRes?.ErrorMessage ?? 'unknown error'}`);
+    const decisions = (decRes.Results ?? []) as mjBizAppsTasksTaskDecisionEntity[];
     if (decisions.length === 0) return [];
-    const outcomes = await this.loadTerminalOutcomeIds(kind, contextUser);
+    const outcomes = ((outcomeRes?.Results ?? []) as mjBizAppsTasksTaskDecisionOutcomeEntity[])
+      .filter(o => IsTaskDecisionOutcomeCode(o.Code) && IsApprovalOutcome(o.Code) === (kind === 'Approval'))
+      .map(o => o.ID);
     return decisions.filter(d => outcomes.some(oid => UUIDsEqual(oid, d.OutcomeID)));
   }
 
@@ -720,16 +732,5 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
       throw new Error(`Could not look up the Person linked to the batch's builder (user ${userId}): ${error instanceof Error ? error.message : String(error)}`);
     }
     return found.get(userId.toLowerCase());
-  }
-
-  /** The terminal TaskDecisionOutcome IDs that are an approval, or that are not (a rejection). */
-  private async loadTerminalOutcomeIds(kind: 'Approval' | 'Rejection', contextUser: UserInfo): Promise<string[]> {
-    const res = await this.viewProvider.RunView<mjBizAppsTasksTaskDecisionOutcomeEntity>(
-      { EntityName: TASK_DECISION_OUTCOME_ENTITY, ExtraFilter: `IsTerminal=1`, ResultType: 'entity_object', BypassCache: true },
-      contextUser,
-    );
-    return (res.Results ?? [])
-      .filter(o => IsTaskDecisionOutcomeCode(o.Code) && IsApprovalOutcome(o.Code) === (kind === 'Approval'))
-      .map(o => o.ID);
   }
 }

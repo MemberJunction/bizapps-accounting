@@ -1,6 +1,7 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, Input, OnInit, OnDestroy } from '@angular/core';
-import { RunView, RunViewParams } from '@memberjunction/core';
+import { RunViewParams } from '@memberjunction/core';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { GridColumnConfig } from '@memberjunction/ng-entity-viewer';
 import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
@@ -155,13 +156,11 @@ export class DimensionsPageComponent extends BaseAngularComponent implements OnI
     this.LoadError = null;
     this.cdr.markForCheck();
     try {
-      const rv = RunView.FromMetadataProvider(this.ProviderToUse);
-      const res = await rv.RunView<DimensionRow>(
-        { EntityName: DIM_ENTITY, Fields: ['ID', 'Code', 'Name', 'IsActive'], OrderBy: 'DisplayOrder ASC, Code ASC', ResultType: 'simple' },
-        this.ProviderToUse.CurrentUser,
-      );
-      if (!res.Success) throw new Error(res.ErrorMessage ?? 'Could not load dimensions. Refresh the page to try again.');
-      this.Dimensions = res.Results ?? [];
+      const provider = this.ProviderToUse;
+      await AccountingEngineBase.Instance.Config(false, provider?.CurrentUser, provider);
+      this.Dimensions = [...AccountingEngineBase.Instance.Dimensions]
+        .sort((a, b) => (a.DisplayOrder - b.DisplayOrder) || (a.Code ?? '').localeCompare(b.Code ?? ''))
+        .map((d) => ({ ID: d.ID, Code: d.Code, Name: d.Name, IsActive: d.IsActive }));
       if (!this.SelectedID && this.Dimensions.length > 0) this.SelectedID = this.Dimensions[0].ID;
       this.applyValueParams();
     } catch (e) {

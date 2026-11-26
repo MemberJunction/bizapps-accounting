@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
-import { CompositeKey, RunView } from '@memberjunction/core';
+import { CompositeKey, RunView, type RunViewParams } from '@memberjunction/core';
 import type { mjBizAppsAccountingAccountingEngineExtensionEntity } from '@mj-biz-apps/accounting-entities';
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { NavigationService } from '@memberjunction/ng-shared';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
@@ -44,31 +45,62 @@ export class ERPSyncPageComponent extends BaseAngularComponent implements OnInit
     this.refreshSub?.unsubscribe();
   }
 
+  private canReadEntity(entityName: string): boolean {
+    const user = this.ProviderToUse?.CurrentUser;
+    const info = this.ProviderToUse?.EntityByName?.(entityName);
+    if (!info || !user) return true;
+    return info.GetUserPermisions(user)?.CanRead ?? false;
+  }
+
   public async Load(): Promise<void> {
     this.IsLoading = true;
     this.LoadError = null;
     this.cdr.markForCheck();
     try {
-      const rv = RunView.FromMetadataProvider(this.ProviderToUse);
-      const user = this.ProviderToUse.CurrentUser;
-      const ci = await rv.RunView<Record<string, string | boolean | Date | null>>({
-        EntityName: CI_ENTITY,
-        ExtraFilter: 'IsActive = 1',
-        ResultType: 'simple',
-      }, user);
-      const runs = await rv.RunView<Record<string, string | Date | null>>({
-        EntityName: RUN_ENTITY,
-        OrderBy: 'StartedAt DESC',
-        MaxRows: 50,
-        ResultType: 'simple',
-      }, user);
+      const provider = this.ProviderToUse;
+      const user = provider.CurrentUser;
+      const rv = RunView.FromMetadataProvider(provider);
+
+      const canReadCI = this.canReadEntity(CI_ENTITY);
+      const canReadRuns = this.canReadEntity(RUN_ENTITY);
+      const batch: RunViewParams[] = [];
+      let ciIndex = -1;
+      let runsIndex = -1;
+      if (canReadCI) {
+        ciIndex = batch.length;
+        batch.push({
+          EntityName: CI_ENTITY,
+          ExtraFilter: 'IsActive = 1',
+          Fields: ['ID', 'CompanyID', 'Company', 'Integration', 'IsActive'],
+          ResultType: 'simple',
+        });
+      }
+      if (canReadRuns) {
+        runsIndex = batch.length;
+        batch.push({
+          EntityName: RUN_ENTITY,
+          Fields: ['CompanyIntegrationID', 'Status', 'StartedAt', 'ErrorMessage'],
+          OrderBy: 'StartedAt DESC',
+          MaxRows: 50,
+          ResultType: 'simple',
+        });
+      }
+
+      const [viewResults] = await Promise.all([
+        batch.length > 0 ? rv.RunViews(batch, user) : Promise.resolve([]),
+        AccountingEngineBase.Instance.Config(false, user, provider),
+      ]);
+
+      const ciRows = (ciIndex >= 0 ? (viewResults[ciIndex]?.Results ?? []) : []) as Array<Record<string, string | boolean | Date | null>>;
+      const runRows = (runsIndex >= 0 ? (viewResults[runsIndex]?.Results ?? []) : []) as Array<Record<string, string | Date | null>>;
+
       const latestByCI = new Map<string, Record<string, string | Date | null>>();
-      for (const r of runs.Results ?? []) {
+      for (const r of runRows) {
         const id = String(r.CompanyIntegrationID ?? '');
         if (id && !latestByCI.has(id)) latestByCI.set(id, r);
       }
       const scoped = this.Scope.SelectedIDs;
-      this.Connections = (ci.Results ?? [])
+      this.Connections = ciRows
         .filter((row) => scoped.length === 0 || scoped.includes(String(row.CompanyID)))
         .map((row) => {
           const last = latestByCI.get(String(row.ID));
@@ -83,12 +115,23 @@ export class ERPSyncPageComponent extends BaseAngularComponent implements OnInit
             LastError: last?.ErrorMessage ? String(last.ErrorMessage) : null,
           };
         });
-      const ext = await rv.RunView<ERPExtensionRowModel>({
-        EntityName: EXT_ENTITY,
-        OrderBy: 'Sequence, Name',
-        ResultType: 'simple',
-      }, user);
-      this.Extensions = (ext.Results ?? []) as ERPExtensionRowModel[];
+
+      const cachedExtensions = this.canReadEntity(EXT_ENTITY)
+        ? AccountingEngineBase.Instance.AccountingEngineExtensions
+        : [];
+      this.Extensions = [...cachedExtensions]
+        .sort((a, b) => (a.Sequence - b.Sequence) || (a.Name ?? '').localeCompare(b.Name ?? ''))
+        .map((ext) => ({
+          ID: ext.ID,
+          Code: ext.Code,
+          Name: ext.Name,
+          Description: ext.Description,
+          DriverClass: ext.DriverClass,
+          Status: ext.Status,
+          Sequence: ext.Sequence,
+          CompanyID: ext.CompanyID,
+          Company: ext.Company,
+        }));
     } catch (e) {
       this.LoadError = e instanceof Error ? e.message : String(e);
     } finally {

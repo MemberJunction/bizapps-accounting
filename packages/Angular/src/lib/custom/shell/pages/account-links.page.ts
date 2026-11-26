@@ -1,12 +1,9 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit, OnDestroy } from '@angular/core';
-import { RunView } from '@memberjunction/core';
 import { UUIDsEqual } from '@memberjunction/global';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import type { GlResolutionResult } from '../../shared/gl-resolution-preview.component';
-
-const LINK_ENTITY = 'MJ_BizApps_Accounting: GL Account Links';
 
 /** The columns the view hands back — the raw link row, before we try to NAME its target. */
 interface LinkRecord {
@@ -218,21 +215,32 @@ export class AccountLinksPageComponent extends BaseAngularComponent implements O
     try {
       // The engine caches roles + links; Config is a no-op once loaded (the lazy-load pattern).
       await AccountingEngineBase.Instance.Config(false, this.ProviderToUse.CurrentUser, this.ProviderToUse);
-      this.Roles = AccountingEngineBase.Instance.GLAccountRoles.map((r) => ({ ID: r.ID, Name: r.Name }));
+      const engine = AccountingEngineBase.Instance;
+      this.Roles = engine.GLAccountRoles.map((r) => ({ ID: r.ID, Name: r.Name }));
 
-      const rv = RunView.FromMetadataProvider(this.ProviderToUse);
-      const res = await rv.RunView<LinkRecord>(
-        {
-          EntityName: LINK_ENTITY,
-          Fields: ['ID', 'GLAccountRole', 'GLAccountRoleID', 'GLAccount', 'GLAccountID', 'Entity', 'EntityID', 'RecordID', 'Status', 'StartedAt', 'EndedAt'],
-          OrderBy: 'GLAccountRole ASC, StartedAt DESC',
-          ResultType: 'simple',
-        },
-        this.ProviderToUse.CurrentUser,
-      );
-      if (!res.Success) throw new Error(res.ErrorMessage ?? 'Could not load account links. Refresh the page to try again.');
-      // Name each link's target off the engine caches Config just loaded — no extra round-trip.
-      this.Rows = (res.Results ?? []).map((r) => ({ ...r, TargetName: this.targetNameFor(r.Entity, r.RecordID) }));
+      // Links live in AccountingEngineBase — sort in memory and name each target off cached data (zero per-page RunView).
+      this.Rows = [...engine.GLAccountLinks]
+        .sort((a, b) => {
+          const roleCmp = (a.GLAccountRole ?? '').localeCompare(b.GLAccountRole ?? '');
+          if (roleCmp !== 0) return roleCmp;
+          const aTime = a.StartedAt ? new Date(a.StartedAt).getTime() : -Infinity;
+          const bTime = b.StartedAt ? new Date(b.StartedAt).getTime() : -Infinity;
+          return bTime - aTime;
+        })
+        .map((l) => ({
+          ID: l.ID,
+          GLAccountRole: l.GLAccountRole ?? null,
+          GLAccountRoleID: l.GLAccountRoleID,
+          GLAccount: l.GLAccount ?? null,
+          GLAccountID: l.GLAccountID,
+          Entity: l.Entity ?? null,
+          EntityID: l.EntityID,
+          RecordID: l.RecordID,
+          Status: l.Status,
+          StartedAt: l.StartedAt ? new Date(l.StartedAt).toISOString() : null,
+          EndedAt: l.EndedAt ? new Date(l.EndedAt).toISOString() : null,
+          TargetName: this.targetNameFor(l.Entity ?? null, l.RecordID),
+        }));
 
       // The chip that matters: a role with NO active link is exactly an order that will fail to
       // Confirm. Surfacing it here — where it gets fixed — is the whole point of this screen.

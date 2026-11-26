@@ -5,7 +5,9 @@
  *
  *   GL Accounts · GL Account Roles · GL Account Links (+ their ordered Link Dimensions) ·
  *   Dimensions · Dimension Values · Accounting Company Profiles · Currencies (reference only — FX deferred) ·
- *   Intercompany Account Matches (+ their ordered Match Dimensions)
+ *   Journal Entry Types · Intercompany Account Matches (+ their ordered Match Dimensions) ·
+ *   Accounting Engine Extensions · Finance Exception Types ·
+ *   Tax Authorities · Tax Jurisdictions · Tax Rates · Company Tax Nexus
  *
  * Also exposes:
  *   - ResolveLinkedAccount(entityId, recordId, role, asOfDate) — the per-record link primitive
@@ -31,13 +33,15 @@
  *   PIPELINE: ./pipeline.ts consumes CreatePipelineLookups()
  *   DOC:     plans/accounting-engine-plan.md §2.1
  */
-import { BaseEngine, BaseEnginePropertyConfig, BaseEntity, IMetadataProvider, UserInfo } from '@memberjunction/core';
-import { RegisterForStartup } from '@memberjunction/core';
+import { BaseEngine, BaseEnginePropertyConfig, BaseEntity, IMetadataProvider, Metadata, ProviderType, RegisterForStartup, UserInfo } from '@memberjunction/core';
 import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
+  mjBizAppsAccountingAccountingEngineExtensionEntity,
+  mjBizAppsAccountingCompanyTaxNexusEntity,
   mjBizAppsAccountingCurrencyEntity,
   mjBizAppsAccountingDimensionEntity,
   mjBizAppsAccountingDimensionValueEntity,
+  mjBizAppsAccountingFinanceExceptionTypeEntity,
   mjBizAppsAccountingGLAccountEntity,
   mjBizAppsAccountingGLAccountLinkDimensionEntity,
   mjBizAppsAccountingGLAccountLinkEntity,
@@ -45,6 +49,9 @@ import type {
   mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity,
   mjBizAppsAccountingIntercompanyAccountMatchEntity,
   mjBizAppsAccountingJournalEntryTypeEntity,
+  mjBizAppsAccountingTaxAuthorityEntity,
+  mjBizAppsAccountingTaxJurisdictionEntity,
+  mjBizAppsAccountingTaxRateEntity,
 } from '@mj-biz-apps/accounting-entities';
 import type { PipelineLookups } from './pipeline.js';
 import { DEFAULT_FISCAL_YEAR_START, type FiscalYearStart } from './fiscal-year.js';
@@ -265,10 +272,25 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
   private _dimensionValues: mjBizAppsAccountingDimensionValueEntity[] = [];
   private _companyProfiles: mjBizAppsAccountingAccountingCompanyProfileEntity[] = [];
   private _currencies: mjBizAppsAccountingCurrencyEntity[] = [];
+  private _journalEntryTypes: mjBizAppsAccountingJournalEntryTypeEntity[] = [];
   private _intercompanyMatches: mjBizAppsAccountingIntercompanyAccountMatchEntity[] = [];
   private _intercompanyMatchDimensions: mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity[] = [];
+  private _accountingEngineExtensions: mjBizAppsAccountingAccountingEngineExtensionEntity[] = [];
+  private _financeExceptionTypes: mjBizAppsAccountingFinanceExceptionTypeEntity[] = [];
+  private _taxAuthorities: mjBizAppsAccountingTaxAuthorityEntity[] = [];
+  private _taxJurisdictions: mjBizAppsAccountingTaxJurisdictionEntity[] = [];
+  private _taxRates: mjBizAppsAccountingTaxRateEntity[] = [];
+  private _companyTaxNexus: mjBizAppsAccountingCompanyTaxNexusEntity[] = [];
   private _linkMissRefresh: Promise<void> | null = null;
   private _lastLinkMissRefreshAt = 0;
+
+  private _activeProvider: IMetadataProvider | null = null;
+  private _loadedForUserId: string | null = null;
+  private _cacheInvalidated = false;
+
+  public override get ProviderToUse(): IMetadataProvider {
+    return this._activeProvider ?? Metadata.Provider;
+  }
 
   private _indexGeneration = 0;
 
@@ -325,6 +347,49 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
   private _journalEntryTypesLength = -1;
   private _journalEntryTypeByCode: Map<string, mjBizAppsAccountingJournalEntryTypeEntity> | null = null;
   private _journalEntryBatchSummaryEntryType: mjBizAppsAccountingJournalEntryTypeEntity | undefined = undefined;
+
+  private _currenciesGen = -1;
+  private _currenciesArray: mjBizAppsAccountingCurrencyEntity[] | null = null;
+  private _currenciesLength = -1;
+  private _currencyByCode: Map<string, mjBizAppsAccountingCurrencyEntity> | null = null;
+
+  private _dimensionsGen = -1;
+  private _dimensionsArray: mjBizAppsAccountingDimensionEntity[] | null = null;
+  private _dimensionsLength = -1;
+  private _dimensionById: Map<string, mjBizAppsAccountingDimensionEntity> | null = null;
+  private _dimensionByCode: Map<string, mjBizAppsAccountingDimensionEntity> | null = null;
+
+  private _accountingEngineExtensionsGen = -1;
+  private _accountingEngineExtensionsArray: mjBizAppsAccountingAccountingEngineExtensionEntity[] | null = null;
+  private _accountingEngineExtensionsLength = -1;
+  private _accountingEngineExtensionByCode: Map<string, mjBizAppsAccountingAccountingEngineExtensionEntity> | null = null;
+
+  private _financeExceptionTypesGen = -1;
+  private _financeExceptionTypesArray: mjBizAppsAccountingFinanceExceptionTypeEntity[] | null = null;
+  private _financeExceptionTypesLength = -1;
+  private _financeExceptionTypeByCode: Map<string, mjBizAppsAccountingFinanceExceptionTypeEntity> | null = null;
+
+  private _taxAuthoritiesGen = -1;
+  private _taxAuthoritiesArray: mjBizAppsAccountingTaxAuthorityEntity[] | null = null;
+  private _taxAuthoritiesLength = -1;
+  private _taxAuthorityById: Map<string, mjBizAppsAccountingTaxAuthorityEntity> | null = null;
+  private _taxAuthorityByCode: Map<string, mjBizAppsAccountingTaxAuthorityEntity> | null = null;
+
+  private _taxJurisdictionsGen = -1;
+  private _taxJurisdictionsArray: mjBizAppsAccountingTaxJurisdictionEntity[] | null = null;
+  private _taxJurisdictionsLength = -1;
+  private _taxJurisdictionById: Map<string, mjBizAppsAccountingTaxJurisdictionEntity> | null = null;
+  private _taxJurisdictionByCode: Map<string, mjBizAppsAccountingTaxJurisdictionEntity> | null = null;
+
+  private _taxRatesGen = -1;
+  private _taxRatesArray: mjBizAppsAccountingTaxRateEntity[] | null = null;
+  private _taxRatesLength = -1;
+  private _taxRatesByJurisdictionId: Map<string, mjBizAppsAccountingTaxRateEntity[]> | null = null;
+
+  private _companyTaxNexusGen = -1;
+  private _companyTaxNexusArray: mjBizAppsAccountingCompanyTaxNexusEntity[] | null = null;
+  private _companyTaxNexusLength = -1;
+  private _companyTaxNexusByCompanyId: Map<string, mjBizAppsAccountingCompanyTaxNexusEntity[]> | null = null;
 
   private ensureGLAccountsIndexes(): {
     byId: Map<string, mjBizAppsAccountingGLAccountEntity>;
@@ -578,29 +643,300 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
     };
   }
 
+  private ensureCurrenciesIndex(): {
+    byCode: Map<string, mjBizAppsAccountingCurrencyEntity>;
+  } {
+    const current = this.Currencies;
+    if (
+      this._currenciesGen !== this._indexGeneration ||
+      this._currenciesArray !== current ||
+      this._currenciesLength !== current.length ||
+      !this._currencyByCode
+    ) {
+      const byCode = new Map<string, mjBizAppsAccountingCurrencyEntity>();
+      for (const c of current) {
+        const key = (c.Code ?? '').trim().toUpperCase();
+        if (key && !byCode.has(key)) byCode.set(key, c);
+      }
+      this._currencyByCode = byCode;
+      this._currenciesGen = this._indexGeneration;
+      this._currenciesArray = current;
+      this._currenciesLength = current.length;
+    }
+    return { byCode: this._currencyByCode };
+  }
+
+  private ensureDimensionsIndex(): {
+    byId: Map<string, mjBizAppsAccountingDimensionEntity>;
+    byCode: Map<string, mjBizAppsAccountingDimensionEntity>;
+  } {
+    const current = this.Dimensions;
+    if (
+      this._dimensionsGen !== this._indexGeneration ||
+      this._dimensionsArray !== current ||
+      this._dimensionsLength !== current.length ||
+      !this._dimensionById ||
+      !this._dimensionByCode
+    ) {
+      const byId = new Map<string, mjBizAppsAccountingDimensionEntity>();
+      const byCode = new Map<string, mjBizAppsAccountingDimensionEntity>();
+      for (const d of current) {
+        const idKey = uuidKey(d.ID);
+        if (idKey && !byId.has(idKey)) byId.set(idKey, d);
+        const codeKey = (d.Code ?? '').trim().toLowerCase();
+        if (codeKey && !byCode.has(codeKey)) byCode.set(codeKey, d);
+      }
+      this._dimensionById = byId;
+      this._dimensionByCode = byCode;
+      this._dimensionsGen = this._indexGeneration;
+      this._dimensionsArray = current;
+      this._dimensionsLength = current.length;
+    }
+    return { byId: this._dimensionById, byCode: this._dimensionByCode };
+  }
+
+  private ensureAccountingEngineExtensionsIndex(): {
+    byCode: Map<string, mjBizAppsAccountingAccountingEngineExtensionEntity>;
+  } {
+    const current = this.AccountingEngineExtensions;
+    if (
+      this._accountingEngineExtensionsGen !== this._indexGeneration ||
+      this._accountingEngineExtensionsArray !== current ||
+      this._accountingEngineExtensionsLength !== current.length ||
+      !this._accountingEngineExtensionByCode
+    ) {
+      const byCode = new Map<string, mjBizAppsAccountingAccountingEngineExtensionEntity>();
+      for (const ext of current) {
+        const codeKey = (ext.Code ?? '').trim().toLowerCase();
+        if (codeKey && !byCode.has(codeKey)) byCode.set(codeKey, ext);
+      }
+      this._accountingEngineExtensionByCode = byCode;
+      this._accountingEngineExtensionsGen = this._indexGeneration;
+      this._accountingEngineExtensionsArray = current;
+      this._accountingEngineExtensionsLength = current.length;
+    }
+    return { byCode: this._accountingEngineExtensionByCode };
+  }
+
+  private ensureFinanceExceptionTypesIndex(): {
+    byCode: Map<string, mjBizAppsAccountingFinanceExceptionTypeEntity>;
+  } {
+    const current = this.FinanceExceptionTypes;
+    if (
+      this._financeExceptionTypesGen !== this._indexGeneration ||
+      this._financeExceptionTypesArray !== current ||
+      this._financeExceptionTypesLength !== current.length ||
+      !this._financeExceptionTypeByCode
+    ) {
+      const byCode = new Map<string, mjBizAppsAccountingFinanceExceptionTypeEntity>();
+      for (const t of current) {
+        const codeKey = (t.Code ?? '').trim().toLowerCase();
+        if (codeKey && !byCode.has(codeKey)) byCode.set(codeKey, t);
+      }
+      this._financeExceptionTypeByCode = byCode;
+      this._financeExceptionTypesGen = this._indexGeneration;
+      this._financeExceptionTypesArray = current;
+      this._financeExceptionTypesLength = current.length;
+    }
+    return { byCode: this._financeExceptionTypeByCode };
+  }
+
+  private ensureTaxAuthoritiesIndex(): {
+    byId: Map<string, mjBizAppsAccountingTaxAuthorityEntity>;
+    byCode: Map<string, mjBizAppsAccountingTaxAuthorityEntity>;
+  } {
+    const current = this.TaxAuthorities;
+    if (
+      this._taxAuthoritiesGen !== this._indexGeneration ||
+      this._taxAuthoritiesArray !== current ||
+      this._taxAuthoritiesLength !== current.length ||
+      !this._taxAuthorityById ||
+      !this._taxAuthorityByCode
+    ) {
+      const byId = new Map<string, mjBizAppsAccountingTaxAuthorityEntity>();
+      const byCode = new Map<string, mjBizAppsAccountingTaxAuthorityEntity>();
+      for (const a of current) {
+        const idKey = uuidKey(a.ID);
+        if (idKey && !byId.has(idKey)) byId.set(idKey, a);
+        const codeKey = (a.Code ?? '').trim().toLowerCase();
+        if (codeKey && !byCode.has(codeKey)) byCode.set(codeKey, a);
+      }
+      this._taxAuthorityById = byId;
+      this._taxAuthorityByCode = byCode;
+      this._taxAuthoritiesGen = this._indexGeneration;
+      this._taxAuthoritiesArray = current;
+      this._taxAuthoritiesLength = current.length;
+    }
+    return { byId: this._taxAuthorityById, byCode: this._taxAuthorityByCode };
+  }
+
+  private ensureTaxJurisdictionsIndex(): {
+    byId: Map<string, mjBizAppsAccountingTaxJurisdictionEntity>;
+    byCode: Map<string, mjBizAppsAccountingTaxJurisdictionEntity>;
+  } {
+    const current = this.TaxJurisdictions;
+    if (
+      this._taxJurisdictionsGen !== this._indexGeneration ||
+      this._taxJurisdictionsArray !== current ||
+      this._taxJurisdictionsLength !== current.length ||
+      !this._taxJurisdictionById ||
+      !this._taxJurisdictionByCode
+    ) {
+      const byId = new Map<string, mjBizAppsAccountingTaxJurisdictionEntity>();
+      const byCode = new Map<string, mjBizAppsAccountingTaxJurisdictionEntity>();
+      for (const j of current) {
+        const idKey = uuidKey(j.ID);
+        if (idKey && !byId.has(idKey)) byId.set(idKey, j);
+        const codeKey = (j.Code ?? '').trim().toLowerCase();
+        if (codeKey && !byCode.has(codeKey)) byCode.set(codeKey, j);
+      }
+      this._taxJurisdictionById = byId;
+      this._taxJurisdictionByCode = byCode;
+      this._taxJurisdictionsGen = this._indexGeneration;
+      this._taxJurisdictionsArray = current;
+      this._taxJurisdictionsLength = current.length;
+    }
+    return { byId: this._taxJurisdictionById, byCode: this._taxJurisdictionByCode };
+  }
+
+  private ensureTaxRatesIndex(): {
+    byJurisdictionId: Map<string, mjBizAppsAccountingTaxRateEntity[]>;
+  } {
+    const current = this.TaxRates;
+    if (
+      this._taxRatesGen !== this._indexGeneration ||
+      this._taxRatesArray !== current ||
+      this._taxRatesLength !== current.length ||
+      !this._taxRatesByJurisdictionId
+    ) {
+      const byJurisdictionId = new Map<string, mjBizAppsAccountingTaxRateEntity[]>();
+      for (const r of current) {
+        const key = uuidKey(r.TaxJurisdictionID);
+        if (!key) continue;
+        const bucket = byJurisdictionId.get(key);
+        if (bucket) bucket.push(r);
+        else byJurisdictionId.set(key, [r]);
+      }
+      this._taxRatesByJurisdictionId = byJurisdictionId;
+      this._taxRatesGen = this._indexGeneration;
+      this._taxRatesArray = current;
+      this._taxRatesLength = current.length;
+    }
+    return { byJurisdictionId: this._taxRatesByJurisdictionId };
+  }
+
+  private ensureCompanyTaxNexusIndex(): {
+    byCompanyId: Map<string, mjBizAppsAccountingCompanyTaxNexusEntity[]>;
+  } {
+    const current = this.CompanyTaxNexus;
+    if (
+      this._companyTaxNexusGen !== this._indexGeneration ||
+      this._companyTaxNexusArray !== current ||
+      this._companyTaxNexusLength !== current.length ||
+      !this._companyTaxNexusByCompanyId
+    ) {
+      const byCompanyId = new Map<string, mjBizAppsAccountingCompanyTaxNexusEntity[]>();
+      for (const n of current) {
+        const key = uuidKey(n.CompanyID);
+        if (!key) continue;
+        const bucket = byCompanyId.get(key);
+        if (bucket) bucket.push(n);
+        else byCompanyId.set(key, [n]);
+      }
+      this._companyTaxNexusByCompanyId = byCompanyId;
+      this._companyTaxNexusGen = this._indexGeneration;
+      this._companyTaxNexusArray = current;
+      this._companyTaxNexusLength = current.length;
+    }
+    return { byCompanyId: this._companyTaxNexusByCompanyId };
+  }
+
   public static get Instance(): AccountingEngineBase {
     return super.getInstance<AccountingEngineBase>();
   }
 
+  /**
+   * Marks the cached reference metadata stale so the next `Config()` call performs a full reload,
+   * and clears the tracked client user so the next caller re-validates its session.
+   */
+  public InvalidateCache(): void {
+    this._cacheInvalidated = true;
+    this._loadedForUserId = null;
+    this._indexGeneration++;
+  }
+
+  /**
+   * True when this engine holds a valid, non-invalidated load for `userId`.
+   * On client (`ProviderType.Network`) providers, verifies that the cached data belongs to `userId`
+   * (impersonation / user-switch safety). On server (`ProviderType.Database`) providers, returns
+   * `this.Loaded && !this._cacheInvalidated` because the server holds shared non-RLS reference data.
+   */
+  public IsConfiguredForUser(userId: string | null | undefined): boolean {
+    if (!this.Loaded || this._cacheInvalidated) return false;
+    const md = this.ProviderToUse;
+    if (md?.ProviderType !== ProviderType.Network) return true;
+    const normalized = userId ? uuidKey(userId) : null;
+    return normalized !== null && this._loadedForUserId === normalized;
+  }
+
   public async Config(forceRefresh?: boolean, contextUser?: UserInfo, provider?: IMetadataProvider): Promise<unknown> {
+    this._activeProvider = provider ?? null;
+    const md = this.ProviderToUse;
+    const effectiveUser = contextUser ?? md?.CurrentUser;
+    const nextUserId = effectiveUser?.ID ? uuidKey(effectiveUser.ID) : null;
+    const isClientProvider = md?.ProviderType === ProviderType.Network;
+    const userChanged =
+      isClientProvider &&
+      this._loadedForUserId !== null &&
+      nextUserId !== this._loadedForUserId;
+    const shouldForceRefresh = Boolean(forceRefresh || this._cacheInvalidated || userChanged);
+
+    // Every entity below is bounded, global, non-RLS reference/configuration metadata (verified
+    // against metadata/ and migrations/: none carries RowLevelSecurity filters), so CacheLocal: true
+    // is safe. Any future RLS-filtered entity MUST set CacheLocal: false.
     const params: Array<Partial<BaseEnginePropertyConfig>> = [
-      { PropertyName: '_glAccounts', EntityName: 'MJ_BizApps_Accounting: GL Accounts' },
-      { PropertyName: '_glAccountRoles', EntityName: 'MJ_BizApps_Accounting: GL Account Roles', OrderBy: 'Sequence ASC' },
-      { PropertyName: '_glAccountLinks', EntityName: 'MJ_BizApps_Accounting: GL Account Links' },
-      { PropertyName: '_glAccountLinkDimensions', EntityName: 'MJ_BizApps_Accounting: GL Account Link Dimensions', OrderBy: 'Sequence ASC' },
-      { PropertyName: '_dimensions', EntityName: 'MJ_BizApps_Accounting: Dimensions' },
-      { PropertyName: '_dimensionValues', EntityName: 'MJ_BizApps_Accounting: Dimension Values' },
-      { PropertyName: '_companyProfiles', EntityName: 'MJ_BizApps_Accounting: Accounting Company Profiles' },
-      { PropertyName: '_currencies', EntityName: 'MJ_BizApps_Accounting: Currencies' },
-      { PropertyName: '_journalEntryTypes', EntityName: 'MJ_BizApps_Accounting: Journal Entry Types' },
-      { PropertyName: '_intercompanyMatches', EntityName: 'MJ_BizApps_Accounting: Intercompany Account Matches' },
+      { PropertyName: '_glAccounts', EntityName: 'MJ_BizApps_Accounting: GL Accounts', CacheLocal: true },
+      { PropertyName: '_glAccountRoles', EntityName: 'MJ_BizApps_Accounting: GL Account Roles', OrderBy: 'Sequence ASC', CacheLocal: true },
+      { PropertyName: '_glAccountLinks', EntityName: 'MJ_BizApps_Accounting: GL Account Links', CacheLocal: true },
+      { PropertyName: '_glAccountLinkDimensions', EntityName: 'MJ_BizApps_Accounting: GL Account Link Dimensions', OrderBy: 'Sequence ASC', CacheLocal: true },
+      { PropertyName: '_dimensions', EntityName: 'MJ_BizApps_Accounting: Dimensions', CacheLocal: true },
+      { PropertyName: '_dimensionValues', EntityName: 'MJ_BizApps_Accounting: Dimension Values', CacheLocal: true },
+      { PropertyName: '_companyProfiles', EntityName: 'MJ_BizApps_Accounting: Accounting Company Profiles', CacheLocal: true },
+      { PropertyName: '_currencies', EntityName: 'MJ_BizApps_Accounting: Currencies', CacheLocal: true },
+      { PropertyName: '_journalEntryTypes', EntityName: 'MJ_BizApps_Accounting: Journal Entry Types', CacheLocal: true },
+      { PropertyName: '_intercompanyMatches', EntityName: 'MJ_BizApps_Accounting: Intercompany Account Matches', CacheLocal: true },
       {
         PropertyName: '_intercompanyMatchDimensions',
         EntityName: 'MJ_BizApps_Accounting: Intercompany Account Match Dimensions',
         OrderBy: 'Sequence ASC',
+        CacheLocal: true,
       },
+      {
+        PropertyName: '_accountingEngineExtensions',
+        EntityName: 'MJ_BizApps_Accounting: Accounting Engine Extensions',
+        OrderBy: 'Sequence ASC, Code ASC',
+        CacheLocal: true,
+      },
+      {
+        PropertyName: '_financeExceptionTypes',
+        EntityName: 'MJ_BizApps_Accounting: Finance Exception Types',
+        OrderBy: 'Code ASC',
+        CacheLocal: true,
+      },
+      { PropertyName: '_taxAuthorities', EntityName: 'MJ_BizApps_Accounting: Tax Authorities', OrderBy: 'Code ASC', CacheLocal: true },
+      { PropertyName: '_taxJurisdictions', EntityName: 'MJ_BizApps_Accounting: Tax Jurisdictions', OrderBy: 'Code ASC', CacheLocal: true },
+      { PropertyName: '_taxRates', EntityName: 'MJ_BizApps_Accounting: Tax Rates', CacheLocal: true },
+      { PropertyName: '_companyTaxNexus', EntityName: 'MJ_BizApps_Accounting: Company Tax Nexus', CacheLocal: true },
     ];
-    return await this.Load(params, provider as IMetadataProvider, forceRefresh ?? false, contextUser);
+    const result = await this.Load(params, md, shouldForceRefresh, contextUser);
+    this._cacheInvalidated = false;
+    if (isClientProvider) {
+      this._loadedForUserId = nextUserId;
+    }
+    if (shouldForceRefresh) {
+      this._indexGeneration++;
+    }
+    return result;
   }
 
   // ─── cached collections ────────────────────────────────────────────────────
@@ -641,8 +977,88 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
   public get IntercompanyAccountMatchDimensions(): mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity[] {
     return this.GetConfigData<mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity>('_intercompanyMatchDimensions');
   }
+  public get AccountingEngineExtensions(): mjBizAppsAccountingAccountingEngineExtensionEntity[] {
+    return this.GetConfigData<mjBizAppsAccountingAccountingEngineExtensionEntity>('_accountingEngineExtensions');
+  }
+  public get FinanceExceptionTypes(): mjBizAppsAccountingFinanceExceptionTypeEntity[] {
+    return this.GetConfigData<mjBizAppsAccountingFinanceExceptionTypeEntity>('_financeExceptionTypes');
+  }
+  public get TaxAuthorities(): mjBizAppsAccountingTaxAuthorityEntity[] {
+    return this.GetConfigData<mjBizAppsAccountingTaxAuthorityEntity>('_taxAuthorities');
+  }
+  public get TaxJurisdictions(): mjBizAppsAccountingTaxJurisdictionEntity[] {
+    return this.GetConfigData<mjBizAppsAccountingTaxJurisdictionEntity>('_taxJurisdictions');
+  }
+  public get TaxRates(): mjBizAppsAccountingTaxRateEntity[] {
+    return this.GetConfigData<mjBizAppsAccountingTaxRateEntity>('_taxRates');
+  }
+  public get CompanyTaxNexus(): mjBizAppsAccountingCompanyTaxNexusEntity[] {
+    return this.GetConfigData<mjBizAppsAccountingCompanyTaxNexusEntity>('_companyTaxNexus');
+  }
 
   // ─── point lookups ─────────────────────────────────────────────────────────
+
+  public CompanyProfileByID(companyId: string | null | undefined): mjBizAppsAccountingAccountingCompanyProfileEntity | undefined {
+    const key = uuidKey(companyId);
+    return key ? this.ensureCompanyProfilesIndex().byId.get(key) : undefined;
+  }
+
+  public CurrencyByCode(code: string | null | undefined): mjBizAppsAccountingCurrencyEntity | undefined {
+    const key = (code ?? '').trim().toUpperCase();
+    return key ? this.ensureCurrenciesIndex().byCode.get(key) : undefined;
+  }
+
+  public DimensionByID(dimensionId: string | null | undefined): mjBizAppsAccountingDimensionEntity | undefined {
+    const key = uuidKey(dimensionId);
+    return key ? this.ensureDimensionsIndex().byId.get(key) : undefined;
+  }
+
+  public DimensionByCode(code: string | null | undefined): mjBizAppsAccountingDimensionEntity | undefined {
+    const key = (code ?? '').trim().toLowerCase();
+    return key ? this.ensureDimensionsIndex().byCode.get(key) : undefined;
+  }
+
+  public AccountingEngineExtensionByCode(code: string | null | undefined): mjBizAppsAccountingAccountingEngineExtensionEntity | undefined {
+    const key = (code ?? '').trim().toLowerCase();
+    return key ? this.ensureAccountingEngineExtensionsIndex().byCode.get(key) : undefined;
+  }
+
+  public FinanceExceptionTypeByCode(code: string | null | undefined): mjBizAppsAccountingFinanceExceptionTypeEntity | undefined {
+    const key = (code ?? '').trim().toLowerCase();
+    return key ? this.ensureFinanceExceptionTypesIndex().byCode.get(key) : undefined;
+  }
+
+  public TaxAuthorityByID(taxAuthorityId: string | null | undefined): mjBizAppsAccountingTaxAuthorityEntity | undefined {
+    const key = uuidKey(taxAuthorityId);
+    return key ? this.ensureTaxAuthoritiesIndex().byId.get(key) : undefined;
+  }
+
+  public TaxAuthorityByCode(code: string | null | undefined): mjBizAppsAccountingTaxAuthorityEntity | undefined {
+    const key = (code ?? '').trim().toLowerCase();
+    return key ? this.ensureTaxAuthoritiesIndex().byCode.get(key) : undefined;
+  }
+
+  public TaxJurisdictionByID(taxJurisdictionId: string | null | undefined): mjBizAppsAccountingTaxJurisdictionEntity | undefined {
+    const key = uuidKey(taxJurisdictionId);
+    return key ? this.ensureTaxJurisdictionsIndex().byId.get(key) : undefined;
+  }
+
+  public TaxJurisdictionByCode(code: string | null | undefined): mjBizAppsAccountingTaxJurisdictionEntity | undefined {
+    const key = (code ?? '').trim().toLowerCase();
+    return key ? this.ensureTaxJurisdictionsIndex().byCode.get(key) : undefined;
+  }
+
+  public TaxRatesForJurisdiction(taxJurisdictionId: string | null | undefined): mjBizAppsAccountingTaxRateEntity[] {
+    const key = uuidKey(taxJurisdictionId);
+    const bucket = key ? this.ensureTaxRatesIndex().byJurisdictionId.get(key) : undefined;
+    return bucket ? [...bucket] : [];
+  }
+
+  public CompanyTaxNexusForCompany(companyId: string | null | undefined): mjBizAppsAccountingCompanyTaxNexusEntity[] {
+    const key = uuidKey(companyId);
+    const bucket = key ? this.ensureCompanyTaxNexusIndex().byCompanyId.get(key) : undefined;
+    return bucket ? [...bucket] : [];
+  }
 
   public GLAccountByID(glAccountId: string): mjBizAppsAccountingGLAccountEntity | undefined {
     const key = uuidKey(glAccountId);

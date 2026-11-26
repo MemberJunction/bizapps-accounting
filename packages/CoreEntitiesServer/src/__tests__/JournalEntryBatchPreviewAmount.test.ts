@@ -61,12 +61,26 @@ function fakeProvider(): IMetadataProvider {
         return { Success: true, Results: [] };
     }
   };
-  return { RunView } as unknown as IMetadataProvider;
+  const RunViews = async (all: RunViewParams[]) => Promise.all(all.map(RunView));
+  return { RunView, RunViews } as unknown as IMetadataProvider;
 }
 
 const user = { ID: 'U1' } as unknown as UserInfo;
 
 describe('previewBatch — candidate Amount ignores the selection', () => {
+  it('batches independent preview reads through RunViews instead of unbatched RunView waterfalls', async () => {
+    const provider = fakeProvider();
+    const runViewsSpy = vi.spyOn(provider as unknown as { RunViews: (all: RunViewParams[]) => Promise<unknown[]> }, 'RunViews');
+    const result = await previewBatch({}, user, provider, new Set([JE_A]));
+
+    expect(result.Candidates).toHaveLength(2);
+    expect(runViewsSpy).toHaveBeenCalled();
+    // Initial candidate JE + Journal Entry Types read is batched in a single RunViews call
+    const firstBatchEntities = runViewsSpy.mock.calls[0][0].map(q => q.EntityName);
+    expect(firstBatchEntities).toContain('MJ_BizApps_Accounting: Journal Entries');
+    expect(firstBatchEntities).toContain('MJ_BizApps_Accounting: Journal Entry Types');
+  });
+
   it('an unticked candidate keeps its own Amount; the totals cover only the ticked ones', async () => {
     const result = await previewBatch({}, user, fakeProvider(), new Set([JE_A]));
 

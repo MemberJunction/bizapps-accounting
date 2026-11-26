@@ -11,7 +11,7 @@ import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page
 import { CancelJournalEntryBatchResult, JournalEntryBatchDispatchClient, StrandedJournalEntryBatchWire } from '../../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 import { BatchActionDialogState } from '../../JournalEntryBatchDispatch/batch-action-dialog/batch-action-dialog.state';
 import { RetryConfirmState } from '../../JournalEntryBatchDispatch/retry-confirm-dialog/retry-confirm-dialog.state';
-import { CompanyApprovers, IsErpAcceptedFailedBatch, LoadCompanyApprovers, MayCancelApprovedBatch } from '../../JournalEntryBatchDispatch/batch-action-permission';
+import { CompanyApprovers, IsErpAcceptedFailedBatch, LoadCompanyApproversFromEngine, MayCancelApprovedBatch } from '../../JournalEntryBatchDispatch/batch-action-permission';
 import { TIME_WINDOWS, TimeWindowId, timeWindowRange, toSqlDate, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
 import { sqlLiteral, likeContains } from '../../../transfer-pending/list-scaffold/sql-filter';
 import { rowKeyToId } from '../../../transfer-pending/list-scaffold/grid-row-key';
@@ -289,11 +289,11 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
     this.LoadError = null;
     this.cdr.markForCheck();
     try {
-      const rv = new RunView();
+      const rv = RunView.FromMetadataProvider(this.ProviderToUse);
       const [[count, failed], stranded, approvers] = await Promise.all([
-        rv.RunViews([this.countParams(), this.failedParams()]),
+        rv.RunViews([this.countParams(), this.failedParams()], this.ProviderToUse.CurrentUser),
         this.client().GetStrandedJournalEntries(),
-        LoadCompanyApprovers(rv),
+        LoadCompanyApproversFromEngine(this.ProviderToUse, this.ProviderToUse.CurrentUser),
       ]);
       if (token !== this.loadToken) return;
 
@@ -459,11 +459,14 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   }
 
   private async loadSelected(id: string): Promise<void> {
-    const result = await new RunView().RunView<mjBizAppsAccountingJournalEntryBatchEntity>({
-      EntityName: BATCH_ENTITY,
-      ExtraFilter: `ID='${sqlLiteral(id)}'`,
-      ResultType: 'entity_object',
-    });
+    const result = await RunView.FromMetadataProvider(this.ProviderToUse).RunView<mjBizAppsAccountingJournalEntryBatchEntity>(
+      {
+        EntityName: BATCH_ENTITY,
+        ExtraFilter: `ID='${sqlLiteral(id)}'`,
+        ResultType: 'entity_object',
+      },
+      this.ProviderToUse.CurrentUser,
+    );
     this.SelectedBatch = result.Success ? (result.Results?.[0] ?? null) : null;
     this.cdr.markForCheck();
   }

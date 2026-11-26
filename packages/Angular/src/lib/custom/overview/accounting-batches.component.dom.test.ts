@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { IMetadataProvider, Metadata, RunView, RunViewParams, UserInfo } from '@memberjunction/core';
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
 import { BatchOperatorCatalog } from '../../../__tests__/support/batch-operator';
 import { ComponentCss, RuleBody } from '../../../__tests__/support/component-styles';
 import { AccountingBatchesPageComponent, BatchItem } from './accounting-batches.component';
@@ -22,7 +24,6 @@ import { AUGUST_CLOSE_IN_CHICAGO, useBusinessClock, viewResult } from '../../../
  */
 const BUSINESS_DAY = '2026-08-31';
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
-const COMPANY_PROFILE_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const COMPANY_ID = '00000000-0000-0000-0000-0000000000c1';
 const BUILDER_USER_ID = '00000000-0000-0000-0000-0000000000b1';
 const APPROVER_USER_ID = '00000000-0000-0000-0000-0000000000a1';
@@ -31,6 +32,25 @@ const OTHER_USER_ID = '00000000-0000-0000-0000-0000000000f1';
 const APPROVED_BY_USER_ID = '00000000-0000-0000-0000-0000000000d1';
 /** The MJ system user, which the nightly job builds as. */
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-0000000000e1';
+
+/** Stub AccountingEngineBase company profiles for LoadBatches(). */
+function stubCompanyProfiles(
+  profiles: Array<{ ID: string; Name?: string; ApprovalCFOUserID?: string | null }> | null,
+): void {
+  if (profiles === null) {
+    vi.spyOn(AccountingEngineBase.Instance, 'Config').mockRejectedValue(new Error('read refused'));
+    return;
+  }
+  vi.spyOn(AccountingEngineBase.Instance, 'Config').mockResolvedValue(undefined);
+  vi.spyOn(AccountingEngineBase.Instance, 'CompanyProfiles', 'get').mockReturnValue(
+    profiles as unknown as mjBizAppsAccountingAccountingCompanyProfileEntity[],
+  );
+}
+
+/** Stub batched RunViews for LoadBatches(), dispatching each query through `answer`. */
+function stubBatchedViews(answer: (p: RunViewParams) => ReturnType<typeof viewResult>): void {
+  vi.spyOn(RunView.prototype, 'RunViews').mockImplementation(async (ps: RunViewParams[]) => ps.map(answer));
+}
 
 /** Sign in as `userId`: the page reads the current user from the global provider. */
 function signInAs(userId: string): void {
@@ -70,9 +90,9 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
     // The page's batch list (ngOnInit) reads through the global RunView. One batch comes back so
     // the spec can see the list render: LoadBatches swallows its own errors, so an empty page is
     // not evidence that it loaded.
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+    stubCompanyProfiles([{ ID: COMPANY_ID, Name: 'Test Company', ApprovalCFOUserID: APPROVER_USER_ID }]);
+    stubBatchedViews((p: RunViewParams) => {
       if (p.EntityName === BATCH_ENTITY) return viewResult([LISTED_BATCH]);
-      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, Name: 'Test Company', ApprovalCFOUserID: APPROVER_USER_ID }]);
       return viewResult([], 0);
     });
     previewCalls = [];
@@ -227,9 +247,9 @@ describe('AccountingBatchesPageComponent — DATE columns read as the stored day
   beforeEach(() => {
     // Building needs the batch-operator grant (#448); the signed-in user holds it.
     signInAs(APPROVER_USER_ID);
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+    stubCompanyProfiles([{ ID: COMPANY_ID, Name: 'Test Company', ApprovalCFOUserID: APPROVER_USER_ID }]);
+    stubBatchedViews((p: RunViewParams) => {
       if (p.EntityName === BATCH_ENTITY) return viewResult([LISTED_BATCH]);
-      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, Name: 'Test Company', ApprovalCFOUserID: APPROVER_USER_ID }]);
       return viewResult([], 0);
     });
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockResolvedValue({
@@ -286,7 +306,8 @@ describe('AccountingBatchesPageComponent — entries held back by a posting star
   beforeEach(() => {
     // Building needs the batch-operator grant (#448); the signed-in user holds it.
     signInAs(APPROVER_USER_ID);
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async () => viewResult([], 0));
+    stubCompanyProfiles([]);
+    stubBatchedViews(() => viewResult([], 0));
   });
 
   async function openWith(heldBack: number): Promise<ComponentFixture<AccountingBatchesPageComponent>> {
@@ -320,7 +341,8 @@ describe('AccountingBatchesPageComponent — entries held back by the posting da
 
   beforeEach(() => {
     signInAs(APPROVER_USER_ID);
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async () => viewResult([], 0));
+    stubCompanyProfiles([]);
+    stubBatchedViews(() => viewResult([], 0));
   });
 
   const PAYMENT = {
@@ -383,7 +405,8 @@ describe('AccountingBatchesPageComponent — overlapping Build Batch previews (#
   beforeEach(() => {
     // Building needs the batch-operator grant (#448); the signed-in user holds it.
     signInAs(APPROVER_USER_ID);
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async () => viewResult([], 0));
+    stubCompanyProfiles([]);
+    stubBatchedViews(() => viewResult([], 0));
     pending = [];
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockImplementation(
       () => new Promise<PreviewJournalEntryBatchResult>((resolve, reject) => pending.push({ resolve, reject })),
@@ -514,11 +537,8 @@ describe('AccountingBatchesPageComponent — Build Batch selection after Clear A
   beforeEach(() => {
     // Building needs the batch-operator grant (#448); the signed-in user holds it.
     signInAs(APPROVER_USER_ID);
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
-      p.EntityName === COMPANY_PROFILE_ENTITY
-        ? viewResult([{ ID: 'co-1', Name: 'Company One', ApprovalCFOUserID: APPROVER_USER_ID }])
-        : viewResult([], 0),
-    );
+    stubCompanyProfiles([{ ID: 'co-1', Name: 'Company One', ApprovalCFOUserID: APPROVER_USER_ID }]);
+    stubBatchedViews(() => viewResult([], 0));
     previewCalls = [];
     buildCalls = [];
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockImplementation(async (options) => {
@@ -660,9 +680,9 @@ describe('AccountingBatchesPageComponent — Cancel a batch (#183, golive #302)'
   beforeEach(() => {
     // The company's approver may cancel at every status these cases cover.
     signInAs(APPROVER_USER_ID);
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+    stubCompanyProfiles([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
+    stubBatchedViews((p: RunViewParams) => {
       if (p.EntityName === BATCH_ENTITY) return viewResult([LISTED_BATCH, APPROVED, FAILED]);
-      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
       return viewResult([], 0);
     });
     // The dialog reads the cancel reason's limit from the batch entity's metadata when it opens (#307).
@@ -813,7 +833,8 @@ describe('AccountingBatchesPageComponent — a failed Cancel or Archive reloads 
   beforeEach(() => {
     listedStatus = 'Pending';
     batchReads = 0;
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+    stubCompanyProfiles([]);
+    stubBatchedViews((p: RunViewParams) => {
       if (p.EntityName !== BATCH_ENTITY) return viewResult([], 0);
       batchReads++;
       return viewResult([{ ...LISTED_BATCH, Status: listedStatus }]);
@@ -889,13 +910,14 @@ describe('AccountingBatchesPageComponent — who sees Cancel (#308, #339, DOM)',
 
   beforeEach(() => {
     profilesRead = true;
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+    vi.spyOn(AccountingEngineBase.Instance, 'Config').mockImplementation(async () => {
+      if (!profilesRead) throw new Error('read refused');
+    });
+    vi.spyOn(AccountingEngineBase.Instance, 'CompanyProfiles', 'get').mockReturnValue([
+      { ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID } as unknown as mjBizAppsAccountingAccountingCompanyProfileEntity,
+    ]);
+    stubBatchedViews((p: RunViewParams) => {
       if (p.EntityName === BATCH_ENTITY) return viewResult([LISTED_BATCH, NIGHTLY, APPROVED]);
-      if (p.EntityName === COMPANY_PROFILE_ENTITY) {
-        return profilesRead
-          ? viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }])
-          : { ...viewResult([]), Success: false, ErrorMessage: 'read refused' };
-      }
       return viewResult([], 0);
     });
   });
@@ -946,9 +968,9 @@ describe('AccountingBatchesPageComponent — who sees Cancel (#308, #339, DOM)',
 
 describe('AccountingBatchesPageComponent — Build Batch needs the batch-operator grant (#448, DOM)', () => {
   beforeEach(() => {
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+    stubCompanyProfiles([{ ID: COMPANY_ID, Name: 'Test Company', ApprovalCFOUserID: APPROVER_USER_ID }]);
+    stubBatchedViews((p: RunViewParams) => {
       if (p.EntityName === BATCH_ENTITY) return viewResult([LISTED_BATCH]);
-      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, Name: 'Test Company', ApprovalCFOUserID: APPROVER_USER_ID }]);
       return viewResult([], 0);
     });
   });
@@ -1000,12 +1022,12 @@ describe('AccountingBatchesPageComponent — Approve, Reject, Dispatch and Retry
 
   beforeEach(() => {
     batchReads = 0;
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+    stubCompanyProfiles([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
+    stubBatchedViews((p: RunViewParams) => {
       if (p.EntityName === BATCH_ENTITY) {
         batchReads++;
         return viewResult([PENDING, APPROVED, FAILED]);
       }
-      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
       return viewResult([], 0);
     });
   });
@@ -1167,14 +1189,12 @@ describe('AccountingBatchesPageComponent — Single-company Build Batch dialog (
 
   beforeEach(() => {
     signInAs(BUILDER_USER_ID);
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+    stubCompanyProfiles([
+      { ID: COMPANY_ID, Name: 'Alpha Co', ApprovalCFOUserID: APPROVER_USER_ID },
+      { ID: COMPANY_TWO_ID, Name: 'Beta Co', ApprovalCFOUserID: APPROVER_USER_ID },
+    ]);
+    stubBatchedViews((p: RunViewParams) => {
       if (p.EntityName === BATCH_ENTITY) return viewResult([LISTED_BATCH]);
-      if (p.EntityName === COMPANY_PROFILE_ENTITY) {
-        return viewResult([
-          { ID: COMPANY_ID, Name: 'Alpha Co', ApprovalCFOUserID: APPROVER_USER_ID },
-          { ID: COMPANY_TWO_ID, Name: 'Beta Co', ApprovalCFOUserID: APPROVER_USER_ID },
-        ]);
-      }
       return viewResult([], 0);
     });
     previewCalls = [];
@@ -1263,9 +1283,9 @@ describe('AccountingBatchesPageComponent — Archive permissions (#325) and 1024
   };
 
   beforeEach(() => {
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+    stubCompanyProfiles([{ ID: COMPANY_ID, Name: 'Test Company', ApprovalCFOUserID: APPROVER_USER_ID }]);
+    stubBatchedViews((p: RunViewParams) => {
       if (p.EntityName === BATCH_ENTITY) return viewResult([PENDING, APPROVED, FAILED]);
-      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, Name: 'Test Company', ApprovalCFOUserID: APPROVER_USER_ID }]);
       return viewResult([], 0);
     });
   });
@@ -1334,12 +1354,12 @@ describe('AccountingBatchesPageComponent — Send approved batches (golive #451,
 
   beforeEach(() => {
     batchReads = 0;
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+    stubCompanyProfiles([{ ID: COMPANY_ID, Name: 'Test Company', ApprovalCFOUserID: APPROVER_USER_ID }]);
+    stubBatchedViews((p: RunViewParams) => {
       if (p.EntityName === BATCH_ENTITY) {
         batchReads++;
         return viewResult([LISTED_BATCH, APPROVED_ONE, APPROVED_TWO]);
       }
-      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, Name: 'Test Company', ApprovalCFOUserID: APPROVER_USER_ID }]);
       return viewResult([], 0);
     });
   });

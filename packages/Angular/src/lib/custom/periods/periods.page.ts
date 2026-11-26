@@ -1,12 +1,13 @@
 import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { CompositeKey, Metadata, RunView } from '@memberjunction/core';
+import { CompositeKey, Metadata } from '@memberjunction/core';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { NavigationService } from '@memberjunction/ng-shared';
 import { SharedGenericModule } from '@memberjunction/ng-shared-generic';
 import { MJButtonDirective, MJDialogComponent, MJDialogActionsComponent } from '@memberjunction/ng-ui-components';
 import { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
 import {
+  AccountingEngineBase,
   CanCloseMonth,
   CloseMonthThrough,
   ReopenMonthThrough,
@@ -95,16 +96,19 @@ export class PeriodsPageComponent implements OnInit {
     this.IsLoading = true;
     this.LoadError = null;
     this.cdr.markForCheck();
-    const res = await new RunView().RunView<CompanyProfile>({
-      EntityName: COMPANY_PROFILE_ENTITY,
-      ExtraFilter: 'IsActive=1',
-      OrderBy: 'Name ASC',
-      ResultType: 'entity_object',
-    });
-    this.Profiles = res.Success ? (res.Results ?? []) : [];
-    this.LoadError = res.Success ? null : (res.ErrorMessage || 'Could not load the companies. Refresh the page to try again.');
-    this.IsLoading = false;
-    this.cdr.markForCheck();
+    try {
+      const provider = Metadata.Provider;
+      await AccountingEngineBase.Instance.Config(false, provider?.CurrentUser, provider);
+      this.Profiles = AccountingEngineBase.Instance.CompanyProfiles
+        .filter(p => p.IsActive !== false)
+        .sort((a, b) => (a.Name ?? '').localeCompare(b.Name ?? ''));
+    } catch (e) {
+      this.Profiles = [];
+      this.LoadError = e instanceof Error ? e.message : 'Could not load the companies. Refresh the page to try again.';
+    } finally {
+      this.IsLoading = false;
+      this.cdr.markForCheck();
+    }
     await this.loadHeldBackCounts(this.Profiles);
   }
 

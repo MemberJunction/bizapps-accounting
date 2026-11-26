@@ -56,12 +56,14 @@ describe('JournalEntryBatchStatusDashboardComponent — inferred date range west
     // The status/target filter value-lists read entity metadata; there is no provider here, and
     // the date columns do not depend on them.
     vi.spyOn(Metadata.prototype, 'EntityByName').mockReturnValue(new EntityInfo());
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+    const answerView = (p: RunViewParams) => {
       if (p.EntityName === BATCH_ENTITY) return viewResult([BATCH]);
       if (p.EntityName === JE_ENTITY && p.ExtraFilter === "Status='Pending'") return viewResult(PENDING_ENTRIES);
       if (p.EntityName === JE_ENTITY) return viewResult(SOURCE_ENTRIES);
       return viewResult([], 0);
-    });
+    };
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => answerView(p));
+    vi.spyOn(RunView.prototype, 'RunViews').mockImplementation(async (ps: RunViewParams[]) => ps.map(answerView));
     await TestBed.configureTestingModule({ imports: [ReadModelsModule] }).compileComponents();
   });
 
@@ -110,10 +112,12 @@ describe('JournalEntryBatchStatusDashboardComponent — build cutoff (#426, DOM)
     builds = [];
     vi.spyOn(AccountingEngineBase.prototype, 'ConfigEx').mockResolvedValue(undefined);
     vi.spyOn(Metadata.prototype, 'EntityByName').mockReturnValue(new EntityInfo());
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+    const answerView = (p: RunViewParams) => {
       if (p.EntityName === JE_ENTITY && p.ExtraFilter === "Status='Pending'") return viewResult(PENDING_ENTRIES);
       return viewResult([], 0);
-    });
+    };
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => answerView(p));
+    vi.spyOn(RunView.prototype, 'RunViews').mockImplementation(async (ps: RunViewParams[]) => ps.map(answerView));
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'BuildJournalEntryBatch').mockImplementation(async (input) => {
       builds.push(input);
       return { Success: true, NothingToBatch: true, SummaryLineCount: 0, TotalDebits: 0, TotalCredits: 0, JECount: 0, CompanyCount: 0 };
@@ -173,6 +177,7 @@ describe('JournalEntryBatchStatusDashboardComponent — Build needs the batch-op
     vi.spyOn(AccountingEngineBase.prototype, 'ConfigEx').mockResolvedValue(undefined);
     vi.spyOn(Metadata.prototype, 'EntityByName').mockReturnValue(new EntityInfo());
     vi.spyOn(RunView.prototype, 'RunView').mockResolvedValue(viewResult([], 0));
+    vi.spyOn(RunView.prototype, 'RunViews').mockImplementation(async (ps: RunViewParams[]) => ps.map(() => viewResult([], 0)));
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'BuildJournalEntryBatch').mockImplementation(async () => {
       builds++;
       return { Success: true, NothingToBatch: true, SummaryLineCount: 0, TotalDebits: 0, TotalCredits: 0, JECount: 0, CompanyCount: 0 };

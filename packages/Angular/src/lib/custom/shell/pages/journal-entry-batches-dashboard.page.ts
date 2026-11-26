@@ -109,10 +109,8 @@ export class JournalEntryBatchesDashboardPageComponent extends AccountingDashboa
     this.LoadError = null;
     this.cdr.markForCheck();
     try {
-      // Counts and list rows are independent reads — run them together rather than stacking waits.
-      // The cards are built AFTER both settle: a card's header count comes from the COUNT, not from
-      // however many rows we chose to show (see DashboardList.Count).
-      const [counts, rows] = await Promise.all([this.loadCounts(), this.loadListRows()]);
+      // Every count and every list card in ONE batched RunViews round-trip (9 counts + 3 lists).
+      const { counts, rows } = await this.loadDashboardBatch();
       this.Stats = this.buildStats(counts);
       this.Breakdowns = this.buildBreakdowns(counts);
       this.Lists = this.buildLists(rows, counts);
@@ -127,28 +125,76 @@ export class JournalEntryBatchesDashboardPageComponent extends AccountingDashboa
     }
   }
 
-  private async loadCounts(): Promise<BatchCounts> {
-    // `approved` / `sent` / `posted` / `cancelled` are counted so the dispatch-pipeline breakdown can
-    // cover the WHOLE `JournalEntryBatch.Status` value list (Pending|Approved|Sent|Posted|Failed|
-    // Cancelled — CK_JournalEntryBatch_Status). Four extra `MaxRows: 1` + `TotalRowCount` reads: SQL
-    // counts, one row each, which is precisely the kind of stat §0 permits on demand. Counting
-    // Approved directly rather than deriving it as `open - awaiting` keeps each segment traceable to
-    // one filter — a derived segment silently goes wrong the day `open`'s filter changes.
-    const [open, awaiting, approved, sent, posted, failed, cancelled, unbatched, unstamped] = await Promise.all([
-      this.count({ EntityName: BATCH_ENTITY, ExtraFilter: `Status IN ('Pending','Approved')` }),
-      this.count({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Pending'` }),
-      this.count({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Approved'` }),
-      this.count({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Sent'` }),
-      this.count({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Posted'` }),
-      this.count({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Failed'` }),
-      this.count({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Cancelled'` }),
-      this.count({ EntityName: JE_ENTITY, ExtraFilter: this.Scope.ComposeFilter(`Status='Pending'`) }),
-      // MOD-14: a built batch with no approval task is the detectable, retryable state. Surfacing
-      // it here is what makes it actionable rather than merely detectable.
-      this.count({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Pending' AND ApprovalTaskID IS NULL` }),
-    ]);
+  private async loadDashboardBatch(): Promise<{ counts: BatchCounts; rows: BatchListRows }> {
+    const list = (filter: string): RunViewParams => ({
+      EntityName: BATCH_ENTITY,
+      ExtraFilter: filter,
+      Fields: BATCH_LIST_FIELDS,
+      OrderBy: '__mj_CreatedAt DESC',
+      MaxRows: DASHBOARD_LIST_ROWS,
+      ResultType: 'simple',
+    });
 
-    return { open, awaiting, approved, sent, posted, failed, cancelled, unbatched, unstamped };
+    const rv = RunView.FromMetadataProvider(this.ProviderToUse);
+    const [
+      openRes,
+      awaitingRes,
+      approvedRes,
+      sentRes,
+      postedRes,
+      failedRes,
+      cancelledRes,
+      unbatchedRes,
+      unstampedRes,
+      inbox,
+      failed,
+      recent,
+    ] = await rv.RunViews(
+      [
+        this.countParams({ EntityName: BATCH_ENTITY, ExtraFilter: `Status IN ('Pending','Approved')` }),
+        this.countParams({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Pending'` }),
+        this.countParams({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Approved'` }),
+        this.countParams({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Sent'` }),
+        this.countParams({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Posted'` }),
+        this.countParams({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Failed'` }),
+        this.countParams({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Cancelled'` }),
+        this.countParams({ EntityName: JE_ENTITY, ExtraFilter: this.Scope.ComposeFilter(`Status='Pending'`) }),
+        // MOD-14: a built batch with no approval task is the detectable, retryable state.
+        this.countParams({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Pending' AND ApprovalTaskID IS NULL` }),
+        list(`Status='Pending'`),
+        list(`Status='Failed'`),
+        list(''),
+      ],
+      this.ProviderToUse.CurrentUser,
+    );
+
+    const readCount = (res: { Success: boolean; ErrorMessage?: string; TotalRowCount?: number } | undefined): number => {
+      if (!res?.Success) throw new Error(res?.ErrorMessage ?? 'Could not load the dashboard totals. Refresh the page to try again.');
+      return res.TotalRowCount ?? 0;
+    };
+
+    const counts: BatchCounts = {
+      open: readCount(openRes),
+      awaiting: readCount(awaitingRes),
+      approved: readCount(approvedRes),
+      sent: readCount(sentRes),
+      posted: readCount(postedRes),
+      failed: readCount(failedRes),
+      cancelled: readCount(cancelledRes),
+      unbatched: readCount(unbatchedRes),
+      unstamped: readCount(unstampedRes),
+    };
+
+    if (!inbox?.Success) throw new Error(inbox?.ErrorMessage ?? 'Could not load the approval inbox. Refresh the page to try again.');
+    if (!failed?.Success) throw new Error(failed?.ErrorMessage ?? 'Could not load the failed dispatches. Refresh the page to try again.');
+    if (!recent?.Success) throw new Error(recent?.ErrorMessage ?? 'Could not load recent journal entry batches. Refresh the page to try again.');
+
+    const rows: BatchListRows = {
+      inbox: (inbox.Results ?? []) as BatchListRow[],
+      failed: (failed.Results ?? []) as BatchListRow[],
+      recent: (recent.Results ?? []) as BatchListRow[],
+    };
+    return { counts, rows };
   }
 
   /**
@@ -204,34 +250,6 @@ export class JournalEntryBatchesDashboardPageComponent extends AccountingDashboa
         GoTo: 'approvals', Warn: c.unstamped > 0,
         Tooltip: 'Built journal entry batches with no approval request, so no one will be asked to approve them. Each batch is valid; retry its approval request from Batch approvals.' },
     ];
-  }
-
-  /**
-   * Every list card's rows, in ONE batched round-trip — never a read per card, let alone per row.
-   * Three `MaxRows: 5` top-Ns over an indexed sort column, which is what keeps them §0-cheap.
-   */
-  private async loadListRows(): Promise<BatchListRows> {
-    const rv = RunView.FromMetadataProvider(this.ProviderToUse);
-    const list = (filter: string): RunViewParams => ({
-      EntityName: BATCH_ENTITY,
-      ExtraFilter: filter,
-      Fields: BATCH_LIST_FIELDS,
-      OrderBy: '__mj_CreatedAt DESC',
-      MaxRows: DASHBOARD_LIST_ROWS,
-      ResultType: 'simple',
-    });
-
-    const [inbox, failed, recent] = await rv.RunViews<BatchListRow>(
-      [list(`Status='Pending'`), list(`Status='Failed'`), list('')],
-      this.ProviderToUse.CurrentUser,
-    );
-
-    // RunView reports failure in the result, it does not throw — so check, don't assume.
-    if (!inbox.Success) throw new Error(inbox.ErrorMessage ?? 'Could not load the approval inbox. Refresh the page to try again.');
-    if (!failed.Success) throw new Error(failed.ErrorMessage ?? 'Could not load the failed dispatches. Refresh the page to try again.');
-    if (!recent.Success) throw new Error(recent.ErrorMessage ?? 'Could not load recent journal entry batches. Refresh the page to try again.');
-
-    return { inbox: inbox.Results ?? [], failed: failed.Results ?? [], recent: recent.Results ?? [] };
   }
 
   /** @param c supplies each card's header count — the TRUE total, not the five rows we fetched. */

@@ -1,5 +1,6 @@
-import { RunView, UserInfo } from '@memberjunction/core';
+import { IMetadataProvider, Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { NormalizeUUID, UUIDsEqual } from '@memberjunction/global';
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 
 const COMPANY_PROFILE_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
@@ -19,6 +20,35 @@ export type ArchiveBatch = PendingCancelBatch & ApprovedCancelBatch;
 /** Each company's configured approver (`AccountingCompanyProfile.ApprovalCFOUserID`), keyed by normalized company ID. */
 export type CompanyApprovers = ReadonlyMap<string, string>;
 
+/** Build a `CompanyApprovers` lookup map from any profile collection (cached engine or RunView rows). */
+export function CompanyApproversFromProfiles(
+  profiles: ReadonlyArray<{ ID: string; ApprovalCFOUserID: string | null }>,
+): CompanyApprovers {
+  const approvers = new Map<string, string>();
+  for (const p of profiles) {
+    if (p.ApprovalCFOUserID) approvers.set(NormalizeUUID(p.ID), p.ApprovalCFOUserID);
+  }
+  return approvers;
+}
+
+/**
+ * Read every company's configured approver from the shared `AccountingEngineBase` reference cache
+ * (zero per-page RunView). Fails closed to an empty map on permission or load failure so buttons
+ * gated on approver status stay hidden while the server remains the authority.
+ */
+export async function LoadCompanyApproversFromEngine(
+  provider?: IMetadataProvider,
+  contextUser?: UserInfo,
+): Promise<CompanyApprovers> {
+  try {
+    const md = provider ?? Metadata.Provider;
+    await AccountingEngineBase.Instance.Config(false, contextUser ?? md?.CurrentUser, md);
+    return CompanyApproversFromProfiles(AccountingEngineBase.Instance.CompanyProfiles);
+  } catch {
+    return new Map<string, string>();
+  }
+}
+
 /**
  * Read every company's configured approver, for the rules below. A failed read answers an empty
  * map: no user then counts as the approver, so the buttons only the approver may use stay hidden,
@@ -29,12 +59,8 @@ export async function LoadCompanyApprovers(rv: RunView, contextUser?: UserInfo):
     { EntityName: COMPANY_PROFILE_ENTITY, Fields: ['ID', 'ApprovalCFOUserID'], ResultType: 'simple' },
     contextUser,
   );
-  const approvers = new Map<string, string>();
-  if (!res.Success) return approvers;
-  for (const p of res.Results ?? []) {
-    if (p.ApprovalCFOUserID) approvers.set(NormalizeUUID(p.ID), p.ApprovalCFOUserID);
-  }
-  return approvers;
+  if (!res.Success) return new Map<string, string>();
+  return CompanyApproversFromProfiles(res.Results ?? []);
 }
 
 /** The batch company's configured approver, or undefined when none is configured or the read failed. */

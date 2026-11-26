@@ -1,13 +1,14 @@
 import { Component } from '@angular/core';
-import { RegisterClass } from '@memberjunction/global';
+import { RegisterClass, UUIDsEqual } from '@memberjunction/global';
 import { BaseFormComponent } from '@memberjunction/ng-base-forms';
 import { RunView } from '@memberjunction/core';
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import {
   mjBizAppsAccountingGLAccountEntity,
 } from '@mj-biz-apps/accounting-entities';
 import { mjBizAppsAccountingGLAccountFormComponent } from '../../generated/Entities/mjBizAppsAccountingGLAccount/mjbizappsaccountingglaccount.form.component';
 
-const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
+const COMPANIES_ENTITY = 'MJ: Companies';
 
 /**
  * `loadTree` interpolates the selected company id into an ExtraFilter, so anything that is not a
@@ -121,10 +122,18 @@ export class GLAccountFormComponentExtended extends mjBizAppsAccountingGLAccount
   // ─── data loading + tree build ─────────────────────────────────────────────
 
   private async loadCompanies(): Promise<void> {
-    const rv = RunView.FromMetadataProvider(this.ProviderToUse);
+    const provider = this.ProviderToUse;
+    const user = provider.CurrentUser;
+    const info = provider.EntityByName?.(COMPANIES_ENTITY);
+    if (info && user && !info.GetUserPermisions(user)?.CanRead) {
+      this.Companies = [];
+      this.cdr.markForCheck();
+      return;
+    }
+    const rv = RunView.FromMetadataProvider(provider);
     const res = await rv.RunView<{ ID: string; Name: string }>(
-      { EntityName: 'MJ: Companies', Fields: ['ID', 'Name'], OrderBy: 'Name ASC', ResultType: 'simple' },
-      this.ProviderToUse.CurrentUser,
+      { EntityName: COMPANIES_ENTITY, Fields: ['ID', 'Name'], OrderBy: 'Name ASC', ResultType: 'simple' },
+      user,
     );
     this.Companies = res.Success ? (res.Results ?? []) : [];
     this.cdr.markForCheck();
@@ -132,19 +141,17 @@ export class GLAccountFormComponentExtended extends mjBizAppsAccountingGLAccount
 
   private async loadTree(): Promise<void> {
     if (!this.SelectedCompanyID) { this.allAccounts = []; this.Roots = []; return; }
-    // The id is embedded in the filter below; a malformed one never reaches a query.
     if (!UUID_RE.test(this.SelectedCompanyID)) { this.allAccounts = []; this.Roots = []; this.cdr.markForCheck(); return; }
     this.TreeLoading = true;
     this.TreeError = null;
     this.cdr.markForCheck();
     try {
-      const rv = RunView.FromMetadataProvider(this.ProviderToUse);
-      const res = await rv.RunView<mjBizAppsAccountingGLAccountEntity>(
-        { EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${this.SelectedCompanyID}'`, OrderBy: 'Code ASC', ResultType: 'simple' },
-        this.ProviderToUse.CurrentUser,
-      );
-      if (!res.Success) { this.TreeError = res.ErrorMessage ?? 'Could not load the chart of accounts. Refresh the page to try again.'; this.allAccounts = []; }
-      else this.allAccounts = res.Results ?? [];
+      const provider = this.ProviderToUse;
+      await AccountingEngineBase.Instance.Config(false, provider.CurrentUser, provider);
+      const companyId = this.SelectedCompanyID;
+      this.allAccounts = AccountingEngineBase.Instance.GLAccounts
+        .filter((a) => UUIDsEqual(a.CompanyID, companyId))
+        .sort((a, b) => (a.Code ?? '').localeCompare(b.Code ?? ''));
       this.rebuildTree();
     } catch (e) {
       this.TreeError = e instanceof Error ? e.message : String(e);

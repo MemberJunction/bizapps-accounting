@@ -118,10 +118,8 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
     this.LoadError = null;
     this.cdr.markForCheck();
     try {
-      // Counts and list rows are independent reads — run them together rather than stacking waits.
-      // The cards are built AFTER both settle because a card's header count comes from the COUNT,
-      // not from however many rows we chose to show (see DashboardList.Count).
-      const [counts, rows] = await Promise.all([this.loadCounts(), this.loadListRows()]);
+      // Every count and every list card in ONE batched RunViews round-trip (5 counts + 3 lists).
+      const { counts, rows } = await this.loadDashboardBatch();
       this.Stats = this.buildStats(counts);
       this.Breakdowns = this.buildBreakdowns(counts);
       this.Lists = this.buildLists(rows, counts);
@@ -137,32 +135,73 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
   }
 
   /**
-   * Every count this page shows, in one place. All are `MaxRows: 1` + `TotalRowCount` — SQL counts,
-   * one row transfers — which is the only kind of number §0 allows on demand.
-   *
-   * **No "out of balance" count.** It looks like the most useful card on the page and it is not
-   * buildable: the balanced-JE invariant is enforced by a DEFERRABLE constraint trigger, so an
-   * unbalanced entry cannot be committed in the first place. Counting them would need a
-   * `SUM(Debit)<>SUM(Credit)` GROUP BY over every line in the ledger — the exact heavy aggregate §0
-   * forbids — to always return 0. A card that costs a ledger scan to prove a DB constraint works is
-   * not worth its price.
+   * Every count + list card this page shows, in ONE batched `RunViews` call.
+   * All counts are `MaxRows: 1` + `TotalRowCount` — SQL counts, one row transfers — and all
+   * list cards are `MaxRows: 5` top-Ns over an indexed sort column (§0-legal).
    */
-  private async loadCounts(): Promise<JeCounts> {
+  private async loadDashboardBatch(): Promise<{ counts: JeCounts; rows: JeListRows }> {
     const monthStart = this.monthStartBusiness();
     const scoped = (own: string | null): string => this.Scope.ComposeFilter(own);
+    const list = (own: string | null, orderBy: string): RunViewParams => ({
+      EntityName: JE_ENTITY,
+      ExtraFilter: scoped(own),
+      Fields: JE_LIST_FIELDS,
+      OrderBy: orderBy,
+      MaxRows: DASHBOARD_LIST_ROWS,
+      ResultType: 'simple',
+    });
 
-    // NO scheduled-entries count: the ScheduledJournalEntry system was retired (D15) — its count
-    // here made the WHOLE dashboard load reject with "entity not found" (red LoadError card).
-    const [thisMonth, pending, batched, glPosted, awaiting] = await Promise.all([
-      this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`EffectiveDate >= '${monthStart}'`) }),
-      this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Pending'`) }),
-      this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Batched'`) }),
-      this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='GLPosted'`) }),
-      // C.8: a Pending MANUAL entry is sitting behind the CFO gate — it will not be batched.
-      this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Pending' AND EntryType='Manual'`) }),
-    ]);
+    const rv = RunView.FromMetadataProvider(this.ProviderToUse);
+    const [
+      thisMonthRes,
+      pendingRes,
+      batchedRes,
+      glPostedRes,
+      awaitingRes,
+      recent,
+      awaiting,
+      oldest,
+    ] = await rv.RunViews(
+      [
+        this.countParams({ EntityName: JE_ENTITY, ExtraFilter: scoped(`EffectiveDate >= '${monthStart}'`) }),
+        this.countParams({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Pending'`) }),
+        this.countParams({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Batched'`) }),
+        this.countParams({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='GLPosted'`) }),
+        // C.8: a Pending MANUAL entry is sitting behind the CFO gate — it will not be batched.
+        this.countParams({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Pending' AND EntryType='Manual'`) }),
+        list(null, 'EffectiveDate DESC'),
+        // C.8 again — the same population the "Awaiting CFO approval" stat counts, now named.
+        list(`EntryType='Manual' AND Status='Pending'`, 'EffectiveDate DESC'),
+        // ASC, not DESC: the point of this card is the entry that has been sitting UNPOSTED longest.
+        list(`Status='Pending'`, 'EffectiveDate ASC'),
+      ],
+      this.ProviderToUse.CurrentUser,
+    );
 
-    return { thisMonth, pending, batched, glPosted, awaiting };
+    const readCount = (res: { Success: boolean; ErrorMessage?: string; TotalRowCount?: number } | undefined): number => {
+      if (!res?.Success) throw new Error(res?.ErrorMessage ?? 'Could not load the dashboard totals. Refresh the page to try again.');
+      return res.TotalRowCount ?? 0;
+    };
+
+    const counts: JeCounts = {
+      thisMonth: readCount(thisMonthRes),
+      pending: readCount(pendingRes),
+      batched: readCount(batchedRes),
+      glPosted: readCount(glPostedRes),
+      awaiting: readCount(awaitingRes),
+    };
+
+    // RunView reports failure in the result, it does not throw — so check, don't assume.
+    if (!recent?.Success) throw new Error(recent?.ErrorMessage ?? 'Could not load recent journal entries. Refresh the page to try again.');
+    if (!awaiting?.Success) throw new Error(awaiting?.ErrorMessage ?? 'Could not load entries awaiting approval. Refresh the page to try again.');
+    if (!oldest?.Success) throw new Error(oldest?.ErrorMessage ?? 'Could not load the oldest unposted entries. Refresh the page to try again.');
+
+    const rows: JeListRows = {
+      recent: (recent.Results ?? []) as JournalEntryListRow[],
+      awaiting: (awaiting.Results ?? []) as JournalEntryListRow[],
+      oldest: (oldest.Results ?? []) as JournalEntryListRow[],
+    };
+    return { counts, rows };
   }
 
   /**
@@ -214,40 +253,6 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
         ],
       },
     ];
-  }
-
-  /**
-   * Every list card's rows, in ONE batched round-trip. Three `MaxRows: 5` top-Ns over an indexed
-   * sort column — never a read per card, let alone per row.
-   */
-  private async loadListRows(): Promise<JeListRows> {
-    const rv = RunView.FromMetadataProvider(this.ProviderToUse);
-    const list = (own: string | null, orderBy: string): RunViewParams => ({
-      EntityName: JE_ENTITY,
-      ExtraFilter: this.Scope.ComposeFilter(own),
-      Fields: JE_LIST_FIELDS,
-      OrderBy: orderBy,
-      MaxRows: DASHBOARD_LIST_ROWS,
-      ResultType: 'simple',
-    });
-
-    const [recent, awaiting, oldest] = await rv.RunViews<JournalEntryListRow>(
-      [
-        list(null, 'EffectiveDate DESC'),
-        // C.8 again — the same population the "Awaiting CFO approval" stat counts, now named.
-        list(`EntryType='Manual' AND Status='Pending'`, 'EffectiveDate DESC'),
-        // ASC, not DESC: the point of this card is the entry that has been sitting UNPOSTED longest.
-        list(`Status='Pending'`, 'EffectiveDate ASC'),
-      ],
-      this.ProviderToUse.CurrentUser,
-    );
-
-    // RunView reports failure in the result, it does not throw — so check, don't assume.
-    if (!recent.Success) throw new Error(recent.ErrorMessage ?? 'Could not load recent journal entries. Refresh the page to try again.');
-    if (!awaiting.Success) throw new Error(awaiting.ErrorMessage ?? 'Could not load entries awaiting approval. Refresh the page to try again.');
-    if (!oldest.Success) throw new Error(oldest.ErrorMessage ?? 'Could not load the oldest unposted entries. Refresh the page to try again.');
-
-    return { recent: recent.Results ?? [], awaiting: awaiting.Results ?? [], oldest: oldest.Results ?? [] };
   }
 
   /** @param c supplies each card's header count — the TRUE total, not the five rows we fetched. */

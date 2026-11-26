@@ -395,14 +395,61 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   // ─── data loading ────────────────────────────────────────────────────────────
 
   private async loadAll(): Promise<void> {
-    await this.loadCompanies();
-    const [batches, jeHeaders] = await Promise.all([
-      this.loadBatches(),
-      this.loadJEHeaders(),
+    const [, [batchesRes, jesRes]] = await Promise.all([
+      this.loadCompanies(),
+      this.runView().RunViews(
+        [
+          {
+            EntityName: BATCH_ENTITY,
+            Fields: [
+              'ID', 'JournalEntryBatchNumber', 'Status', 'TargetSystem', 'CompanyID',
+              'TotalEntries', 'TotalDebits', 'TotalCredits', 'ExternalJournalEntryBatchRef',
+              'ArchiveReason', 'BatchedAt', 'SummaryJournalEntryID',
+            ],
+            OrderBy: 'BatchedAt DESC',
+            ResultType: 'simple',
+          },
+          {
+            EntityName: JE_ENTITY,
+            ExtraFilter: 'JournalEntryBatchID IS NOT NULL',
+            Fields: ['ID', 'JournalEntryBatchID', 'EffectiveDate'],
+            OrderBy: 'EffectiveDate ASC',
+            ResultType: 'simple',
+          },
+        ],
+        this.contextUser(),
+      ),
     ]);
-    this.jesByBatch = jeHeaders;
+    const rawBatches = (batchesRes?.Results ?? []) as Array<mjBizAppsAccountingJournalEntryBatchEntity & { SummaryJournalEntryID?: string | null }>;
+    const summaryIds = new Set(
+      rawBatches.map((b) => b.SummaryJournalEntryID).filter((id): id is string => !!id).map((id) => NormalizeUUID(id)),
+    );
+    const byBatch = new Map<string, JEHeader[]>();
+    for (const je of (jesRes?.Results ?? []) as Array<{ ID: string; JournalEntryBatchID: string | null; EffectiveDate: string | null }>) {
+      if (!je.JournalEntryBatchID) continue;
+      if (summaryIds.has(NormalizeUUID(je.ID))) continue; // the consolidation itself, not a source
+      const arr = byBatch.get(je.JournalEntryBatchID) ?? [];
+      arr.push({ ID: je.ID, EffectiveDate: je.EffectiveDate ? new Date(je.EffectiveDate) : null });
+      byBatch.set(je.JournalEntryBatchID, arr);
+    }
+    this.jesByBatch = byBatch;
     // Batches are single-company (D7): the company comes straight off the batch header.
-    this.Batches = batches.map(b => this.toRow(b, jeHeaders.get(b.ID) ?? [], b.CompanyID ? [b.CompanyID] : []));
+    this.Batches = rawBatches.map(b => this.toRow(
+      {
+        ID: b.ID,
+        JournalEntryBatchNumber: b.JournalEntryBatchNumber,
+        Status: b.Status,
+        TargetSystem: b.TargetSystem,
+        TotalEntries: b.TotalEntries,
+        TotalDebits: b.TotalDebits,
+        TotalCredits: b.TotalCredits,
+        ExternalJournalEntryBatchRef: b.ExternalJournalEntryBatchRef,
+        ArchiveReason: b.ArchiveReason,
+        BatchedAt: b.BatchedAt ? new Date(b.BatchedAt) : null,
+      },
+      byBatch.get(b.ID) ?? [],
+      b.CompanyID ? [b.CompanyID] : [],
+    ));
     this.cdr.markForCheck();
   }
 
@@ -431,44 +478,6 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
     this.Companies = profiles
       .map(c => ({ ID: c.ID, Name: c.Name }))
       .sort((a, b) => a.Name.localeCompare(b.Name));
-  }
-
-  private async loadBatches(): Promise<Array<{ ID: string; JournalEntryBatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; CompanyID: string | null; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalJournalEntryBatchRef: string | null; ArchiveReason: string | null; BatchedAt: Date | null }>> {
-    const res = await this.runView().RunView<mjBizAppsAccountingJournalEntryBatchEntity>(
-      { EntityName: BATCH_ENTITY, OrderBy: 'BatchedAt DESC', ResultType: 'simple' }, this.contextUser());
-    return (res.Results ?? []).map(b => ({
-      ID: b.ID, JournalEntryBatchNumber: b.JournalEntryBatchNumber, Status: b.Status, TargetSystem: b.TargetSystem,
-      CompanyID: b.CompanyID ?? null,
-      TotalEntries: b.TotalEntries, TotalDebits: b.TotalDebits, TotalCredits: b.TotalCredits,
-      ExternalJournalEntryBatchRef: b.ExternalJournalEntryBatchRef, ArchiveReason: b.ArchiveReason,
-      BatchedAt: b.BatchedAt ? new Date(b.BatchedAt) : null,
-    }));
-  }
-
-  /** JE headers per batch (for the inferred date range + to fetch each batch's lines on expand). */
-  private async loadJEHeaders(): Promise<Map<string, JEHeader[]>> {
-    // The batch's own SUMMARY JE also carries JournalEntryBatchID — it is the consolidation OF the sources,
-    // so counting it alongside them doubles every amount (a 350/350 batch
-    // drilled down as 700/700). Exclude summaries here so the map holds SOURCE JEs only; the
-    // detail then re-derives the same netted posting the summary persists.
-    const [res, batches] = await Promise.all([
-      this.runView().RunView<{ ID: string; JournalEntryBatchID: string | null; EffectiveDate: string | null }>(
-        { EntityName: JE_ENTITY, ExtraFilter: 'JournalEntryBatchID IS NOT NULL', Fields: ['ID', 'JournalEntryBatchID', 'EffectiveDate'], OrderBy: 'EffectiveDate ASC', ResultType: 'simple' }, this.contextUser()),
-      this.runView().RunView<{ ID: string; SummaryJournalEntryID: string | null }>(
-        { EntityName: BATCH_ENTITY, Fields: ['ID', 'SummaryJournalEntryID'], ResultType: 'simple' }, this.contextUser()),
-    ]);
-    const summaryIds = new Set(
-      (batches.Results ?? []).map((b) => b.SummaryJournalEntryID).filter((id): id is string => !!id).map((id) => NormalizeUUID(id)),
-    );
-    const byBatch = new Map<string, JEHeader[]>();
-    for (const je of res.Results ?? []) {
-      if (!je.JournalEntryBatchID) continue;
-      if (summaryIds.has(NormalizeUUID(je.ID))) continue; // the consolidation itself, not a source
-      const arr = byBatch.get(je.JournalEntryBatchID) ?? [];
-      arr.push({ ID: je.ID, EffectiveDate: je.EffectiveDate ? new Date(je.EffectiveDate) : null });
-      byBatch.set(je.JournalEntryBatchID, arr);
-    }
-    return byBatch;
   }
 
   /** Lazy per-batch detail: load the batch's JE lines and consolidate them into the netted posting. */
@@ -539,9 +548,18 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
     return res.Results ?? [];
   }
 
-  /** Populate the GL-account name/code/company cache for any ids not already known. */
+  /** Populate the GL-account name/code/company cache from AccountingEngineBase first, querying only misses. */
   private async ensureGLNames(glIds: string[]): Promise<void> {
-    const missing = [...new Set(glIds)].filter(id => !this.glById.has(id));
+    const missing: string[] = [];
+    for (const id of new Set(glIds)) {
+      if (this.glById.has(id)) continue;
+      const cached = AccountingEngineBase.Instance.GLAccountByID(id);
+      if (cached) {
+        this.glById.set(id, { Name: cached.Name, Code: cached.Code, CompanyID: cached.CompanyID });
+      } else {
+        missing.push(id);
+      }
+    }
     if (missing.length === 0) return;
     const inList = missing.map(id => `'${id}'`).join(',');
     const res = await this.runView().RunView<{ ID: string; Name: string; Code: string; CompanyID: string }>(

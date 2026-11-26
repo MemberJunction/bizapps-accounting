@@ -9,9 +9,14 @@
  *          test-harnesses/server/engine-runtime.ts against real GLAccountLink rows
  */
 import { describe, it, expect, vi } from 'vitest';
-import { BaseEngine, BaseEnginePropertyConfig } from '@memberjunction/core';
+import { BaseEngine, BaseEnginePropertyConfig, IMetadataProvider, Metadata, ProviderType, UserInfo } from '@memberjunction/core';
 import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
+  mjBizAppsAccountingAccountingEngineExtensionEntity,
+  mjBizAppsAccountingCompanyTaxNexusEntity,
+  mjBizAppsAccountingCurrencyEntity,
+  mjBizAppsAccountingDimensionEntity,
+  mjBizAppsAccountingFinanceExceptionTypeEntity,
   mjBizAppsAccountingGLAccountEntity,
   mjBizAppsAccountingGLAccountLinkDimensionEntity,
   mjBizAppsAccountingGLAccountLinkEntity,
@@ -19,6 +24,9 @@ import type {
   mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity,
   mjBizAppsAccountingIntercompanyAccountMatchEntity,
   mjBizAppsAccountingJournalEntryTypeEntity,
+  mjBizAppsAccountingTaxAuthorityEntity,
+  mjBizAppsAccountingTaxJurisdictionEntity,
+  mjBizAppsAccountingTaxRateEntity,
 } from '@mj-biz-apps/accounting-entities';
 import {
   AccountingEngineBase,
@@ -301,5 +309,139 @@ describe('AccountingEngineBase indexing, caching, and lifecycle', () => {
 
     // But lookup on GLAccountRoles succeeds without touching GLAccounts
     expect(engine.GLAccountRoleByName(role1.Name)).toBe(role1);
+  });
+
+  it('resolves new O(1) indexed helpers for profiles, currencies, dimensions, extensions, exception types, and tax metadata', () => {
+    const engine = TestableAccountingEngine.create();
+    const currencyUsd = { ID: 'curr-1', Code: 'USD', Name: 'US Dollar' } as mjBizAppsAccountingCurrencyEntity;
+    const dimDept = { ID: 'dddd0000-0000-0000-0000-000000000001', Code: 'DEPT', Name: 'Department' } as mjBizAppsAccountingDimensionEntity;
+    const ext = { ID: 'ext-1', Code: 'ImportBankBalances', Name: 'Import Bank Balances', Sequence: 1 } as mjBizAppsAccountingAccountingEngineExtensionEntity;
+    const excType = { ID: 'exc-1', Code: 'ERP_POSTING_REJECTED', Name: 'ERP Posting Rejected', IsActive: true } as mjBizAppsAccountingFinanceExceptionTypeEntity;
+    const taxAuth = { ID: 'aaaa0000-0000-0000-0000-000000000001', Code: 'US-IRS', Name: 'IRS' } as mjBizAppsAccountingTaxAuthorityEntity;
+    const taxJur = { ID: 'bbbb0000-0000-0000-0000-000000000001', TaxAuthorityID: taxAuth.ID, Code: 'US-CA', Name: 'California' } as mjBizAppsAccountingTaxJurisdictionEntity;
+    const taxRate = { ID: 'cccc0000-0000-0000-0000-000000000001', TaxJurisdictionID: taxJur.ID, TaxCategory: 'Standard', Rate: 0.0725 } as mjBizAppsAccountingTaxRateEntity;
+    const nexus = { ID: 'eeee0000-0000-0000-0000-000000000001', CompanyID: profile1.ID, TaxJurisdictionID: taxJur.ID } as mjBizAppsAccountingCompanyTaxNexusEntity;
+
+    vi.spyOn(engine, 'CompanyProfiles', 'get').mockReturnValue([profile1]);
+    vi.spyOn(engine, 'Currencies', 'get').mockReturnValue([currencyUsd]);
+    vi.spyOn(engine, 'Dimensions', 'get').mockReturnValue([dimDept]);
+    vi.spyOn(engine, 'AccountingEngineExtensions', 'get').mockReturnValue([ext]);
+    vi.spyOn(engine, 'FinanceExceptionTypes', 'get').mockReturnValue([excType]);
+    vi.spyOn(engine, 'TaxAuthorities', 'get').mockReturnValue([taxAuth]);
+    vi.spyOn(engine, 'TaxJurisdictions', 'get').mockReturnValue([taxJur]);
+    vi.spyOn(engine, 'TaxRates', 'get').mockReturnValue([taxRate]);
+    vi.spyOn(engine, 'CompanyTaxNexus', 'get').mockReturnValue([nexus]);
+
+    expect(engine.CompanyProfileByID(profile1.ID.toUpperCase())).toBe(profile1);
+    expect(engine.CompanyProfileByID(null)).toBeUndefined();
+    expect(engine.CurrencyByCode('usd')).toBe(currencyUsd);
+    expect(engine.CurrencyByCode(' USD ')).toBe(currencyUsd);
+    expect(engine.CurrencyByCode('EUR')).toBeUndefined();
+    expect(engine.DimensionByID(dimDept.ID.toUpperCase())).toBe(dimDept);
+    expect(engine.DimensionByCode('dept')).toBe(dimDept);
+    expect(engine.AccountingEngineExtensionByCode('importbankbalances')).toBe(ext);
+    expect(engine.FinanceExceptionTypeByCode('erp_posting_rejected')).toBe(excType);
+    expect(engine.TaxAuthorityByID(taxAuth.ID.toUpperCase())).toBe(taxAuth);
+    expect(engine.TaxAuthorityByCode('us-irs')).toBe(taxAuth);
+    expect(engine.TaxJurisdictionByID(taxJur.ID.toUpperCase())).toBe(taxJur);
+    expect(engine.TaxJurisdictionByCode('us-ca')).toBe(taxJur);
+    expect(engine.TaxRatesForJurisdiction(taxJur.ID.toUpperCase())).toEqual([taxRate]);
+    expect(engine.TaxRatesForJurisdiction('missing')).toEqual([]);
+    expect(engine.CompanyTaxNexusForCompany(profile1.ID.toUpperCase())).toEqual([nexus]);
+    expect(engine.CompanyTaxNexusForCompany('missing')).toEqual([]);
+  });
+
+  it('tracks ProviderToUse, enables CacheLocal on bounded reference tables, and evicts cache on client user change or InvalidateCache', async () => {
+    const engine = TestableAccountingEngine.create();
+    const userA = { ID: 'aaaa0000-0000-0000-0000-00000000000a' } as UserInfo;
+    const userB = { ID: 'bbbb0000-0000-0000-0000-00000000000b' } as UserInfo;
+    const networkProvider = { ProviderType: ProviderType.Network, CurrentUser: userA } as unknown as IMetadataProvider;
+    const fallbackProvider = { ProviderType: ProviderType.Network, CurrentUser: userB } as unknown as IMetadataProvider;
+
+    const mdSpy = vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue(fallbackProvider);
+    let isLoaded = false;
+    vi.spyOn(engine, 'Loaded', 'get').mockImplementation(() => isLoaded);
+    const loadSpy = vi.spyOn(engine as unknown as { Load: (...args: unknown[]) => Promise<void> }, 'Load').mockImplementation(async () => {
+      isLoaded = true;
+    });
+
+    try {
+      // Falls back to Metadata.Provider before an explicit provider is passed
+      expect(engine.ProviderToUse).toBe(fallbackProvider);
+      expect(engine.IsConfiguredForUser(userA.ID)).toBe(false);
+
+      // Initial client load for User A
+      await engine.Config(false, userA, networkProvider);
+      expect(engine.ProviderToUse).toBe(networkProvider);
+      expect(loadSpy).toHaveBeenCalledTimes(1);
+      const [loadedParams, loadedProvider, firstForceRefresh] = loadSpy.mock.calls[0] as [
+        Array<Partial<BaseEnginePropertyConfig>>,
+        IMetadataProvider,
+        boolean,
+      ];
+      expect(loadedProvider).toBe(networkProvider);
+      expect(firstForceRefresh).toBe(false);
+      expect(loadedParams.every((p) => p.CacheLocal === true)).toBe(true);
+      const entityNames = loadedParams.map((p) => p.EntityName);
+      expect(entityNames).toContain('MJ_BizApps_Accounting: Finance Exception Types');
+      expect(entityNames).toContain('MJ_BizApps_Accounting: Accounting Engine Extensions');
+      expect(entityNames).toContain('MJ_BizApps_Accounting: Tax Authorities');
+      expect(entityNames).toContain('MJ_BizApps_Accounting: Tax Jurisdictions');
+      expect(entityNames).toContain('MJ_BizApps_Accounting: Tax Rates');
+      expect(entityNames).toContain('MJ_BizApps_Accounting: Company Tax Nexus');
+      expect(entityNames).not.toContain('MJ_BizApps_Accounting: Journal Entries');
+      expect(entityNames).not.toContain('MJ_BizApps_Accounting: Tax Liabilities');
+
+      expect(engine.IsConfiguredForUser(userA.ID)).toBe(true);
+      expect(engine.IsConfiguredForUser(userA.ID.toUpperCase())).toBe(true);
+      expect(engine.IsConfiguredForUser(userB.ID)).toBe(false);
+
+      // Same client user does NOT force refresh
+      await engine.Config(false, userA, networkProvider);
+      expect(loadSpy.mock.calls[1][2]).toBe(false);
+
+      // Client user changes (impersonation) -> forces refresh and updates tracked user
+      await engine.Config(false, userB, networkProvider);
+      expect(loadSpy.mock.calls[2][2]).toBe(true);
+      expect(engine.IsConfiguredForUser(userB.ID)).toBe(true);
+      expect(engine.IsConfiguredForUser(userA.ID)).toBe(false);
+
+      // InvalidateCache marks engine stale and forces next Config() reload
+      engine.InvalidateCache();
+      expect(engine.IsConfiguredForUser(userB.ID)).toBe(false);
+      await engine.Config(false, userB, networkProvider);
+      expect(loadSpy.mock.calls[3][2]).toBe(true);
+      expect(engine.IsConfiguredForUser(userB.ID)).toBe(true);
+    } finally {
+      mdSpy.mockRestore();
+    }
+  });
+
+  it('does NOT force reload on server (ProviderType.Database) when contextUser varies per request', async () => {
+    const engine = TestableAccountingEngine.create();
+    const userA = { ID: 'aaaa0000-0000-0000-0000-00000000000a' } as UserInfo;
+    const userB = { ID: 'bbbb0000-0000-0000-0000-00000000000b' } as UserInfo;
+    const dbProvider = { ProviderType: ProviderType.Database } as unknown as IMetadataProvider;
+
+    let isLoaded = false;
+    vi.spyOn(engine, 'Loaded', 'get').mockImplementation(() => isLoaded);
+    const loadSpy = vi.spyOn(engine as unknown as { Load: (...args: unknown[]) => Promise<void> }, 'Load').mockImplementation(async () => {
+      isLoaded = true;
+    });
+
+    await engine.Config(false, userA, dbProvider);
+    expect(loadSpy.mock.calls[0][2]).toBe(false);
+    expect(engine.IsConfiguredForUser(userA.ID)).toBe(true);
+    expect(engine.IsConfiguredForUser(userB.ID)).toBe(true);
+
+    // Per-request user change on server keeps shared cache without forcing reload
+    await engine.Config(false, userB, dbProvider);
+    expect(loadSpy.mock.calls[1][2]).toBe(false);
+
+    // Explicit InvalidateCache still forces reload on server
+    engine.InvalidateCache();
+    expect(engine.IsConfiguredForUser(userB.ID)).toBe(false);
+    await engine.Config(false, userB, dbProvider);
+    expect(loadSpy.mock.calls[2][2]).toBe(true);
   });
 });

@@ -86,11 +86,16 @@ export abstract class AccountingDashboardBase extends BaseAngularComponent {
   // the section's create verb lives in the CATEGORY header now, so the dashboards ship no
   // duplicate create button and no header-interior card at all.
 
+  /** Count-only RunViewParams for single-request RunViews batching. */
+  protected countParams(params: Omit<RunViewParams, 'MaxRows' | 'ResultType'>): RunViewParams {
+    return { ...params, Fields: ['ID'], MaxRows: 1, ResultType: 'simple' };
+  }
+
   /** Count-only read: MaxRows 1 keeps the transfer to one row; TotalRowCount is the answer. */
   protected async count(params: Omit<RunViewParams, 'MaxRows' | 'ResultType'>): Promise<number> {
     const rv = RunView.FromMetadataProvider(this.ProviderToUse);
     const res = await rv.RunView(
-      { ...params, Fields: ['ID'], MaxRows: 1, ResultType: 'simple' },
+      this.countParams(params),
       this.ProviderToUse.CurrentUser,
     );
     if (!res.Success) throw new Error(res.ErrorMessage ?? 'Could not load the dashboard totals. Refresh the page to try again.');

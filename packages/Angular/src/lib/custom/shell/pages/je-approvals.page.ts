@@ -2,7 +2,6 @@ import { Component, ChangeDetectionStrategy, ChangeDetectorRef, EventEmitter, in
 import { RunView } from '@memberjunction/core';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
-import { UUIDsEqual } from '@memberjunction/global';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { CompanyScopeService } from '../../shared/company-scope.service';
 
@@ -160,7 +159,7 @@ export class JEApprovalsPageComponent extends BaseAngularComponent implements On
    * have done anyway, but reached deliberately rather than by omission.
    */
   private functionalCurrency(companyId: string): string {
-    const profile = AccountingEngineBase.Instance.CompanyProfiles.find((p) => UUIDsEqual(p.ID, companyId));
+    const profile = AccountingEngineBase.Instance.CompanyProfileByID(companyId);
     return profile?.FunctionalCurrencyCode ?? 'USD';
   }
 

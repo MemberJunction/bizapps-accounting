@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
-import { RunView } from '@memberjunction/core';
+import { Metadata, RunView } from '@memberjunction/core';
 import type {
     mjBizAppsAccountingJournalEntryEntity,
     mjBizAppsAccountingJournalEntryLineEntity,
@@ -434,13 +434,22 @@ function missingReversalIds(
 /** Each reversal's EffectiveDate as a calendar day, by lowercased ID. A failed load returns none. */
 async function loadReversalDays(ids: string[]): Promise<Map<string, string>> {
     const days = new Map<string, string>();
+    const provider = Metadata.Provider;
+    const user = provider?.CurrentUser;
+    const info = provider?.EntityByName?.(JOURNAL_ENTRY_ENTITY);
+    if (info && user && !info.GetUserPermisions(user)?.CanRead) {
+        return days;
+    }
     const quoted = ids.map((id) => `'${id.replace(/'/g, "''")}'`).join(', ');
-    const result = await new RunView().RunView<{ ID: string; EffectiveDate: string | Date }>({
-        EntityName: JOURNAL_ENTRY_ENTITY,
-        ExtraFilter: `ID IN (${quoted})`,
-        Fields: ['ID', 'EffectiveDate'],
-        ResultType: 'simple',
-    });
+    const result = await RunView.FromMetadataProvider(provider).RunView<{ ID: string; EffectiveDate: string | Date }>(
+        {
+            EntityName: JOURNAL_ENTRY_ENTITY,
+            ExtraFilter: `ID IN (${quoted})`,
+            Fields: ['ID', 'EffectiveDate'],
+            ResultType: 'simple',
+        },
+        user,
+    );
     if (!result.Success) {
         console.error('Deferred revenue waterfall: could not load reversal dates:', result.ErrorMessage);
         return days;
