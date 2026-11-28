@@ -1,0 +1,31 @@
+[
+  {
+    "fields": {
+      "Name": "Accounting & Subledger",
+      "Description": "Inspect AR subledger journal entries, GL accounts, dimensions, posting batches, open finance exceptions, tax liabilities, and accounting company close controls through RunView with per-user RLS scoping. Installed by the BizApps Accounting app.",
+      "Instructions": "@file:templates/accounting-chief-of-staff.skill.md",
+      "Status": "Active",
+      "ActivationMode": "Auto",
+      "Category": "Finance",
+      "IconClass": "fa-solid fa-file-invoice-dollar",
+      "CreatedByUserID": "@lookup:MJ: Users.Name=System"
+    },
+    "relatedEntities": {
+      "MJ: AI Agent Skills": [
+        {
+          "fields": {
+            "AgentID": "@lookup:MJ: AI Agents.Name=Chief of Staff",
+            "SkillID": "@parent:ID",
+            "Status": "Active"
+          },
+          "primaryKey": {
+            "ID": "39D8A7FC-A3C5-4725-9DC1-A50086EF6E89"
+          }
+        }
+      ]
+    },
+    "primaryKey": {
+      "ID": "FF33EF7B-22BB-4053-BFA3-60B503CA6DFB"
+    }
+  }
+]

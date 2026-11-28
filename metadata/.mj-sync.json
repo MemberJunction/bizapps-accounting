@@ -25,7 +25,8 @@
     "authorizations",
     "roles",
     "entity-permissions",
-    "authorization-roles"
+    "authorization-roles",
+    "chief-of-staff-skills"
   ],
   "sqlLogging": {
     "enabled": true,
