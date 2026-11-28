@@ -1,0 +1,18 @@
+[
+  {
+    "fields": {
+      "Name": "Journal Entry Batch Approval",
+      "Code": "ACCOUNTING_JE_BATCH_APPROVAL",
+      "Description": "CFO approval of a journal entry batch before it is sent to the ERP. Approving or rejecting the task approves or cancels the batch through the Accounting.ApplyJournalEntryBatchTaskDecision hook.",
+      "IconClass": "fa-solid fa-stamp",
+      "DefaultPriority": "High",
+      "IsApproval": true,
+      "IsActive": true,
+      "OnCompleteActionID": "@lookup:MJ: Actions.ID=B4242C42-1856-4D8D-A5A1-255202B11855",
+      "OnRejectActionID": "@lookup:MJ: Actions.ID=B4242C42-1856-4D8D-A5A1-255202B11855"
+    },
+    "primaryKey": {
+      "ID": "E9F862A2-5154-49E1-BEC2-2120A3562768"
+    }
+  }
+]
